@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef RCI_USENAMES_DEFINES_H
 #define RCI_USENAMES_DEFINES_H
+
+#ifdef ENABLE_RCI
 
 #if !(defined RCI_ELEMENTS_NAME_MAX_SIZE)
 #define RCI_ELEMENTS_NAME_MAX_SIZE 22
@@ -44,5 +46,8 @@
 #define RCI_VALUES_NAME_MAX_SIZE 7
 #endif
 #endif
+
+#endif /* ENABLE_RCI */
+
 #endif
 

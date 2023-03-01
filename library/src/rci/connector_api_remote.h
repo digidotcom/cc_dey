@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef CONNECTOR_API_REMOTE_H
 #define CONNECTOR_API_REMOTE_H
+
+#ifdef ENABLE_RCI
 
 #define RCI_PARSER_USES_ERROR_DESCRIPTIONS
 #define RCI_PARSER_USES_STRING
@@ -376,5 +378,7 @@ extern connector_remote_config_data_t * const rci_descriptor_data;
 #if !defined _CONNECTOR_API_H
 #error "Illegal inclusion of connector_api_remote.h. You should only include connector_api.h in user code."
 #endif
+
+#endif /* ENABLE_RCI */
 
 #endif

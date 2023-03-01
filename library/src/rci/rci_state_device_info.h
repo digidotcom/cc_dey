@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef rci_state_device_info_h
 #define rci_state_device_info_h
+
+#ifdef ENABLE_RCI
 
 #include "connector_api.h"
 #include "ccapi_rci_functions.h"
@@ -62,5 +64,7 @@ ccapi_state_device_information_error_id_t rci_state_device_information_hardware_
 ccapi_state_device_information_error_id_t rci_state_device_information_kinetis_get(
 		ccapi_rci_info_t * const info, char const * * const value);
 #define rci_state_device_information_kinetis_set    NULL
+
+#endif /* ENABLE_RCI */
 
 #endif

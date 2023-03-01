@@ -66,8 +66,10 @@ static int is_zero_array(const uint8_t *array, size_t size);
 /*------------------------------------------------------------------------------
                          G L O B A L  V A R I A B L E S
 ------------------------------------------------------------------------------*/
+#ifdef ENABLE_RCI
 extern ccapi_rci_service_t rci_service;
 extern connector_remote_config_data_t rci_internal_data;
+#endif /* ENABLE_RCI */
 extern ccapi_receive_service_t receive_service;
 extern ccapi_streaming_cli_service_t streaming_cli_service;
 
@@ -415,10 +417,13 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	start->service.streaming_cli = &streaming_cli_service,
 
 	/* Initialize RCI service. */
+	start->service.rci = NULL;
+#ifdef ENABLE_RCI
 	start->service.rci = &rci_service;
 	rci_internal_data.firmware_target_zero_version = fw_string_to_int(cc_cfg->fw_version);
 	rci_internal_data.vendor_id = cc_cfg->vendor_id;
 	rci_internal_data.device_type = cc_cfg->device_type;
+#endif /* ENABLE_RCI */
 
 	/* Initialize device request service. */
 	start->service.receive = &receive_service;

@@ -65,11 +65,15 @@ CFLAGS += -Wno-error=padded -Wno-error=format-nonliteral -Wno-unused-function -W
 CFLAGS +=-std=c99
 # Include POSIX and GNU features.
 CFLAGS += -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
-# Include Public Header Files.
-CFLAGS += -I $(SRC) -I $(CUSTOM_CCFSM_PUBLIC_HEADER_DIR) -I $(CCFSM_PUBLIC_HEADER_DIR)
-CFLAGS += -I $(CCAPI_PUBLIC_HEADER_DIR) -I $(CUSTOM_PUBLIC_HEADER_DIR)
-# Include Platform Header Files.
-CFLAGS += -I $(MINIUNZ_DIR) -I $(PLATFORM_DIR)
+CFLAGS += -g -O
+
+# Target output to generate.
+CC_PRIVATE_SRCS := $(CCFSM_PRIVATE_DIR)/connector_api.c
+CCAPI_PRIVATE_SRCS := $(wildcard $(CCAPI_PRIVATE_DIR)/*.c)
+PLATFORM_SRCS := $(wildcard $(PLATFORM_DIR)/*.c)
+CC_DEY_SRCS := $(wildcard $(SRC)/*.c)
+CC_MINIUNZ_SRCS := $(wildcard $(SRC)/miniunz/*.c)
+
 ifeq ($(CONFIG_DISABLE_RECOVERY_UPDATE),)
 CFLAGS += -DENABLE_RECOVERY_UPDATE $(shell pkg-config --cflags recovery)
 PC_REQUIRES_PRIVATE += recovery
@@ -83,16 +87,19 @@ ifeq ($(CONFIG_DISABLE_BT),)
 CFLAGS += -DENABLE_BT
 endif
 
-CFLAGS += -g -O
+ifneq ($(CONFIG_ENABLE_RCI),)
+CFLAGS += -DENABLE_RCI
+CC_DEY_RCI_SRCS := $(wildcard $(SRC)/rci/*.c)
+RCI_HEADERS = -I $(SRC)/rci
+endif
 
-# Target output to generate.
-CC_PRIVATE_SRCS := $(CCFSM_PRIVATE_DIR)/connector_api.c
-CCAPI_PRIVATE_SRCS := $(wildcard $(CCAPI_PRIVATE_DIR)/*.c)
-PLATFORM_SRCS := $(wildcard $(PLATFORM_DIR)/*.c)
-CC_DEY_SRCS := $(wildcard $(SRC)/*.c)
-CC_MINIUNZ_SRCS := $(wildcard $(SRC)/miniunz/*.c)
+# Include Public Header Files.
+CFLAGS += -I $(SRC) $(RCI_HEADERS) -I $(CUSTOM_CCFSM_PUBLIC_HEADER_DIR) -I $(CCFSM_PUBLIC_HEADER_DIR)
+CFLAGS += -I $(CCAPI_PUBLIC_HEADER_DIR) -I $(CUSTOM_PUBLIC_HEADER_DIR)
+# Include Platform Header Files.
+CFLAGS += -I $(MINIUNZ_DIR) -I $(PLATFORM_DIR)
 
-SRCS = $(CC_DEY_SRCS) $(CC_MINIUNZ_SRCS) $(PLATFORM_SRCS) $(CC_PRIVATE_SRCS) $(CCAPI_PRIVATE_SRCS)
+SRCS = $(CC_DEY_SRCS) $(CC_DEY_RCI_SRCS) $(CC_MINIUNZ_SRCS) $(PLATFORM_SRCS) $(CC_PRIVATE_SRCS) $(CCAPI_PRIVATE_SRCS)
 
 OBJS = $(SRCS:.c=.o)
 

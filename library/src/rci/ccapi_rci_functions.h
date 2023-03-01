@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef ccapi_rci_functions_h
 #define ccapi_rci_functions_h
+
+#ifdef ENABLE_RCI
 
 #include <ccapi/ccapi.h>
 
@@ -59,5 +61,7 @@ ccapi_global_error_id_t rci_action_end_cb(ccapi_rci_info_t * const info);
 ccapi_global_error_id_t rci_do_command_cb(ccapi_rci_info_t * const info);
 ccapi_global_error_id_t rci_set_factory_defaults_cb(ccapi_rci_info_t * const info);
 ccapi_global_error_id_t rci_reboot_cb(ccapi_rci_info_t * const info);
+
+#endif /* ENABLE_RCI */
 
 #endif

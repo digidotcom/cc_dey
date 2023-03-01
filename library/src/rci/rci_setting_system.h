@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef rci_setting_system_h
 #define rci_setting_system_h
+
+#ifdef ENABLE_RCI
 
 #include "connector_api.h"
 #include "ccapi_rci_functions.h"
@@ -56,5 +58,7 @@ ccapi_setting_system_error_id_t rci_setting_system_location_get(
 		ccapi_rci_info_t * const info, char const * * const value);
 ccapi_setting_system_error_id_t rci_setting_system_location_set(
 		ccapi_rci_info_t * const info, char const * const value);
+
+#endif /* ENABLE_RCI */
 
 #endif
