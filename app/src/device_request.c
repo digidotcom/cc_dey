@@ -51,13 +51,16 @@
 
 #define RESPONSE_ERROR			"ERROR"
 #define RESPONSE_OK				"OK"
+#define STRING_NA				"N/A"
 
 #define USER_LED_ALIAS			"USER_LED"
 
 #define DEVREQ_TAG				"APP-DEVREQ:"
 
 #define MAX_RESPONSE_SIZE			512
+#define PARAM_LENGTH				25
 
+#define BUILD_FILE					"/etc/build"
 #define EMMC_SIZE_FILE				"/sys/class/mmc_host/mmc0/mmc0:0001/block/mmcblk0/size"
 #define NAND_SIZE_FILE				"/proc/mtd"
 #define RESOLUTION_FILE				"/sys/class/graphics/fb0/modes"
@@ -125,6 +128,40 @@
 	log_error("%s " format, DEVREQ_TAG, __VA_ARGS__)
 
 static int future_connector_enable = true;
+
+/**
+ * read_dey_version() - Read the DEY version
+ *
+ * @version:	Buffer to store the DEY version.
+ *
+ * Return: 0 if success, 1 otherwise.
+ */
+static int read_dey_version(char *version)
+{
+	FILE *in = NULL;
+	char line[128] = {0};
+
+	if (!file_readable(BUILD_FILE))
+		goto error;
+
+	in = fopen(BUILD_FILE, "rb");
+	if (in == NULL)
+		goto error;
+
+	while (fgets(line, sizeof(line), in) != NULL) {
+		if (strncmp(line, "DISTRO_VERSION", strlen("DISTRO_VERSION")) == 0) {
+			sscanf(line, "%*s %*s %s", version);
+			break;
+		}
+	}
+	fclose(in);
+
+	return 0;
+error:
+	log_dr_error("Error getting DEY version: File '%s' does not exist or not readable", BUILD_FILE);
+
+	return 1;
+}
 
 /**
  * get_emmc_size() - Returns the total eMMC storage size.
@@ -479,6 +516,16 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 
 		Response:
 		{
+			"dey_version": "DEY-4.0-r1-20230224201833"
+			"kernel_version": "Linux ccimx8mm-dvk 5.15.71+g002ce509df39 #1 SMP PREEMPT Fri Feb 24 20:18:33 UTC 2023 aarch64 aarch64 aarch64 GNU/Linux"
+			"uboot_version": "U-Boot dub-2021.10-r2.1-git-00061-gb49ead8bf02 (Feb 17 2023 - 12:17:49 +0000)""
+			"serial_number": "000000",
+			"device_type": "ccimx8mm-dvk",
+			"module_variant": "0x03",
+			"board_variant": "0",
+			"board_id": "0",
+			"mca_hw_version": "1",
+			"mca_fw_version": "1.02",
 			"total_st": 0,
 			"total_mem": 2002120,
 			"resolution": "1920x1080p-0",
@@ -506,6 +553,161 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 	if (!root) {
 		status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto error;
+	}
+
+	{
+		char version[MAX_RESPONSE_SIZE] = STRING_NA;
+		char dey_version[PARAM_LENGTH] = STRING_NA;
+		char build_id[PARAM_LENGTH] = STRING_NA;
+
+		if (read_dey_version(dey_version) == 0 && read_file_line("/etc/version", build_id, PARAM_LENGTH) == 0) {
+			if (strlen(build_id) > 0)
+				build_id[strlen(build_id) - 1] = '\0';  /* Remove the last line feed */
+
+			snprintf(version, MAX_RESPONSE_SIZE, "DEY-%s-%s", dey_version, build_id);
+		}
+
+		if (json_object_object_add(root, "dey_version", json_object_new_string(version)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+	}
+
+	{
+		char kernel[MAX_RESPONSE_SIZE] = STRING_NA;
+		char *resp = NULL;
+
+		if (ldx_process_execute_cmd("uname -a", &resp, 2) != 0 || resp == NULL) {
+			if (resp != NULL)
+				log_dr_error("Error getting Kernel version: %s", resp);
+			else
+				log_dr_error("%s", "Error getting Kernel version");
+		} else {
+			if (strlen(resp) > 0)
+				resp[strlen(resp) - 1] = '\0';  /* Remove the last line feed */
+
+			snprintf(kernel, MAX_RESPONSE_SIZE, "%s", resp);
+		}
+
+		if (json_object_object_add(root, "kernel_version", json_object_new_string(kernel)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			free(resp);
+			goto error;
+		}
+
+		free(resp);
+	}
+
+	{
+		char uboot[MAX_RESPONSE_SIZE] = STRING_NA;
+
+		if (read_file_line("/proc/device-tree/digi,uboot,version", uboot, MAX_RESPONSE_SIZE) != 0)
+			log_dr_error("%s", "Error getting U-Boot version");
+
+		if (json_object_object_add(root, "uboot_version", json_object_new_string(uboot)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+	}
+
+	{
+		char board_sn[PARAM_LENGTH] = STRING_NA;
+		char dev_type[PARAM_LENGTH] = STRING_NA;
+		char som_variant[PARAM_LENGTH] = STRING_NA;
+		char board_variant[PARAM_LENGTH] = STRING_NA;
+		char board_id[PARAM_LENGTH] = STRING_NA;
+
+		/* Serial number */
+		if (read_file_line("/proc/device-tree/digi,hwid,sn", board_sn, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting serial number");
+
+		if (json_object_object_add(root, "serial_number", json_object_new_string(board_sn)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+
+		/* Device type */
+		if (read_file_line("/proc/device-tree/digi,machine,name", dev_type, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting device type");
+
+		if (json_object_object_add(root, "device_type", json_object_new_string(dev_type)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+
+		/* SOM variant */
+		if (read_file_line("/proc/device-tree/digi,hwid,variant", som_variant, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting SOM variant");
+
+		if (json_object_object_add(root, "module_variant", json_object_new_string(som_variant)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+
+		/* Board variant */
+		if (read_file_line("/proc/device-tree/digi,carrierboard,version", board_variant, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting board variant");
+
+		if (json_object_object_add(root, "board_variant", json_object_new_string(board_variant)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+
+		/* Board ID */
+		if (read_file_line("/proc/device-tree/digi,carrierboard,id", board_id, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting board ID");
+
+		if (json_object_object_add(root, "board_id", json_object_new_string(board_id)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+	}
+
+	{
+		char path[MAX_RESPONSE_SIZE];
+		char fw_version[PARAM_LENGTH] = STRING_NA;
+		char hw_version[PARAM_LENGTH] = STRING_NA;
+		char *resp = NULL;
+
+		if (ldx_process_execute_cmd("basename $(dirname $(grep -lv ioexp $(grep -l mca /sys/bus/i2c/devices/*/name)))", &resp, 2) != 0 || resp == NULL) {
+			if (resp != NULL)
+				log_dr_error("Error getting MCA address: %s", resp);
+			else
+				log_dr_error("%s", "Error getting MCA address");
+			goto done;
+		}
+
+		if (strlen(resp) > 0)
+			resp[strlen(resp) - 1] = '\0';  /* Remove the last line feed */
+
+		/* MCA firmware version */
+		sprintf(path, "/sys/bus/i2c/devices/%s/fw_version", resp);
+		if (read_file_line(path, fw_version, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting MCA firmware version");
+
+		if (strlen(fw_version) > 0)
+			fw_version[strlen(fw_version) - 1] = '\0';  /* Remove the last line feed */
+
+		if (json_object_object_add(root, "mca_fw_version", json_object_new_string(fw_version)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			free(resp);
+			goto error;
+		}
+
+		/* MCA hardware version */
+		sprintf(path, "/sys/bus/i2c/devices/%s/hw_version", resp);
+		if (read_file_line(path, hw_version, PARAM_LENGTH) != 0)
+			log_dr_error("%s", "Error getting MCA hardware version");
+
+		if (strlen(hw_version) > 0)
+			hw_version[strlen(hw_version) - 1] = '\0';  /* Remove the last line feed */
+
+		free(resp);
+
+		if (json_object_object_add(root, "mca_hw_version", json_object_new_string(hw_version)) < 0) {
+			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
 	}
 
 	{
