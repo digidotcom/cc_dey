@@ -254,6 +254,10 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 					continue;
 				return -1;
 			}
+			if (bytes_read == 0) {
+				errno = EPIPE; /* Broken socket before terminator */
+				return -1;
+			}
 			if ((end = memchr(buf, TERMINATOR, bytes_read)) != 0) {/* Found terminator */
 				bytes_read = end - buf + 1;
 				recv(socket, buf, bytes_read, 0);					/* Consume the segment up to and including the terminator */
@@ -271,6 +275,10 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 			if (bytes_read < 0) {
 				if (errno == EINTR)
 					continue;
+				return -1;
+			}
+			if (bytes_read == 0) {
+				errno = EPIPE;			/* overrun and broken socket */
 				return -1;
 			}
 			if (ch == TERMINATOR) {
