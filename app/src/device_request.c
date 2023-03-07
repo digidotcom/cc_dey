@@ -269,12 +269,10 @@ static int add_net_state_json(net_state_t i_state, json_object **iface_item, boo
 		return 1;
 
 	if (complete) {
-		int type = i_state.is_dhcp ? 0 : 1;
-
 		if (json_object_object_add(*iface_item, CFG_FIELD_ENABLE, json_object_new_boolean(i_state.status == NET_STATUS_CONNECTED)) < 0)
 			return 1;
 
-		if (json_object_object_add(*iface_item, CFG_FIELD_TYPE, json_object_new_int(type)) < 0)
+		if (json_object_object_add(*iface_item, CFG_FIELD_TYPE, json_object_new_int(i_state.is_dhcp)) < 0)
 			return 1;
 
 		snprintf(ip, sizeof(ip), IP_FORMAT,
@@ -683,7 +681,7 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			}
 		}
 		Only the requested elements.
-		type: 0 (DHCP), 1 (Static)
+		type: 1 (DHCP), 0 (Static)
 		sec_mode: -1 (error), Open (0), WPA (1), WPA2 (2), WPA3 (3)
 	*/
 
@@ -867,10 +865,10 @@ static int get_net_cfg_from_json(json_object *json_item, const char *iface_name,
 		if (type < 0 || type > 1)
 			return -1;
 
-		net_cfg->is_dhcp = type == 0 ? NET_ENABLED : NET_DISABLED;
+		net_cfg->is_dhcp = type == 1 ? NET_ENABLED : NET_DISABLED;
 		valid_fields++;
 
-		log_dr_debug("  %s: %s", CFG_FIELD_TYPE, type == 0 ? "DHCP" : "Static");
+		log_dr_debug("  %s: %s", CFG_FIELD_TYPE, type == 1 ? "DHCP" : "Static");
 	}
 
 	ret = get_ip_from_json(json_item, CFG_FIELD_IP, &net_cfg->ipv4);
@@ -1232,7 +1230,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 			}
 		}
 		Valid elements: ethernet, wifi, bluetooth, connector
-		type: 0 (DHCP), 1 (Static)
+		type: 1 (DHCP), 0 (Static)
 		sec_mode: 0 (open), 1 (wpa), 2 (wpa2), 3 (wpa3)
 
 		Response:
