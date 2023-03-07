@@ -33,13 +33,12 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "cc_config.h"
+#include "cc_system_monitor.h"
 #include "device_request.h"
 #include "file_utils.h"
 #include "network_utils.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 #define TARGET_DEVICE_INFO		"device_info"
 #define TARGET_GET_CONFIG		"get_config"
 #define TARGET_GET_TIME			"get_time"
@@ -75,6 +74,7 @@
 #define CFG_ELEMENT_WIFI			"wifi"
 #define CFG_ELEMENT_BLUETOOTH		"bluetooth"
 #define CFG_ELEMENT_CONNECTOR		"connector"
+#define CFG_ELEMENT_SYS_MONITOR		"sys-monitor"
 
 #define CFG_FIELD_DESC				"desc"
 #define CFG_FIELD_DNS1				"dns1"
@@ -86,8 +86,10 @@
 #define CFG_FIELD_MUSIC_FILE	"music_file"
 #define CFG_FIELD_NAME				"name"
 #define CFG_FIELD_NETMASK			"netmask"
+#define CFG_FIELD_N_SAMPLE_UPLOAD	"n_dp_upload"
 #define CFG_FIELD_PLAY			"play"
 #define CFG_FIELD_PSK				"psk"
+#define CFG_FIELD_SAMPLE_RATE		"sample_rate"
 #define CFG_FIELD_SEC_MODE			"sec_mode"
 #define CFG_FIELD_SSID				"ssid"
 #define CFG_FIELD_STATUS			"status"
@@ -97,9 +99,6 @@
 #define UNUSED_ARGUMENT(a)	(void)(a)
 #endif
 
-/*------------------------------------------------------------------------------
-                                  M A C R O S
-------------------------------------------------------------------------------*/
 /*
  * log_dr_debug() - Log the given message as debug
  *
@@ -127,7 +126,14 @@
 #define log_dr_error(format, ...)									\
 	log_error("%s " format, DEVREQ_TAG, __VA_ARGS__)
 
+typedef struct {
+	bool enable;
+	uint32_t sample_rate;
+	uint32_t n_samples_upload;
+} sys_mon_cfg_t;
+
 static int future_connector_enable = true;
+extern cc_cfg_t *cc_cfg;
 
 /**
  * read_dey_version() - Read the DEY version
@@ -823,7 +829,8 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 	char *request = request_buffer_info->buffer;
 	json_object *req = NULL, *json_element = NULL, *resp = NULL;
 	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
-	bool eth_cfg = false, wifi_cfg = false, bt_cfg = false, cc_cfg = false;
+	bool eth_cfg = false, wifi_cfg = false, bt_cfg = false, c_cfg = false;
+	bool sys_mon_cfg = false;
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
@@ -835,7 +842,7 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			"element": ["ethernet", "wifi"]
 		}
 		Empty request returns all elements.
-		Valid elements: ethernet, wifi, bluetooth, connector
+		Valid elements: ethernet, wifi, bluetooth, connector, sys-monitor
 
 		Response:
 		{
@@ -880,6 +887,11 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			},
 			"connector": {
 				"enable": true
+			},
+			"sys-monitor": {
+				"enable": true,
+				"sample_rate": 30,
+				"n_dp_upload": 2
 			}
 		}
 		Only the requested elements.
@@ -891,7 +903,8 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 		eth_cfg = true;
 		wifi_cfg = true;
 		bt_cfg = true;
-		cc_cfg = true;
+		c_cfg = true;
+		sys_mon_cfg = true;
 	} else {
 		int len, i;
 
@@ -916,12 +929,13 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 				eth_cfg = eth_cfg || strcmp(element, CFG_ELEMENT_ETHERNET) == 0;
 				wifi_cfg = wifi_cfg || strcmp(element, CFG_ELEMENT_WIFI) == 0;
 				bt_cfg = bt_cfg || strcmp(element, CFG_ELEMENT_BLUETOOTH) == 0;
-				cc_cfg = cc_cfg || strcmp(element, CFG_ELEMENT_CONNECTOR) == 0;
+				c_cfg = c_cfg || strcmp(element, CFG_ELEMENT_CONNECTOR) == 0;
+				sys_mon_cfg = sys_mon_cfg || strcmp(element, CFG_ELEMENT_SYS_MONITOR) == 0;
 			}
 		}
 	}
 
-	if (!eth_cfg && !wifi_cfg && !bt_cfg && !cc_cfg)
+	if (!eth_cfg && !wifi_cfg && !bt_cfg && !c_cfg && !sys_mon_cfg)
 		goto bad_format;
 
 	resp = json_object_new_object();
@@ -958,12 +972,28 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			goto error;
 	}
 
-	if (cc_cfg) {
+	if (c_cfg) {
 		json_object *item = add_json_element(CFG_ELEMENT_CONNECTOR, &resp);
 		if (!item)
 			goto error;
 
 		if (json_object_object_add(item, CFG_FIELD_ENABLE, json_object_new_boolean(true)) < 0)
+			goto error;
+	}
+
+	if (sys_mon_cfg) {
+		get_configuration(cc_cfg);
+
+		json_object *item = add_json_element(CFG_ELEMENT_SYS_MONITOR, &resp);
+		if (!item)
+			goto error;
+
+		if (json_object_object_add(item, CFG_FIELD_ENABLE,
+			json_object_new_boolean(cc_cfg->services & SYS_MONITOR_SERVICE)) < 0)
+			goto error;
+		if (json_object_object_add(item, CFG_FIELD_SAMPLE_RATE, json_object_new_int(cc_cfg->sys_mon_sample_rate)) < 0)
+			goto error;
+		if (json_object_object_add(item, CFG_FIELD_N_SAMPLE_UPLOAD, json_object_new_int(cc_cfg->sys_mon_num_samples_upload)) < 0)
 			goto error;
 	}
 
@@ -1359,6 +1389,93 @@ static int get_bt_config(json_object *bt_req, bt_config_t *bt_cfg, json_object *
 }
 
 /*
+ * get_system_monitor_config() - Retrieves the system monitor from the JSon object
+ *
+ * @req:		Request JSon object.
+ * @sm_cfg:		Pointer to store the configuration.
+ * @resp:		Response JSon object.
+ *
+ * Return: 0 if success, -1 for bad format, -2 for out of memory.
+ */
+static int get_system_monitor_config(json_object *sm_req, sys_mon_cfg_t *sm_cfg, json_object **resp)
+{
+	int valid_fields = 0;
+	json_object *cfg_field = NULL;
+
+	if (add_json_element(CFG_ELEMENT_SYS_MONITOR, resp) == NULL)
+		return -2; /* Out of memory */
+
+	if (json_object_object_get_ex(sm_req, CFG_FIELD_ENABLE, &cfg_field)) {
+		if (!json_object_is_type(cfg_field, json_type_boolean))
+			return -1; /* Bad format */
+
+		sm_cfg->enable = json_object_get_boolean(cfg_field);
+		valid_fields++;
+	}
+
+	if (json_object_object_get_ex(sm_req, CFG_FIELD_SAMPLE_RATE, &cfg_field)) {
+		if (!json_object_is_type(cfg_field, json_type_int))
+			return -1; /* Bad format */
+
+		sm_cfg->sample_rate = json_object_get_int(cfg_field);
+		valid_fields++;
+	}
+
+	if (json_object_object_get_ex(sm_req, CFG_FIELD_N_SAMPLE_UPLOAD, &cfg_field)) {
+		if (!json_object_is_type(cfg_field, json_type_int))
+			return -1; /* Bad format */
+
+		sm_cfg->n_samples_upload = json_object_get_int(cfg_field);
+		valid_fields++;
+	}
+
+	return valid_fields > 0 ? 0 : -1;
+}
+
+/**
+ * set_system_monitor_config() - Sets the system monitor configuration
+ *
+ * @sm_cfg:		The new configuration
+ *
+ * Return: 0 if success, 1 unable to start system monitor, -1 unable to save config.
+ */
+static int set_system_monitor_config(sys_mon_cfg_t sm_cfg)
+{
+	bool save_cfg = false;
+
+	if (sm_cfg.enable != ((cc_cfg->services & SYS_MONITOR_SERVICE) ? true : false)) {
+		save_cfg = true;
+		if (sm_cfg.enable) {
+			cc_cfg->services |= SYS_MONITOR_SERVICE;
+			log_dr_error("%s: Starting system monitor", __func__);
+			if (start_system_monitor(cc_cfg) != CC_SYS_MON_ERROR_NONE)
+				return 1;
+		} else {
+			log_dr_error("%s: Stopping system monitor", __func__);
+			stop_system_monitor();
+			cc_cfg->services &= ~SYS_MONITOR_SERVICE;
+		}
+	}
+
+	if (sm_cfg.sample_rate != cc_cfg->sys_mon_sample_rate) {
+		save_cfg = true;
+		cc_cfg->sys_mon_sample_rate = sm_cfg.sample_rate;
+	}
+
+	if (sm_cfg.n_samples_upload != cc_cfg->sys_mon_num_samples_upload) {
+		save_cfg = true;
+		cc_cfg->sys_mon_num_samples_upload = sm_cfg.n_samples_upload;
+	}
+
+	if (save_cfg) {
+		log_dr_error("%s: Saving configuration", __func__);
+		return save_configuration(cc_cfg);
+	}
+
+	return 0;
+}
+
+/*
  * set_config_cb() - Data callback for 'set_config' device requests
  *
  * @target:					Target ID of the device request (set_config).
@@ -1380,6 +1497,11 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 	int valid_fields = 0, bt_devs = 0, n_eth_ifaces = 0, n_wifi_ifaces = 0, i;
 	net_config_t *net_cfgs = NULL;
 	wifi_config_t *wifi_cfgs = NULL;
+	sys_mon_cfg_t sm_cfg = {
+		.enable = cc_cfg->services & SYS_MONITOR_SERVICE,
+		.sample_rate = cc_cfg->sys_mon_sample_rate,
+		.n_samples_upload = cc_cfg->sys_mon_num_samples_upload,
+	};
 	bt_config_t bt_cfg = {
 		.dev_id = 0,
 		.enable = BT_ENABLED_ERROR,
@@ -1388,6 +1510,8 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 	};
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
+
+	response_buffer_info->buffer  = NULL;
 
 		/*
 		target "set_config"
@@ -1429,9 +1553,14 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 			},
 			"connector": {
 				"enable": true
+			},
+			"sys-monitor": {
+				"enable": true,
+				"sample_rate": 30,
+				"n_dp_upload": 2
 			}
 		}
-		Valid elements: ethernet, wifi, bluetooth, connector
+		Valid elements: ethernet, wifi, bluetooth, connector, sys-monitor
 		type: 1 (DHCP), 0 (Static)
 		sec_mode: 0 (open), 1 (wpa), 2 (wpa2), 3 (wpa3)
 
@@ -1499,6 +1628,16 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 		future_connector_enable = json_object_get_boolean(cfg_field);
 	}
 
+	if (json_object_object_get_ex(req, CFG_ELEMENT_SYS_MONITOR, &json_element)) {
+		int ret_sm = get_system_monitor_config(json_element, &sm_cfg, &resp);
+		if (ret_sm == -1)
+			goto bad_format;
+		if (ret_sm == -2)
+			goto error;
+
+		valid_fields++;
+	}
+
 	if (!valid_fields)
 		goto bad_format;
 
@@ -1555,7 +1694,30 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 			goto error;
 	}
 
-	/* Configure Connector */
+	/* Configure system monitor */
+	{
+		json_object *sm_item = NULL;
+		int err = set_system_monitor_config(sm_cfg);
+
+		if (!json_object_object_get_ex(resp, CFG_ELEMENT_SYS_MONITOR, &sm_item))
+			goto bad_format; /* Should not occur */
+
+		if (err == 1)
+			response_buffer_info->buffer = strdup("Unable to star system monitor");
+		else if (err == -1)
+			response_buffer_info->buffer = strdup("Unable to save configuration");
+
+		if (err != 0) {
+			status = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+			log_dr_error("Cannot process request for target '%s': %s", target, (char *)response_buffer_info->buffer);
+		}
+
+		if (json_object_object_add(sm_item, CFG_FIELD_STATUS, json_object_new_int(err)) < 0
+			|| json_object_object_add(sm_item, CFG_FIELD_DESC,
+				json_object_new_string(err == 0 ? "No error" : response_buffer_info->buffer)) < 0)
+			goto error;
+	}
+
 	response_buffer_info->buffer = strdup(json_object_to_json_string(resp));
 	if (response_buffer_info->buffer == NULL)
 		goto error;
@@ -1563,12 +1725,16 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 	goto done;
 
 bad_format:
+	if (response_buffer_info->buffer != NULL)
+		free(response_buffer_info->buffer);
 	response_buffer_info->buffer = strdup("Invalid format");
 	status = response_buffer_info->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 	log_dr_error("Cannot parse request for target '%s': Invalid format", target);
 	goto done;
 
 error:
+	if (response_buffer_info->buffer != NULL)
+		free(response_buffer_info->buffer);
 	response_buffer_info->buffer = strdup("Out of memory");
 	status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	log_dr_error("Cannot process request for target '%s': Out of memory", target);
