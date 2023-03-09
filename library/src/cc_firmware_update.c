@@ -338,7 +338,7 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 
 	if (sscanf(fw_version, "%hhu.%hhu.%hhu.%hhu", &version[0], &version[1],
 			&version[2], &version[3]) != 4) {
-		log_error("Error initilizing Cloud connection: Bad firmware_version string '%s', firmware update disabled",
+		log_error("Error initializing Cloud connection: Bad firmware_version string '%s', firmware update disabled",
 				fw_version);
 		return 0;
 	}
@@ -346,7 +346,7 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 	fw_list = calloc(__CC_FW_TARGET_LAST, sizeof(*fw_list));
 	*fw_service = calloc(1, sizeof(**fw_service));
 	if (fw_list == NULL || *fw_service == NULL) {
-		log_error("Error initilizing Cloud connection: %s", "Out of memory");
+		log_error("Error initializing Cloud connection: %s", "Out of memory");
 		free(fw_list);
 		return 1;
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -184,7 +184,7 @@ static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection
 {
 	ccapi_dp_error_t dp_error = ccapi_dp_create_collection(dp_collection);
 	if (dp_error != CCAPI_DP_ERROR_NONE) {
-		log_mon_error("Error initalizing app monitor, %d", dp_error);
+		log_mon_error("Error initializing app monitor, %d", dp_error);
 		return dp_error;
 	}
 

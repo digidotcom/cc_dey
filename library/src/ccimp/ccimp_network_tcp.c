@@ -278,7 +278,7 @@ ccimp_status_t ccimp_network_tcp_open(ccimp_network_open_t *const data)
 	status = app_is_tcp_connect_complete(*pfd);
 	if (status == CCIMP_STATUS_OK) {
 #if (defined APP_SSL)
-		log_debug("%s: openning SSL socket", __func__);
+		log_debug("%s: opening SSL socket", __func__);
 		if (app_ssl_connect(ssl_info)) {
 			log_error("%s", "Error establishing SSL connection");
 			status = CCIMP_STATUS_ERROR;
@@ -496,13 +496,13 @@ static int app_verify_device_cloud_certificate(SSL *const ssl)
 	X509 *const device_cloud_cert = SSL_get_peer_certificate(ssl);
 
 	if (device_cloud_cert == NULL) {
-		log_error("Error verifiying Remote Manager certificate: %s", "Could not load peer certificate");
+		log_error("Error verifying Remote Manager certificate: %s", "Could not load peer certificate");
 		goto done;
 	}
 
 	ret = SSL_get_verify_result(ssl);
 	if (ret !=  X509_V_OK) {
-		log_error("Error verifiying Remote Manager certificate: Invalid certificate (%d)", ret);
+		log_error("Error verifying Remote Manager certificate: Invalid certificate (%d)", ret);
 		goto done;
 	}
 

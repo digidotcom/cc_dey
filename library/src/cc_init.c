@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -478,7 +478,7 @@ static int create_ccapi_tcp_start_info_struct(const cc_cfg_t *const cc_cfg, ccap
 
 	/*
 	 * Some interfaces return a null MAC address (like ppp used by some
-	 * cellular modems). In those cases asume a WAN connection
+	 * cellular modems). In those cases assume a WAN connection
 	 */
 	if (is_zero_array(active_interface.mac, sizeof(active_interface.mac))) {
 		tcp_info->connection.type = CCAPI_CONNECTION_WAN;

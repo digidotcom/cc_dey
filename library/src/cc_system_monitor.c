@@ -432,7 +432,7 @@ static ccapi_dp_error_t init_system_monitor(const cc_cfg_t *const cc_cfg)
 	/* Create data point collection. */
 	ccapi_dp_error_t dp_error = ccapi_dp_create_collection(&dp_collection);
 	if (dp_error != CCAPI_DP_ERROR_NONE) {
-		log_sm_error("Error initalizing system monitor, %d", dp_error);
+		log_sm_error("Error initializing system monitor, %d", dp_error);
 		return dp_error;
 	}
 
@@ -576,8 +576,7 @@ error:
 
 #ifdef ENABLE_BT
 /*
- * init_bt_streams() - Add the bluetooth interface data point streams to
- *                     collection
+ * init_bt_streams() - Add Bluetooth interface data point streams to collection
  *
  * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
  * 			settings parsed from the configuration file are stored.

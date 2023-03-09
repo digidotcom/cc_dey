@@ -1122,9 +1122,9 @@ error:
 /*
  * get_bt_config() - Retrieves the Bluetooth from the JSon object
  *
- * @req:		Request JSon object.
- * @wifi_cfgs:	Pointer to store the configuration.
- * @resp:		Response JSon object.
+ * @req:			Request JSon object.
+ * @bt_config_t:	Pointer to store the configuration.
+ * @resp:			Response JSon object.
  *
  * Return: 0 if success, -1 for bad format, -2 for out of memory.
  */
@@ -1146,7 +1146,7 @@ static int get_bt_config(json_object *bt_req, bt_config_t *bt_cfg, json_object *
 
 	if (json_object_object_get_ex(bt_req, CFG_FIELD_NAME, &cfg_field)) {
 		if (!json_object_is_type(cfg_field, json_type_string))
-			return -1;
+			return -1; /* Bad format */
 
 		bt_cfg->set_name = true;
 		strncpy(bt_cfg->name, json_object_get_string(cfg_field), BT_NAME_MAX_LEN);
