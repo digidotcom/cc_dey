@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -104,8 +104,8 @@
 ------------------------------------------------------------------------------*/
 static int fill_connector_config(cc_cfg_t *cc_cfg);
 static int set_connector_config(cc_cfg_t *cc_cfg);
+static int check_cfg(void);
 static int cfg_check_vendor_id(cfg_t *cfg, cfg_opt_t *opt);
-static int check_vendor_id(unsigned long value);
 static int cfg_check_device_type(cfg_t *cfg, cfg_opt_t *opt);
 static int cfg_check_fw_version(cfg_t *cfg, cfg_opt_t *opt);
 static int cfg_check_rm_url(cfg_t *cfg, cfg_opt_t *opt);
@@ -405,30 +405,19 @@ error:
  */
 static int fill_connector_config(cc_cfg_t *cc_cfg)
 {
+	if (check_cfg())
+		return -1;
+
 	/* Fill general settings. */
 	cc_cfg->vendor_id = strtoul(cfg_getstr(cfg, SETTING_VENDOR_ID), NULL, 16);
-	if (check_vendor_id(cc_cfg->vendor_id) != 0)
-		return -1;
 	cc_cfg->device_type = strdup(cfg_getstr(cfg, SETTING_DEVICE_TYPE));
-	if (cc_cfg->device_type == NULL)
-		return -1;
 	cc_cfg->fw_version = strdup(cfg_getstr(cfg, SETTING_FW_VERSION));
-	if (cc_cfg->fw_version == NULL)
-		return -1;
 	cc_cfg->description = strdup(cfg_getstr(cfg, SETTING_DESCRIPTION));
-	if (cc_cfg->description == NULL)
-		return -1;
 	cc_cfg->contact = strdup(cfg_getstr(cfg, SETTING_CONTACT));
-	if (cc_cfg->contact == NULL)
-		return -1;
 	cc_cfg->location = strdup(cfg_getstr(cfg, SETTING_LOCATION));
-	if (cc_cfg->location == NULL)
-		return -1;
 
 	/* Fill connection settings. */
 	cc_cfg->url = strdup(cfg_getstr(cfg, SETTING_RM_URL));
-	if (cc_cfg->url == NULL)
-		return -1;
 	cc_cfg->client_cert_path = strdup(cfg_getstr(cfg, SETTING_CLIENT_CERT_PATH));
 	cc_cfg->enable_reconnect = (ccapi_bool_t) cfg_getbool(cfg, SETTING_ENABLE_RECONNECT);
 	cc_cfg->reconnect_time = cfg_getint(cfg, SETTING_RECONNECT_TIME);
@@ -447,8 +436,6 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 		cc_cfg->services = cc_cfg->services | SYS_MONITOR_SERVICE;
 
 	cc_cfg->fw_download_path = strdup(cfg_getstr(cfg, SETTING_FW_DOWNLOAD_PATH));
-	if (cc_cfg->fw_download_path == NULL)
-		return -1;
 
 	/* Fill On the fly setting */
 	cc_cfg->on_the_fly = (ccapi_bool_t) cfg_getbool(cfg, SETTING_ON_THE_FLY);
@@ -485,9 +472,6 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	char vid_str[11]; /* "0x" + 8 chars + '\0' */
 
 	/* Set general settings. */
-	if (check_vendor_id(cc_cfg->vendor_id) != 0)
-		return -1;
-
 	snprintf(vid_str, sizeof vid_str, "0x%08"PRIX32, cc_cfg->vendor_id);
 	cfg_setstr(cfg, SETTING_VENDOR_ID, vid_str);
 	cfg_setstr(cfg, SETTING_DEVICE_TYPE, cc_cfg->device_type);
@@ -514,9 +498,8 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	/* Fill system monitor settings. */
 	cfg_setint(cfg, SETTING_SYS_MON_SAMPLE_RATE, cc_cfg->sys_mon_sample_rate);
 	cfg_setint(cfg, SETTING_SYS_MON_UPLOAD_SIZE, cc_cfg->sys_mon_num_samples_upload);
-	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++) {
+	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++)
 		cfg_setnstr(cfg, SETTING_SYS_MON_METRICS, cc_cfg->sys_mon_metrics[i], i);
-	}
 
 	/* Fill static location settings. */
 	cfg_setbool(cfg, SETTING_USE_STATIC_LOCATION, (cfg_bool_t) cc_cfg->use_static_location);
@@ -537,6 +520,64 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 		break;
 	}
 	cfg_setbool(cfg, SETTING_LOG_CONSOLE, (cfg_bool_t) cc_cfg->log_console);
+
+	return 0;
+}
+
+/*
+ * check_cfg() - Checks whether the parsed configuration is valid
+ *
+ * Return: 0 if the configuration is valid, -1 otherwise.
+ */
+static int check_cfg(void)
+{
+	/* Check general settings. */
+	if (cfg_check_vendor_id(cfg, cfg_getopt(cfg, SETTING_VENDOR_ID)) != 0)
+		return -1;
+	if (cfg_check_device_type(cfg, cfg_getopt(cfg, SETTING_DEVICE_TYPE)) != 0)
+		return -1;
+	if (cfg_check_fw_version(cfg, cfg_getopt(cfg, SETTING_FW_VERSION)) != 0)
+		return -1;
+	if (cfg_check_description(cfg, cfg_getopt(cfg, SETTING_DESCRIPTION)) != 0)
+		return -1;
+	if (cfg_check_contact(cfg, cfg_getopt(cfg, SETTING_CONTACT)) != 0)
+		return -1;
+	if (cfg_check_location(cfg, cfg_getopt(cfg, SETTING_LOCATION)) != 0)
+		return -1;
+
+	/* Check connection settings. */
+	if (cfg_check_rm_url(cfg, cfg_getopt(cfg, SETTING_RM_URL)) != 0)
+		return -1;
+	if (cfg_check_cert_path(cfg, cfg_getopt(cfg, SETTING_CLIENT_CERT_PATH)) != 0)
+		return -1;
+	if (cfg_check_reconnect_time(cfg, cfg_getopt(cfg, SETTING_RECONNECT_TIME)) != 0)
+		return -1;
+	if (cfg_check_keepalive_rx(cfg, cfg_getopt(cfg, SETTING_KEEPALIVE_RX)) != 0)
+		return -1;
+	if (cfg_check_keepalive_tx(cfg, cfg_getopt(cfg, SETTING_KEEPALIVE_TX)) != 0)
+		return -1;
+	if (cfg_check_wait_times(cfg, cfg_getopt(cfg, SETTING_WAIT_TIMES)) != 0)
+		return -1;
+
+	/* Check services settings. */
+	if (cfg_check_fw_download_path(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
+		return -1;
+
+	/* Check system monitor settings. */
+	if (cfg_check_sys_mon_sample_rate(cfg, cfg_getopt(cfg, SETTING_SYS_MON_SAMPLE_RATE)) != 0)
+		return -1;
+	if (cfg_check_sys_mon_upload_size(cfg, cfg_getopt(cfg, SETTING_SYS_MON_UPLOAD_SIZE)) != 0)
+		return -1;
+	if (cfg_check_sys_mon_metrics(cfg, cfg_getopt(cfg, SETTING_SYS_MON_METRICS)) != 0)
+		return -1;
+
+	/* Check static location settings. */
+	if (cfg_check_latitude(cfg, cfg_getopt(cfg, SETTING_LATITUDE)) != 0)
+		return -1;
+	if (cfg_check_longitude(cfg, cfg_getopt(cfg, SETTING_LONGITUDE)) != 0)
+		return -1;
+	if (cfg_check_float_range(cfg, cfg_getopt(cfg, SETTING_ALTITUDE), -100000, 100000) != 0)
+		return -1;
 
 	return 0;
 }
@@ -958,25 +999,6 @@ static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
 		cfg_error(cfg,
 				"Invalid %s (%s): directory does not exist or do not have R/W access",
 				opt->name, val);
-		return -1;
-	}
-
-	return 0;
-}
-
-/*
- * check_vendor_id() - Validate the given Vendor ID
- *
- * @value:	The Vendor ID value.
- *
- * @Return: 0 for a valid value, -1 otherwise.
- */
-static int check_vendor_id(unsigned long value)
-{
-	if (value == 0 || value >= SETTING_VENDOR_ID_MAX) {
-		log_error(
-				"Invalid %s (0x%08lX): value must be between 0 and 0x%08lX",
-				SETTING_VENDOR_ID, value, SETTING_VENDOR_ID_MAX);
 		return -1;
 	}
 
