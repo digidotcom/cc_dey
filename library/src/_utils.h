@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,13 +17,29 @@
  * ===========================================================================
  */
 
-#ifndef STRING_UTILS_H
-#define STRING_UTILS_H
+#ifndef ___UTILS_H__
+#define ___UTILS_H__
 
+#include <stdint.h>
+
+#ifndef TEMP_FAILURE_RETRY
+
+#define TEMP_FAILURE_RETRY(expression) ({ \
+	__typeof(expression) __temp_result; \
+	do { \
+			__temp_result = (expression); \
+	} while (__temp_result == (__typeof(expression))-1 && errno == EINTR); \
+	__temp_result; \
+})
+
+#endif
+
+int mkpath(char *dir, mode_t mode);
+int crc32file(char const *const path, uint32_t *crc);
 char *delete_quotes(char *str);
 char *delete_leading_spaces(char *str);
 char *delete_trailing_spaces(char *str);
 char *trim(char *str);
 char *delete_newline_character(char *str);
 
-#endif
+#endif /* ___UTILS_H__ */

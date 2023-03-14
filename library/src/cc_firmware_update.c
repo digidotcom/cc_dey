@@ -34,8 +34,7 @@
 #include "cc_config.h"
 #include "cc_firmware_update.h"
 #include "cc_logging.h"
-#include "file_utils.h"
-#include "string_utils.h"
+#include "_utils.h"
 
 /* Swupdate support */
 #ifdef ENABLE_ONTHEFLY_UPDATE

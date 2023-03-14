@@ -36,8 +36,8 @@
 #include "cc_config.h"
 #include "cc_system_monitor.h"
 #include "device_request.h"
-#include "file_utils.h"
 #include "network_utils.h"
+#include "utils.h"
 
 #define TARGET_DEVICE_INFO		"device_info"
 #define TARGET_GET_CONFIG		"get_config"
@@ -2117,7 +2117,6 @@ exit:
 
 	return ret;
 }
-
 
 /*
  * request_status_cb() - Status callback for application device requests

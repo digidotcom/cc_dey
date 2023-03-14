@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,19 +17,14 @@
  * ===========================================================================
  */
 
-#ifndef file_utils_h
-#define file_utils_h
-
-#include <stdint.h>
-#include <sys/types.h>
+#ifndef __UTILS_H__
+#define __UTILS_H__
 
 int file_exists(const char * const filename);
 int file_readable(const char * const filename);
 int file_writable(const char * const filename);
-int mkpath(char *dir, mode_t mode);
 long read_file(const char *path, char *buffer, long file_size);
 int read_file_line(const char * const path, char *buffer, int bytes_to_read);
 int write_to_file(const char * const path, const char * const format, ...);
-int crc32file(char const *const path, uint32_t *crc);
 
-#endif
+#endif /* __UTILS_H__ */
