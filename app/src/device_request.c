@@ -33,11 +33,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "cc_config.h"
-#include "cc_system_monitor.h"
 #include "device_request.h"
-#include "network_utils.h"
-#include "utils.h"
 
 #define TARGET_DEVICE_INFO		"device_info"
 #define TARGET_GET_CONFIG		"get_config"

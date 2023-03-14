@@ -20,6 +20,14 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
+#define IPV4_GROUPS			4
+#define MAC_ADDRESS_GROUPS	6
+
+#define IP_STRING_LENGTH 	(4 * IPV4_GROUPS)
+#define IP_FORMAT			"%d.%d.%d.%d"
+#define MAC_STRING_LENGTH	(3 * MAC_ADDRESS_GROUPS)
+#define MAC_FORMAT			"%02x:%02x:%02x:%02x:%02x:%02x"
+
 int file_exists(const char * const filename);
 int file_readable(const char * const filename);
 int file_writable(const char * const filename);

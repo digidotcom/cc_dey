@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Digi International Inc.
+ * Copyright (c) 2016-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -20,8 +20,11 @@
 #ifndef CLOUDCONNECTOR_H_
 #define CLOUDCONNECTOR_H_
 
+#include "cc_config.h"
 #include "cc_init.h"
 #include "cc_logging.h"
+#include "cc_system_monitor.h"
+#include "utils.h"
 
 #include <ccimp/ccimp_types.h>
 
