@@ -1073,7 +1073,7 @@ static int get_net_cfg_from_json(json_object *json_item, const char *iface_name,
 	json_object *cfg_field = NULL;
 	int valid_fields = 0, ret;
 
-	strncpy(net_cfg->name, iface_name, sizeof(net_cfg->name));
+	strncpy(net_cfg->name, iface_name, strlen(net_cfg->name));
 
 	if (json_object_object_get_ex(json_item, CFG_FIELD_ENABLE, &cfg_field)) {
 		if (!json_object_is_type(cfg_field, json_type_boolean))
@@ -1146,7 +1146,7 @@ static int get_wifi_cfg_from_json(json_object *json_item, const char *iface_name
 	json_object *cfg_field = NULL;
 	int valid_fields = 0;
 
-	strncpy(wifi_cfg->name, iface_name, sizeof(wifi_cfg->name));
+	strncpy(wifi_cfg->name, iface_name, strlen(wifi_cfg->name));
 
 	valid_fields = get_net_cfg_from_json(json_item, iface_name, &wifi_cfg->net_config);
 	if (valid_fields < 0)
@@ -1159,7 +1159,7 @@ static int get_wifi_cfg_from_json(json_object *json_item, const char *iface_name
 		if (!json_object_is_type(cfg_field, json_type_string))
 			return 1;
 		wifi_cfg->set_ssid = true;
-		strncpy(wifi_cfg->ssid, json_object_get_string(cfg_field), IW_ESSID_MAX_SIZE);
+		strncpy(wifi_cfg->ssid, json_object_get_string(cfg_field), IW_ESSID_MAX_SIZE - 1);
 		valid_fields++;
 		log_dr_debug("  %s: %s", CFG_FIELD_SSID, wifi_cfg->ssid);
 	}

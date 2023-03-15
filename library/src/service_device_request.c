@@ -595,28 +595,23 @@ ccapi_receive_error_t register_builtin_requests(void)
 static ccapi_bool_t receive_default_accept_cb(char const *const target,
 		ccapi_transport_t const transport)
 {
-	ccapi_bool_t accept_target = CCAPI_TRUE;
-
-#if (defined CCIMP_UDP_TRANSPORT_ENABLED || defined CCIMP_SMS_TRANSPORT_ENABLED)
 	switch (transport) {
+		case CCAPI_TRANSPORT_TCP:
+			return CCAPI_TRUE;
 #if (defined CCIMP_UDP_TRANSPORT_ENABLED)
 		case CCAPI_TRANSPORT_UDP:
-#endif
+			/* intentional fall-through */
+#endif /* CCIMP_UDP_TRANSPORT_ENABLED */
 #if (defined CCIMP_SMS_TRANSPORT_ENABLED)
 		case CCAPI_TRANSPORT_SMS:
-#endif
+			/* intentional fall-through */
+#endif /* CCIMP_SMS_TRANSPORT_ENABLED */
+		default:
 			/* Don't accept requests from SMS and UDP transports */
 			log_dr_debug("%s: not accepted request - target='%s' - transport='%d'",
 				      __func__, target, transport);
-			accept_target = CCAPI_FALSE;
-			break;
+			return CCAPI_FALSE;
 	}
-#else
-	UNUSED_ARGUMENT(transport);
-	UNUSED_ARGUMENT(target);
-#endif
-
-	return accept_target;
 }
 
 /**
