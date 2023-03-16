@@ -208,9 +208,9 @@ static int is_dual_boot_system(void)
 
 	if (ldx_process_execute_cmd("fw_printenv -n dualboot", &resp, 2) != 0 || resp == NULL) {
 		if (resp != NULL)
-			log_error("Error getting dualboot system info: %s", resp);
+			log_fw_error("Error getting dualboot system info: %s", resp);
 		else
-			log_error("%s: Error getting dualboot system info", __func__);
+			log_fw_error("%s: Error getting dualboot system info", __func__);
 
 		is_dual = -1;
 	} else {
@@ -1112,9 +1112,9 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 
 		if (ldx_process_execute_cmd("fw_printenv -n active_system", &resp, 2) != 0 || resp == NULL) {
 			if (resp != NULL)
-				log_error("Error getting active system: %s", resp);
+				log_fw_error("Error getting active system: %s", resp);
 			else
-				log_error("%s: Error getting active system", __func__);
+				log_fw_error("%s: Error getting active system", __func__);
 			retval = -1;
 		} else {
 			/* Read active system */
@@ -1359,9 +1359,9 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 			/* Swap the active system partition */
 			if (ldx_process_execute_cmd("on-the-fly-swap-partition.sh", &resp, 2) != 0) {
 				if (resp != NULL)
-					log_error("Error swapping active system: %s", resp);
+					log_fw_error("Error swapping active system: %s", resp);
 				else
-					log_error("%s: Error swapping active system", __func__);
+					log_fw_error("%s: Error swapping active system", __func__);
 				free(resp);
 				return;
 			}
@@ -1424,7 +1424,7 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 
 	if (sscanf(fw_version, "%hhu.%hhu.%hhu.%hhu", &version[0], &version[1],
 			&version[2], &version[3]) != 4) {
-		log_error("Error initializing Cloud connection: Bad firmware_version string '%s', firmware update disabled",
+		log_fw_error("Error initializing Cloud connection: Bad firmware_version string '%s', firmware update disabled",
 				fw_version);
 		return 0;
 	}
@@ -1432,7 +1432,7 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 	fw_list = calloc(__CC_FW_TARGET_LAST, sizeof(*fw_list));
 	*fw_service = calloc(1, sizeof(**fw_service));
 	if (fw_list == NULL || *fw_service == NULL) {
-		log_error("Error initializing Cloud connection: %s", "Out of memory");
+		log_fw_error("Error initializing Cloud connection: %s", "Out of memory");
 		free(fw_list);
 		return 1;
 	}
