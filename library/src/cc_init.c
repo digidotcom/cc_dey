@@ -251,6 +251,7 @@ cc_stop_error_t stop_cloud_connection(void)
 
 	stop_requested = true;
 	if (reconnect_thread_valid) {
+		reconnect_thread_valid = false;
 		pthread_cancel(reconnect_thread);
 		pthread_join(reconnect_thread, NULL);
 	}
@@ -567,7 +568,7 @@ static int setup_virtual_dirs(const vdir_t *const vdirs, int n_vdirs)
  * @cause:	Reason of the disconnection (disconnection, redirection, missing
  * 		keep alive, or any other data error).
  *
- * Return:	CCAPI_TRUE if Cloud Connector should reconnect, CCAPI_FALSE otherwise.
+ * Return:	CCAPI_TRUE to reconnect immediately, CCAPI_FALSE otherwise.
  */
 static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 {
@@ -616,16 +617,14 @@ static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 		goto error;
 	}
 
-	error = pthread_create(&reconnect_thread, NULL, reconnect_threaded, NULL);
-	if (error != 0) {
+	reconnect_thread_valid = pthread_create(&reconnect_thread, NULL, reconnect_threaded, NULL);
+	if (reconnect_thread_valid != 0) {
 		log_error("Unable to reconnect, cannot create reconnect thread: pthread_create() error %d",
 				error);
 		goto error;
 	}
 
-	reconnect_thread_valid = true;
-
-	return CCAPI_TRUE;
+	return CCAPI_FALSE;
 
 error:
 	pthread_attr_destroy(&attr);
@@ -646,6 +645,7 @@ static void *reconnect_threaded(void *unused)
 
 	initial_reconnection = false;
 
+	log_info("Disconnected, attempting to reconnect in %d seconds", reconnect_time);
 	sleep(reconnect_time);
 	initialize_tcp_transport(cc_cfg);
 

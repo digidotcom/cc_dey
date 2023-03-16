@@ -59,7 +59,7 @@
 #define SETTING_CLIENT_CERT_PATH	"client_cert_path"
 #define SETTING_ENABLE_RECONNECT	"enable_reconnect"
 #define SETTING_RECONNECT_TIME		"reconnect_time"
-#define SETTING_RECONNECT_TIME_MIN	1
+#define SETTING_RECONNECT_TIME_MIN	30
 #define SETTING_RECONNECT_TIME_MAX	32767
 #define SETTING_KEEPALIVE_TX		"keep_alive_time"
 #define SETTING_KEEPALIVE_RX		"server_keep_alive_time"

@@ -45,7 +45,12 @@
 #define ccimp_network_tcp_close      ccimp_network_tcp_close_real
 #endif /* UNIT_TEST */
 
-#define APP_CONNECT_TIMEOUT 30
+/*
+ * FIXME: This must be lower than the timeout specified in the call to
+ * ccapi_start_transport_tcp() to avoid a race condition (CCAPI-163)
+ */
+#define APP_CONNECT_TIMEOUT 25
+#define APP_DISCONNECT_TIMEOUT 10
 
 /*------------------------------------------------------------------------------
                  D A T A    T Y P E S    D E F I N I T I O N S
@@ -56,6 +61,7 @@ typedef struct {
 	SSL_CTX *ctx;
 	SSL *ssl;
 #endif /* APP_SSL */
+	ccimp_os_system_up_time_t disconnect_start_time;
 	ccimp_os_system_up_time_t connect_start_time;
 } network_handle_t;
 
@@ -78,21 +84,47 @@ static int app_ssl_connect(network_handle_t *const handle);
 ------------------------------------------------------------------------------*/
 ccimp_status_t ccimp_network_tcp_close(ccimp_network_close_t *const data)
 {
-	ccimp_status_t status = CCIMP_STATUS_OK;
 	network_handle_t *const handle = data->handle;
 
-	if (close(handle->sock) < 0)
-		log_error("Error closing connection: %s (%d)", strerror(errno), errno);
+	if (handle->disconnect_start_time.sys_uptime == 0) {
+		ccimp_os_get_system_time(&handle->disconnect_start_time);
+	} else {
+		unsigned long elapsed_time;
+		ccimp_os_system_up_time_t current_time;
+
+		ccimp_os_get_system_time(&current_time);
+		elapsed_time = current_time.sys_uptime - handle->disconnect_start_time.sys_uptime;
+
+		if (elapsed_time > APP_DISCONNECT_TIMEOUT)
+			goto close;
+	}
 
 #if (defined APP_SSL)
-	/* Send close notify to peer */
-	if (SSL_shutdown(handle->ssl) == 0)
-		SSL_shutdown(handle->ssl); /* wait for peer's close notify */
+	if (handle->ssl != NULL) {
+		/* Send close notify to peer */
+		int ret = SSL_shutdown(handle->ssl);
+
+		if (ret == 0)
+			return CCIMP_STATUS_BUSY;
+
+		if (ret < 0) {
+			int error = SSL_get_error(handle->ssl, ret);
+
+			if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE)
+				return CCIMP_STATUS_BUSY;
+
+			log_error("Error closing connection: SSL error %d", error);
+		}
+	}
 #endif /* APP_SSL */
+
+close:
+	if (handle->sock != -1 && close(handle->sock) < 0)
+		log_error("Error closing connection: %s (%d)", strerror(errno), errno);
 
 	free_network_handle(handle);
 
-	return status;
+	return CCIMP_STATUS_OK;
 }
 
 ccimp_status_t ccimp_network_tcp_receive(ccimp_network_receive_t *const data)
@@ -304,7 +336,7 @@ error:
 
 static int app_tcp_create_socket(void)
 {
-	int sock = socket(AF_INET, SOCK_STREAM, 0);
+	int sock = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
 	if (sock >= 0) {
 		int enabled = 1;
