@@ -843,6 +843,7 @@ done:
 static int mf_generate_fw(const char *manifest_path, int target)
 {
 	size_t available_space;
+	char *tmp = NULL;
 	mf_fw_info_t fw_info = {0};
 	int error = 0;
 
@@ -893,6 +894,14 @@ static int mf_generate_fw(const char *manifest_path, int target)
 	/* Save firmware package path */
 
 	log_fw_debug("Image was assembly in '%s'", fw_info.file_path);
+	tmp = calloc(1, sizeof(char) * (strlen(fw_info.file_path) + 1));
+	if (tmp == NULL) {
+		log_fw_error("Unable to install software package %s: Out of memory", fw_info.file_path);
+		error = -1;
+		goto done;
+	}
+	free(fw_downloaded_path);
+	fw_downloaded_path = tmp;
 	strcpy(fw_downloaded_path, fw_info.file_path);
 
 done:
@@ -1021,7 +1030,7 @@ static ccapi_fw_data_error_t process_swu_package(const char *swu_path, int targe
 {
 	ccapi_fw_data_error_t error = CCAPI_FW_DATA_ERROR_NONE;
 
-	if (is_dual_boot_system()) {
+	if (is_dual_boot_system() > 0) {
 		char cmd[CMD_BUFSIZE] = {0};
 		char line[LINE_BUFSIZE] = {0};
 		FILE *fp;
@@ -1088,7 +1097,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 	}
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
-	if (is_dual_boot_system() && cc_cfg->on_the_fly) {
+	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		char system_to_update[256] = {0};
 		int active_system_len = 7;
 		char *resp = NULL;
@@ -1217,7 +1226,7 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 	log_fw_debug("Received chunk: target=%d offset=0x%x length=%zu last_chunk=%d", target, offset, size, last_chunk);
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
-	if (is_dual_boot_system() && cc_cfg->on_the_fly) {
+	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		log_fw_debug("Get data package from Remote Manager %d", target);
 		otf_info.chunk_size = size;
 		memcpy(otf_info.buffer, data, otf_info.chunk_size);
@@ -1345,9 +1354,9 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 
 	*system_reset = CCAPI_FALSE;
 
-	if (is_dual_boot_system()) {
+	if (is_dual_boot_system() > 0) {
 #ifdef ENABLE_ONTHEFLY_UPDATE
-		if (cc_cfg->on_the_fly){
+		if (cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST){
 			char *resp = NULL;
 
 			if (!otf_info.update_successful) {
@@ -1377,9 +1386,9 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 
 	log_fw_info("Rebooting in %d seconds", REBOOT_TIMEOUT);
 
-	if (is_dual_boot_system()) {
+	if (is_dual_boot_system() > 0) {
 #ifdef ENABLE_ONTHEFLY_UPDATE
-		if (cc_cfg->on_the_fly) {
+		if (cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 			sync();
 			fflush(stdout);
 			sleep(REBOOT_TIMEOUT);
