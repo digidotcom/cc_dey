@@ -38,8 +38,9 @@
 
 /* Swupdate support */
 #ifdef ENABLE_ONTHEFLY_UPDATE
-#include <swupdate_status.h>
+#include <mntent.h>
 #include <network_ipc.h>
+#include <swupdate_status.h>
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 
 /*------------------------------------------------------------------------------
@@ -1018,6 +1019,45 @@ static int otf_end_cb(RECOVERY_STATUS status)
 
 	return 0;
 }
+
+/*
+ * check_mount_point() - Checks if the provided path is an existing mount point
+ *
+ * @mp_dir:	Absolute path of the mount point directory to check
+ *
+ * If mount entries cannot be read it at least checks if it is an existing
+ * directory.
+ *
+ * Return: true if mount point exists, false otherwise.
+ */
+static bool check_mount_point(const char *mp_dir)
+{
+	FILE *fp = NULL;
+	struct mntent *mnt_entry = NULL;
+	bool found = false;
+
+	fp = setmntent("/proc/mounts", "r");
+	if (fp == NULL) {
+		struct stat st;
+
+		log_fw_error("Unable to check mount point %s", mp_dir);
+
+		/* Check at least if it is an existing directory */
+		return stat(mp_dir, &st) == 0 && S_ISDIR(st.st_mode);
+	}
+
+	while ((mnt_entry = getmntent(fp)) != NULL) {
+		if (strcmp(mnt_entry->mnt_dir, mp_dir) == 0) {
+			found = true;
+			break;
+		}
+	}
+
+	endmntent(fp);
+
+	return found;
+}
+
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 
 /*
@@ -1098,10 +1138,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
 	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
-		char system_to_update[256] = {0};
-		int active_system_len = 7;
 		char *resp = NULL;
-		char *active_system = NULL;
 		int retval;
 		static struct swupdate_request req;
 
@@ -1126,25 +1163,29 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 				log_fw_error("%s: Error getting active system", __func__);
 			retval = -1;
 		} else {
+			char umount_cmd[CMD_BUFSIZE] = {0};
+			char *active_system = resp;
+
 			/* Read active system */
-			active_system = trim(resp);
 			log_fw_debug("Active system detected: '%s'", active_system);
 
 			/* Detect storage media, on eMMC devices the response will be 1*/
 			if (ldx_process_execute_cmd("grep -qs mtd /proc/mtd", NULL, 2) == 0) {
-				strncpy(req.software_set, "mtd" , sizeof(req.software_set) -1);
+				strncpy(req.software_set, "mtd" , sizeof(req.software_set) - 1);
 			} else {
 				strncpy(req.software_set, "mmc" , sizeof(req.software_set) - 1);
 			}
 			log_fw_debug("Is a %s device", req.software_set);
 
 			/* Detect active system & save the partition to umount */
-			if (!strncmp(active_system, "linux_a", active_system_len)) {
-				strncpy(req.running_mode, "secondary" , sizeof(req.running_mode) -1);
-				sprintf(system_to_update, "%s", "umount /mnt/linux_b > /dev/null");
+			if (!strcmp(active_system, "linux_a")) {
+				strncpy(req.running_mode, "secondary" , sizeof(req.running_mode) - 1);
+				if (check_mount_point("/mnt/linux_b"))
+					sprintf(umount_cmd, "%s", "umount /mnt/linux_b > /dev/null");
 			} else {
 				strncpy(req.running_mode, "primary" , sizeof(req.running_mode) - 1);
-				sprintf(system_to_update, "%s", "umount /mnt/linux_a > /dev/null");
+				if (check_mount_point("/mnt/linux_a"))
+					sprintf(umount_cmd, "%s", "umount /mnt/linux_a > /dev/null");
 			}
 
 			log_fw_debug("Selected %s partition to update", req.running_mode);
@@ -1152,7 +1193,8 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 			/* We don't care about the result of the command, it will fail
 			if the partition is already umount, for example in the scenario
 			when a first update fails, and we perform a retry */
-			ldx_process_execute_cmd(system_to_update, NULL, 2);
+			if (strlen(umount_cmd) > 0)
+				ldx_process_execute_cmd(umount_cmd, NULL, 2);
 
 			retval = swupdate_async_start(otf_read_image_cb, otf_print_status_cb, otf_end_cb, &req, sizeof(req));
 		}
