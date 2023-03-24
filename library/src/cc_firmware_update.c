@@ -65,7 +65,6 @@
 
 #define LINE_BUFSIZE				255
 #define CMD_BUFSIZE				255
-#define FW_UPDATE_CMD				"update-firmware"
 
 typedef enum {
 	CC_FW_TARGET_SWU,
@@ -911,26 +910,7 @@ done:
 	return error;
 }
 
-/******************** Recovery update ********************/
-
-#ifdef ENABLE_RECOVERY_UPDATE
-/*
- * reboot_threaded() - Perform the reboot in a new thread
- *
- * @unused:	Unused parameter.
- */
-static void *reboot_threaded(void *unused)
-{
-	UNUSED_ARGUMENT(unused);
-
-	if (reboot_recovery(REBOOT_TIMEOUT))
-		log_fw_error("%s", "Error rebooting in recovery mode");
-
-	pthread_exit(NULL);
-
-	return NULL;
-}
-#endif /* ENABLE_RECOVERY_UPDATE */
+/***********************************************************/
 
 /******************** On the fly update ********************/
 
@@ -1060,6 +1040,8 @@ static bool check_mount_point(const char *mp_dir)
 
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 
+/***********************************************************/
+
 /*
  * process_swu_package() - Perform the installation of the SWU software package
  *
@@ -1075,8 +1057,8 @@ static ccapi_fw_data_error_t process_swu_package(const char *swu_path, int targe
 		char line[LINE_BUFSIZE] = {0};
 		FILE *fp;
 
-		log_fw_debug("We will start the %s script at path %s", FW_UPDATE_CMD, swu_path);
-		sprintf(cmd, "%s %s", FW_UPDATE_CMD, swu_path);
+		log_fw_debug("Starting update with path '%s'", swu_path);
+		sprintf(cmd, "update-firmware --no-reboot %s", swu_path);
 		/* Open process to execute update command */
 		fp = popen(cmd, "r");
 		if (fp == NULL){
@@ -1107,6 +1089,39 @@ static ccapi_fw_data_error_t process_swu_package(const char *swu_path, int targe
 	}
 
 	return error;
+}
+
+/*
+ * reboot_system() - Reboot the system
+ */
+static void reboot_system(void) {
+	if (is_dual_boot_system() > 0) {
+		sync();
+		fflush(stdout);
+		sleep(REBOOT_TIMEOUT);
+		reboot(RB_AUTOBOOT);
+#ifdef ENABLE_RECOVERY_UPDATE
+	} else {
+		if (reboot_recovery(REBOOT_TIMEOUT))
+			log_fw_error("%s", "Error rebooting in recovery mode");
+#endif /* ENABLE_RECOVERY_UPDATE */
+	}
+}
+
+/*
+ * reboot_threaded() - Perform the reboot in a new thread
+ *
+ * @unused:	Unused parameter.
+ */
+static void *reboot_threaded(void *unused)
+{
+	UNUSED_ARGUMENT(unused);
+
+	reboot_system();
+
+	pthread_exit(NULL);
+
+	return NULL;
 }
 
 /******************** CC firmware update callbacks ********************/
@@ -1205,6 +1220,8 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 		if (retval < 0) {
 			log_fw_error("Streaming update process failed, returns '%d'", retval);
 			pthread_mutex_unlock(&otf_info.mutex);
+			pthread_mutex_destroy(&otf_info.mutex);
+
 			return CCAPI_FW_REQUEST_ERROR_ENCOUNTERED_ERROR;
 		}
 	} else
@@ -1282,6 +1299,7 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 			pthread_mutex_lock(&otf_info.mutex);
 			pthread_cond_wait(&otf_info.cv_end, &otf_info.mutex);
 			pthread_mutex_unlock(&otf_info.mutex);
+			pthread_mutex_destroy(&otf_info.mutex);
 
 			/* Verify upgrade status and post-update actions */
 			if (otf_info.end_status == EXIT_FAILURE) {
@@ -1409,56 +1427,35 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 
 	*system_reset = CCAPI_FALSE;
 
-	if (is_dual_boot_system() > 0) {
 #ifdef ENABLE_ONTHEFLY_UPDATE
-		if (cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST){
-			char *resp = NULL;
+	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST){
+		char *resp = NULL;
 
-			if (!otf_info.update_successful) {
-				log_fw_error("On the fly update failed (%d)", otf_info.update_successful);
-				return;
-			}
-			log_fw_debug("On the fly update finished. Now we will reboot the system (%d)", otf_info.update_successful);
-
-			/* Swap the active system partition */
-			if (ldx_process_execute_cmd("on-the-fly-swap-partition.sh", &resp, 2) != 0) {
-				if (resp != NULL)
-					log_fw_error("Error swapping active system: %s", resp);
-				else
-					log_fw_error("%s: Error swapping active system", __func__);
-				free(resp);
-				return;
-			}
-
-			free(resp);
-		} else
-#endif /* ENABLE_ONTHEFLY_UPDATE */
-		{
-			log_fw_debug("%s", "Dualboot mode does not reboot the system");
+		if (!otf_info.update_successful) {
+			log_fw_error("On the fly update failed (%d)", otf_info.update_successful);
 			return;
 		}
+		log_fw_debug("On the fly update finished. Now we will reboot the system (%d)", otf_info.update_successful);
+
+		/* Swap the active system partition */
+		if (ldx_process_execute_cmd("on-the-fly-swap-partition.sh, &resp, 2) != 0) {
+			if (resp != NULL)
+				log_fw_error("Error swapping active system: %s", resp);
+			else
+				log_fw_error("%s: Error swapping active system", __func__);
+			free(resp);
+			return;
+		}
+
+		free(resp);
 	}
+#endif /* ENABLE_ONTHEFLY_UPDATE */
 
 	log_fw_info("Rebooting in %d seconds", REBOOT_TIMEOUT);
 
-	if (is_dual_boot_system() > 0) {
-#ifdef ENABLE_ONTHEFLY_UPDATE
-		if (cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
-			sync();
-			fflush(stdout);
-			sleep(REBOOT_TIMEOUT);
-			reboot(RB_AUTOBOOT);
-		}
-#endif /* ENABLE_ONTHEFLY_UPDATE */
-#ifdef ENABLE_RECOVERY_UPDATE
-	} else {
-		int error = pthread_create(&reboot_thread, NULL, reboot_threaded, NULL);
-		if (error) {
-			/* If we cannot create the thread just reboot. */
-			if (reboot_recovery(REBOOT_TIMEOUT))
-				log_fw_error("%s", "Error rebooting in recovery mode");
-		}
-#endif /* ENABLE_RECOVERY_UPDATE */
+	if (pthread_create(&reboot_thread, NULL, reboot_threaded, NULL) != 0) {
+		/* If we cannot create the thread just reboot. */
+		reboot_system();
 	}
 }
 
