@@ -1156,7 +1156,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 		/* Prepare request structure */
 		swupdate_prepare_req(&req);
 
-		if (ldx_process_execute_cmd("fw_printenv -n active_system", &resp, 2) != 0 || resp == NULL) {
+		if (ldx_process_execute_cmd("update-firmware -a -s", &resp, 2) != 0 || resp == NULL) {
 			if (resp != NULL)
 				log_fw_error("Error getting active system: %s", resp);
 			else
@@ -1164,7 +1164,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 			retval = -1;
 		} else {
 			char umount_cmd[CMD_BUFSIZE] = {0};
-			char *active_system = resp;
+			char *active_system = trim(resp);
 
 			/* Read active system */
 			log_fw_debug("Active system detected: '%s'", active_system);
@@ -1178,7 +1178,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 			log_fw_debug("Is a %s device", req.software_set);
 
 			/* Detect active system & save the partition to umount */
-			if (!strcmp(active_system, "linux_a")) {
+			if (!strcmp(active_system, "a")) {
 				strncpy(req.running_mode, "secondary" , sizeof(req.running_mode) - 1);
 				if (check_mount_point("/mnt/linux_b"))
 					sprintf(umount_cmd, "%s", "umount /mnt/linux_b > /dev/null");
