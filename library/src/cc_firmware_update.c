@@ -1438,7 +1438,7 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 		log_fw_debug("On the fly update finished. Now we will reboot the system (%d)", otf_info.update_successful);
 
 		/* Swap the active system partition */
-		if (ldx_process_execute_cmd("on-the-fly-swap-partition.sh, &resp, 2) != 0) {
+		if (ldx_process_execute_cmd("update-firmware --swap-active-system --no-reboot", &resp, 2) != 0) {
 			if (resp != NULL)
 				log_fw_error("Error swapping active system: %s", resp);
 			else
