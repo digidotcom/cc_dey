@@ -1324,6 +1324,19 @@ static void firmware_cancel_cb(unsigned int const target, ccapi_fw_cancel_error_
 	log_fw_info("Cancel firmware update for target '%d'. Cancel_reason='%d'",
 			target, cancel_reason);
 
+#ifdef ENABLE_ONTHEFLY_UPDATE
+	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
+		otf_info.chunk_size = 0;
+		otf_info.chunk_ready = true;
+
+		/* End called, unlock and exit */
+		pthread_mutex_lock(&otf_info.mutex);
+		pthread_cond_wait(&otf_info.cv_end, &otf_info.mutex);
+		pthread_mutex_unlock(&otf_info.mutex);
+		pthread_mutex_destroy(&otf_info.mutex);
+	}
+#endif /* ENABLE_ONTHEFLY_UPDATE */
+
 	if (fw_fp != NULL) {
 		int fd = fileno(fw_fp);
 
