@@ -177,6 +177,18 @@ ccimp_status_t ccimp_os_create_thread(ccimp_os_create_thread_info_t *const creat
 	add_thread_info(pthread);
 #endif /* UNIT_TEST */
 
+#ifdef _GNU_SOURCE
+	const char *name[] = {
+		[CCIMP_THREAD_FSM] = "FSM",
+		[CCIMP_THREAD_RCI] = "RCI",
+		[CCIMP_THREAD_RECEIVE] = "RECEIVE",
+		[CCIMP_THREAD_CLI] = "CLI",
+		[CCIMP_THREAD_FIRMWARE] = "FIRMWARE"
+	};
+	if (create_thread_info->type < sizeof(name) / sizeof(name[0]) && name[create_thread_info->type])
+		pthread_setname_np(pthread, name[create_thread_info->type]);
+#endif
+
 	return CCIMP_STATUS_OK;
 }
 
