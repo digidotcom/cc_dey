@@ -445,16 +445,16 @@ static int get_user_passwd(char *buf, int size, int rwflag, void *password)
 {
 	char const passwd[] = APP_SSL_CLNT_CERT_PASSWORD;
 	int const pwd_bytes = ARRAY_SIZE(passwd) - 1;
-	int const copy_bytes = (pwd_bytes < size) ? pwd_bytes : size-1;
+	int const copy_bytes = (pwd_bytes < size) ? pwd_bytes : size - 1;
 
 	UNUSED_ARGUMENT(rwflag);
 	UNUSED_ARGUMENT(password);
 
-	ASSERT_GOTO(copy_bytes >= 0, error);
-	memcpy(buf, passwd, copy_bytes);
-	buf[copy_bytes] = '\0';
+	if (copy_bytes >= 0) {
+		memcpy(buf, passwd, copy_bytes);
+		buf[copy_bytes] = '\0';
+	}
 
-error:
 	return copy_bytes;
 }
 #endif /* APP_SSL_CLNT_CERT */
@@ -500,7 +500,7 @@ static int app_verify_device_cloud_certificate(SSL *const ssl)
 	}
 
 	ret = SSL_get_verify_result(ssl);
-	if (ret !=  X509_V_OK) {
+	if (ret != X509_V_OK) {
 		log_error("Error verifying Remote Manager certificate: Invalid certificate (%d)", ret);
 		goto done;
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "ccimp/ccimp_hal.h"
+#include "cc_logging.h"
 
 /*------------------------------------------------------------------------------
                              D E F I N I T I O N S
@@ -39,9 +40,9 @@
 #if (defined CCIMP_DEBUG_ENABLED)
 ccimp_status_t ccimp_hal_halt(void)
 {
-	printf("ccimp_hal_halt!!!!\n");
+	log_debug("%s", "Halt evoked: Shutting down connector");
 
-	assert(0);
+	exit(2);
 
 	/* Should not get here */
 
@@ -51,7 +52,7 @@ ccimp_status_t ccimp_hal_halt(void)
 
 ccimp_status_t ccimp_hal_reset(void)
 {
-	printf("ccimp_hal_reset!!!!\n");
+	log_debug("%s", "Resetting device");
 
 	/* Note: we must be running as the superuser to reboot the system */
 	sync();

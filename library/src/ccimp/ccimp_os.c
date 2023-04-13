@@ -250,7 +250,10 @@ ccimp_status_t ccimp_os_lock_acquire(ccimp_os_lock_acquire_t *const data)
 	int s;
 	sem_t *sem = data->lock;
 
-	assert(sem);
+	if (sem == NULL) {
+		log_error("%s: NULL semaphore", __func__);
+		return CCIMP_STATUS_ERROR;
+	}
 
 	data->acquired = CCAPI_FALSE;
 
@@ -304,7 +307,10 @@ ccimp_status_t ccimp_os_lock_release(ccimp_os_lock_release_t *const data)
 {
 	sem_t *const sem = data->lock;
 
-	assert(sem);
+	if (sem == NULL) {
+		log_error("%s: NULL semaphore", __func__);
+		return CCIMP_STATUS_ERROR;
+	}
 
 	if (sem_post(sem) == -1) {
 		log_error("%s: error", __func__);
@@ -318,7 +324,10 @@ ccimp_status_t ccimp_os_lock_destroy(ccimp_os_lock_destroy_t *const data)
 {
 	sem_t *const sem = data->lock;
 
-	assert(sem);
+	if (sem == NULL) {
+		log_error("%s: NULL semaphore", __func__);
+		return CCIMP_STATUS_ERROR;
+	}
 
 	if (sem_destroy(sem) == -1) {
 		log_error("%s: error", __func__);
