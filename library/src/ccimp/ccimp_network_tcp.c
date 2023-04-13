@@ -71,9 +71,13 @@ typedef struct {
 static int app_tcp_create_socket(void);
 static ccimp_status_t app_tcp_connect(int const sock, in_addr_t const ip_addr);
 static ccimp_status_t app_is_tcp_connect_complete(int const sock);
-static void free_network_handle(network_handle_t *const ssl_ptr);
+static void free_network_handle(network_handle_t *const handle);
+static ccimp_status_t get_status(int const ret, network_handle_t *const handle,
+	size_t *const bytes_used, char const *const func_name);
 #if (defined APP_SSL)
+#if (defined APP_SSL_CLNT_CERT)
 static int get_user_passwd(char *buf, int size, int rwflag, void *password);
+#endif /* APP_SSL_CLNT_CERT */
 static int app_load_certificate_and_key(SSL_CTX *const ctx);
 static int app_verify_device_cloud_certificate(SSL *const ssl);
 static int app_ssl_connect(network_handle_t *const handle);
@@ -158,47 +162,19 @@ ccimp_status_t ccimp_network_tcp_receive(ccimp_network_receive_t *const data)
 	read_bytes = read(handle->sock, data->buffer, data->bytes_available);
 #endif /* APP_SSL */
 
-	if (read_bytes > 0) {
-		data->bytes_used = (size_t) read_bytes;
-
-		return CCIMP_STATUS_OK;
-	}
-
 	if (read_bytes == 0) {
 		/* EOF on input: the connection was closed. */
 		log_debug("%s: EOF on socket", __func__);
 		errno = ECONNRESET;
-		return CCIMP_STATUS_ERROR;
-	} else {
-		int const err = errno;
-
-		/* An error of some sort occurred: handle it appropriately. */
-#if (defined APP_SSL)
-		int ssl_error = SSL_get_error(handle->ssl, read_bytes);
-
-		if (ssl_error == SSL_ERROR_WANT_READ)
-			return CCIMP_STATUS_BUSY;
-
-		SSL_set_shutdown(handle->ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN);
-#endif /* APP_SSL */
-		if (err == EAGAIN)
-			return CCIMP_STATUS_BUSY;
-
-		log_error("Error establishing connection (%s): %s (%d)",  __func__, strerror(err), err);
-		/* If not timeout (no data) return an error */
-		dns_cache_invalidate();
-
-		return CCIMP_STATUS_ERROR;
 	}
 
-	return CCIMP_STATUS_OK;
+	return get_status(read_bytes, handle, &data->bytes_used, __func__);
 }
 
 ccimp_status_t ccimp_network_tcp_send(ccimp_network_send_t *const data)
 {
 	network_handle_t *const handle = data->handle;
 	int sent_bytes = 0;
-	int err;
 
 #if (defined APP_SSL)
 	sent_bytes = SSL_write(handle->ssl, data->buffer, data->bytes_available);
@@ -206,23 +182,7 @@ ccimp_status_t ccimp_network_tcp_send(ccimp_network_send_t *const data)
 	sent_bytes = write(handle->sock, data->buffer, data->bytes_available);
 #endif /* APP_SSL */
 
-	if (sent_bytes >= 0) {
-		data->bytes_used = (size_t) sent_bytes;
-
-		return CCIMP_STATUS_OK;
-	}
-
-	err = errno;
-	if (err == EAGAIN)
-		return CCIMP_STATUS_BUSY;
-
-	log_error("Error establishing connection (%s): %s (%d)", __func__, strerror(err), err);
-#if (defined APP_SSL)
-	SSL_set_shutdown(handle->ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN);
-#endif /* APP_SSL */
-	dns_cache_invalidate();
-
-	return CCIMP_STATUS_ERROR;
+	return get_status(sent_bytes, handle, &data->bytes_used, __func__);
 }
 
 ccimp_status_t ccimp_network_tcp_open(ccimp_network_open_t *const data)
@@ -437,6 +397,47 @@ static void free_network_handle(network_handle_t *const handle)
 #endif /* APP_SSL */
 
 	free(handle);
+}
+
+static ccimp_status_t get_status(int const ret, network_handle_t *const handle,
+	size_t *const bytes_used, char const *const func_name)
+{
+	if (ret <= 0) {
+		int const err = errno;
+
+#if (defined APP_SSL)
+		int ssl_error = SSL_get_error(handle->ssl, ret);
+
+		switch (ssl_error) {
+			case SSL_ERROR_WANT_READ:
+			case SSL_ERROR_WANT_WRITE:
+				return CCIMP_STATUS_BUSY;
+			case SSL_ERROR_ZERO_RETURN:
+			case SSL_ERROR_SYSCALL:
+				SSL_set_shutdown(handle->ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN);
+				/* fall through */
+			default:
+				log_error("%s: SSL error %d", func_name, ssl_error);
+		}
+#else /* APP_SSL */
+		UNUSED_ARGUMENT(handle);
+#endif /* APP_SSL */
+
+		if (ret < 0) {
+			if (err == EAGAIN)
+				return CCIMP_STATUS_BUSY;
+
+			log_error("Error establishing connection (%s): %s (%d)",  __func__, strerror(err), err);
+			/* If not timeout (no data) return an error */
+			dns_cache_invalidate();
+		}
+
+		return CCIMP_STATUS_ERROR;
+	}
+
+	*bytes_used = ret;
+
+	return CCIMP_STATUS_OK;
 }
 
 #if (defined APP_SSL)
