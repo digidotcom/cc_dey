@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Digi International Inc.
+ * Copyright (c) 2016-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -89,10 +89,5 @@
  */
 #define log_debug(format, ...)										\
 	syslog(LOG_DEBUG, format, __VA_ARGS__)
-
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-void wait_for_ccimp_threads(void);
 
 #endif /* CC_LOGGING_H_ */
