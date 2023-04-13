@@ -31,6 +31,7 @@
 #include "network_utils.h"
 #include "service_device_request.h"
 #include "services.h"
+#include "_utils.h"
 
 /*------------------------------------------------------------------------------
                              D E F I N I T I O N S
@@ -113,6 +114,11 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 	if (cc_cfg->log_console)
 		log_options = log_options | LOG_PERROR;
 	init_logger(cc_cfg->log_level, log_options);
+	if (ccimp_logging_init()) {
+		log_error("%s", "Failed to initialize logging");
+
+		return CC_INIT_ERROR_UNKOWN;
+	}
 
 	initial_reconnection = true;
 
@@ -289,6 +295,8 @@ cc_stop_error_t stop_cloud_connection(void)
 	free_configuration(cc_cfg);
 	close_configuration();
 	cc_cfg = NULL;
+
+	ccimp_logging_deinit();
 	closelog();
 
 	return stop_error;

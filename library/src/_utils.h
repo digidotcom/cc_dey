@@ -42,4 +42,7 @@ char *delete_trailing_spaces(char *str);
 char *trim(char *str);
 char *delete_newline_character(char *str);
 
+int ccimp_logging_init(void);
+void ccimp_logging_deinit(void);
+
 #endif /* ___UTILS_H__ */
