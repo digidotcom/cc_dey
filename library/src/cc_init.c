@@ -482,7 +482,7 @@ static int create_ccapi_tcp_start_info_struct(const cc_cfg_t *const cc_cfg, ccap
 	tcp_info->callback.close = tcp_reconnect_cb;
 
 	tcp_info->callback.keepalive = NULL;
-	tcp_info->connection.max_transactions = 0;
+	tcp_info->connection.max_transactions = CCAPI_MAX_TRANSACTIONS_UNLIMITED;
 	tcp_info->connection.password = NULL;
 	tcp_info->connection.start_timeout = CONNECT_TIMEOUT;
 	tcp_info->connection.ip.type = CCAPI_IPV4;
