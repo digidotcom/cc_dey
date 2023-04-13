@@ -333,7 +333,7 @@ static ccapi_start_error_t initialize_ccapi(const cc_cfg_t *const cc_cfg)
 
 	error = ccapi_start(start_st);
 	if (error != CCAPI_START_ERROR_NONE)
-		log_debug("Error initilizing Cloud connection: %d", error);
+		log_debug("Error initializing Cloud connection: %d", error);
 
 	free_ccapi_start_struct(start_st);
 
@@ -398,7 +398,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	ccapi_start_t *start = calloc(1, sizeof(*start));
 
 	if (start == NULL) {
-		log_error("Error initilizing Cloud connection: %s", "Out of memory");
+		log_error("Error initializing Cloud connection: %s", "Out of memory");
 		return NULL;
 	}
 
@@ -407,7 +407,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	start->vendor_id = cc_cfg->vendor_id;
 	start->status = NULL;
 	if (get_device_id_from_mac(start->device_id, get_primary_mac_address(mac_address)) != 0) {
-		log_error("Error initilizing Cloud connection: %s", "Cannot calculate Device ID");
+		log_error("Error initializing Cloud connection: %s", "Cannot calculate Device ID");
 		goto error;
 	}
 
@@ -608,13 +608,6 @@ static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 		log_error("Unable to reconnect, cannot create reconnect thread: pthread_attr_init() error %d",
 				error);
 		return CCAPI_FALSE;
-	}
-
-	error = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	if (error != 0) {
-		log_error("Unable to reconnect, cannot create reconnect thread: pthread_attr_setdetachstate() error %d",
-				error);
-		goto error;
 	}
 
 	reconnect_thread_valid = pthread_create(&reconnect_thread, NULL, reconnect_threaded, NULL);
