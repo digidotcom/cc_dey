@@ -77,6 +77,10 @@ static const char STATUS_CB[] = "status";
 
 static request_data_darray_t active_requests = { 0 };
 
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+extern bool edp_cert_downloaded;
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
+
 static const char *to_user_error_msg(ccapi_receive_error_t error) {
 	switch (error) {
 		case CCAPI_RECEIVE_ERROR_NONE:
@@ -512,6 +516,8 @@ static ccapi_receive_error_t edp_cert_update_cb(const char *const target,
 
 	UNUSED_ARGUMENT(response_buffer_info);
 
+	edp_cert_downloaded = false;
+
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 	if (request_buffer_info && request_buffer_info->buffer && request_buffer_info->length > 0) {
 		char *client_cert_path = get_client_cert_path();
@@ -531,6 +537,7 @@ static ccapi_receive_error_t edp_cert_update_cb(const char *const target,
 			ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		} else {
 			log_dr_debug("%s: certificate saved at %s", __func__, client_cert_path);
+			edp_cert_downloaded = true;
 			ret = CCAPI_RECEIVE_ERROR_NONE;
 		}
 		fclose(fp);

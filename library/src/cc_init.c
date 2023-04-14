@@ -55,7 +55,6 @@ static void free_ccapi_start_struct(ccapi_start_t *ccapi_start);
 static int setup_virtual_dirs(const vdir_t *const vdirs, int n_vdirs);
 static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause);
 static void *reconnect_threaded(void *unused);
-static bool retry_connection(void);
 static int setup_signal_handler(struct sigaction *orig_action);
 static void signal_handler(int signum);
 static int get_device_id_from_mac(uint8_t *const device_id,
@@ -77,9 +76,11 @@ extern ccapi_streaming_cli_service_t streaming_cli_service;
 static volatile cc_status_t connection_status = CC_STATUS_DISCONNECTED;
 static pthread_t reconnect_thread;
 static bool reconnect_thread_valid;
-static bool initial_reconnection;
 static volatile bool stop_requested;
 cc_cfg_t *cc_cfg = NULL;
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+bool edp_cert_downloaded = false;
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
 
 /*------------------------------------------------------------------------------
                      F U N C T I O N  D E F I N I T I O N S
@@ -119,8 +120,6 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 
 		return CC_INIT_ERROR_UNKOWN;
 	}
-
-	initial_reconnection = true;
 
 	ccapi_error = initialize_ccapi(cc_cfg);
 	switch(ccapi_error) {
@@ -597,8 +596,16 @@ static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 
 	reconnect_thread_valid = false;
 
-	if (!initial_reconnection && !retry_connection()) {
-		initial_reconnection = false;
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+	/*
+	 * Retry a connection if:
+	 *   * reconnect is enabled
+	 *   * client certificate path has just been downloaded
+	 */
+	if (!cc_cfg->enable_reconnect && !edp_cert_downloaded) {
+#else /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
+	if (!cc_cfg->enable_reconnect) {
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
 		set_cloud_connection_status(CC_STATUS_DISCONNECTED);
 		return CCAPI_FALSE;
 	}
@@ -644,30 +651,20 @@ static void *reconnect_threaded(void *unused)
 
 	UNUSED_ARGUMENT(unused);
 
-	initial_reconnection = false;
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+	if (edp_cert_downloaded) {
+		log_info("%s", "Downloaded certificate, reconnecting...");
+		edp_cert_downloaded = false;
+	} else
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
+	{
+		log_info("Disconnected, attempting to reconnect in %d seconds", reconnect_time);
+		sleep(reconnect_time);
+	}
 
-	log_info("Disconnected, attempting to reconnect in %d seconds", reconnect_time);
-	sleep(reconnect_time);
 	initialize_tcp_transport(cc_cfg);
 
 	return NULL;
-}
-
-static bool retry_connection(void)
-{
-	bool reconnect = cc_cfg->enable_reconnect;
-
-#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
-	/*
-	 * Retry a connection if:
-	 *   * reconnect is enabled
-	 *   * client certificate path is defined in the configuration
-	 *   * the file is not yet downloaded
-	 */
-	reconnect = reconnect || access(cc_cfg->client_cert_path, F_OK) != 0;
-#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
-
-	return reconnect;
 }
 
 /*
