@@ -93,6 +93,8 @@ CC_DEY_RCI_SRCS := $(wildcard $(SRC)/rci/*.c)
 RCI_HEADERS = -I $(SRC)/rci
 endif
 
+CFLAGS += $(shell pkg-config --cflags libdigiapix)
+
 # Include Public Header Files.
 CFLAGS += -I $(SRC) $(RCI_HEADERS) -I $(CUSTOM_CCFSM_PUBLIC_HEADER_DIR) -I $(CCFSM_PUBLIC_HEADER_DIR)
 CFLAGS += -I $(CCAPI_PUBLIC_HEADER_DIR) -I $(CUSTOM_PUBLIC_HEADER_DIR)
