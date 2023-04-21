@@ -116,7 +116,7 @@ Name: $(NAME)
 Description: Cloud Connector library
 Version: $(MAJOR_VERSION).$(MINOR_VERSION)
 
-Requires.private: libconfuse openssl zlib $(PC_REQUIRES_PRIVATE)
+Requires.private: libconfuse openssl zlib libdigiapix $(PC_REQUIRES_PRIVATE)
 Libs: -L$${libdir} -l$(NAME)
 Libs.private: -lpthread -lutil $(PC_LIBS_PRIVATE)
 Cflags: -I$${includedir}/$(NAME) -I$${includedir}
