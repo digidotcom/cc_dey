@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef rci_setting_static_location_h
 #define rci_setting_static_location_h
+
+#ifdef ENABLE_RCI
 
 #include "connector_api.h"
 #include "ccapi_rci_functions.h"
@@ -62,5 +64,7 @@ ccapi_setting_static_location_error_id_t rci_setting_static_location_altitude_ge
 		ccapi_rci_info_t * const info, float * const value);
 ccapi_setting_static_location_error_id_t rci_setting_static_location_altitude_set(
 		ccapi_rci_info_t * const info, float const * const value);
+
+#endif /* ENABLE_RCI */
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -23,6 +23,7 @@
 #include "rci_setting_ethernet.h"
 #include "cc_logging.h"
 #include "network_utils.h"
+#include "utils.h"
 
 static const char * eth_iface_name[] = { "eth0", "eth1" };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -228,17 +228,17 @@ static int get_lock(char const *const file_name)
 
 	fd = open(full_path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (fd == -1) {
-		syslog(LOG_ERR, "Could not open PID file '%s'", full_path);
+		syslog(LOG_ERR, "Could not open lock file '%s'", full_path);
 		goto error;
 	}
 
 	if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
-		syslog(LOG_ERR, "Could not open lock PID file '%s'", full_path);
+		syslog(LOG_ERR, "Could not open lock file '%s'", full_path);
 		goto error;
 	}
 
 	if (ftruncate(fd, 0) != 0) {
-		syslog(LOG_ERR, "Could not truncate PID file '%s'", full_path);
+		syslog(LOG_ERR, "Could not truncate lock file '%s'", full_path);
 		goto error;
 	}
 
@@ -247,7 +247,7 @@ static int get_lock(char const *const file_name)
 		int len = snprintf(buf, sizeof(buf), "%ld", (long) getpid());
 
 		if (write(fd, buf, len) != len) {
-			syslog(LOG_ERR, "Error writing to PID file '%s'", full_path);
+			syslog(LOG_ERR, "Error writing to lock file '%s'", full_path);
 			goto error;
 		}
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -41,7 +41,7 @@
 #define ccimp_os_lock_create		ccimp_os_lock_create_real
 #define ccimp_os_lock_acquire		ccimp_os_lock_acquire_real
 #define ccimp_os_lock_release		ccimp_os_lock_release_real
-#endif
+#endif /* UNIT_TEST */
 
 #define ccapi_logging_line_info(message) /* TODO */
 
@@ -57,12 +57,16 @@ typedef struct thread_info {
                     F U N C T I O N  D E C L A R A T I O N S
 ------------------------------------------------------------------------------*/
 static void *thread_wrapper(void *argument);
+#if (defined UNIT_TEST)
 static void add_thread_info(pthread_t thread);
+#endif /* UNIT_TEST */
 
 /*------------------------------------------------------------------------------
                          G L O B A L  V A R I A B L E S
 ------------------------------------------------------------------------------*/
+#if (defined UNIT_TEST)
 static thread_info_t * thread_info_list = NULL;
+#endif /* UNIT_TEST */
 
 /*------------------------------------------------------------------------------
                      F U N C T I O N  D E F I N I T I O N S
@@ -90,6 +94,7 @@ ccimp_status_t ccimp_os_realloc(ccimp_os_realloc_t *const realloc_info)
 	return status;
 }
 
+#if (defined UNIT_TEST)
 void wait_for_ccimp_threads(void)
 {
 	while (thread_info_list != NULL) {
@@ -100,6 +105,7 @@ void wait_for_ccimp_threads(void)
 		thread_info_list = next;
 	}
 }
+#endif /* UNIT_TEST */
 
 ccimp_status_t ccimp_os_create_thread(ccimp_os_create_thread_info_t *const create_thread_info)
 {
@@ -149,13 +155,40 @@ ccimp_status_t ccimp_os_create_thread(ccimp_os_create_thread_info_t *const creat
 			return (CCIMP_STATUS_ERROR);
 		}
 	}
-#endif
-	ccode = pthread_create(&pthread, &attr, thread_wrapper, create_thread_info);
+#else
+	ccode = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	if (ccode != 0) {
-		log_error("%s: pthread_create() error %d", __func__, ccode);
+		log_error("%s: pthread_attr_setdetachstate() error %d", __func__, ccode);
+		pthread_attr_destroy(&attr);
+
 		return (CCIMP_STATUS_ERROR);
 	}
+#endif /* UNIT_TEST */
+
+	ccode = pthread_create(&pthread, &attr, thread_wrapper, create_thread_info);
+	pthread_attr_destroy(&attr);
+	if (ccode != 0) {
+		log_error("%s: pthread_create() error %d", __func__, ccode);
+
+		return CCIMP_STATUS_ERROR;
+	}
+
+#if (defined UNIT_TEST)
 	add_thread_info(pthread);
+#endif /* UNIT_TEST */
+
+#ifdef _GNU_SOURCE
+	const char *name[] = {
+		[CCIMP_THREAD_FSM] = "FSM",
+		[CCIMP_THREAD_RCI] = "RCI",
+		[CCIMP_THREAD_RECEIVE] = "RECEIVE",
+		[CCIMP_THREAD_CLI] = "CLI",
+		[CCIMP_THREAD_FIRMWARE] = "FIRMWARE"
+	};
+	if (create_thread_info->type < sizeof(name) / sizeof(name[0]) && name[create_thread_info->type])
+		pthread_setname_np(pthread, name[create_thread_info->type]);
+#endif
+
 	return CCIMP_STATUS_OK;
 }
 
@@ -217,7 +250,10 @@ ccimp_status_t ccimp_os_lock_acquire(ccimp_os_lock_acquire_t *const data)
 	int s;
 	sem_t *sem = data->lock;
 
-	assert(sem);
+	if (sem == NULL) {
+		log_error("%s: NULL semaphore", __func__);
+		return CCIMP_STATUS_ERROR;
+	}
 
 	data->acquired = CCAPI_FALSE;
 
@@ -271,7 +307,10 @@ ccimp_status_t ccimp_os_lock_release(ccimp_os_lock_release_t *const data)
 {
 	sem_t *const sem = data->lock;
 
-	assert(sem);
+	if (sem == NULL) {
+		log_error("%s: NULL semaphore", __func__);
+		return CCIMP_STATUS_ERROR;
+	}
 
 	if (sem_post(sem) == -1) {
 		log_error("%s: error", __func__);
@@ -285,7 +324,10 @@ ccimp_status_t ccimp_os_lock_destroy(ccimp_os_lock_destroy_t *const data)
 {
 	sem_t *const sem = data->lock;
 
-	assert(sem);
+	if (sem == NULL) {
+		log_error("%s: NULL semaphore", __func__);
+		return CCIMP_STATUS_ERROR;
+	}
 
 	if (sem_destroy(sem) == -1) {
 		log_error("%s: error", __func__);
@@ -306,6 +348,7 @@ static void *thread_wrapper(void *argument)
 	return NULL;
 }
 
+#if (defined UNIT_TEST)
 static void add_thread_info(pthread_t thread)
 {
 	thread_info_t *const new_thread_info = malloc(sizeof *new_thread_info);
@@ -314,3 +357,4 @@ static void add_thread_info(pthread_t thread)
 	new_thread_info->next = thread_info_list;
 	thread_info_list = new_thread_info;
 }
+#endif /* UNIT_TEST */

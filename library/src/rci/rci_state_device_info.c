@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -21,7 +21,7 @@
 #include <stdio.h>
 
 #include "cc_logging.h"
-#include "file_utils.h"
+#include "utils.h"
 #include "rci_state_device_info.h"
 
 #define STRING_MAX_LENGTH		256

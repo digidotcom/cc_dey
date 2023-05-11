@@ -65,6 +65,7 @@ CFLAGS += -DGIT_REVISION=\"$(if $(GIT_REVISION),-g$(GIT_REVISION))\"
 CFLAGS += -g -O -DDEBUG
 
 CFLAGS += $(shell pkg-config --cflags libdigiapix)
+CFLAGS += $(shell pkg-config --cflags cloudconnector)
 
 # Target output to generate.
 APP_SRCS = $(wildcard $(SRC)/*.c)

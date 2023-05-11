@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -37,7 +37,7 @@ int read_uint32(int fd, uint32_t * const ret, struct timeval *timeout);
 int write_uint32(int fd, const uint32_t value);
 
 int read_string(int fd, char **string, size_t *length, struct timeval *timeout);
-int write_string(int fd, const char *string );
+int write_string(int fd, const char *string);
 
 int read_blob(int fd, void **buffer, size_t *length, struct timeval *timeout);
 int write_blob(int fd, const void *data, size_t data_length);

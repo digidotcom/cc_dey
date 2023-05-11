@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -31,6 +31,7 @@
 #include "network_utils.h"
 #include "service_device_request.h"
 #include "services.h"
+#include "_utils.h"
 
 /*------------------------------------------------------------------------------
                              D E F I N I T I O N S
@@ -54,7 +55,6 @@ static void free_ccapi_start_struct(ccapi_start_t *ccapi_start);
 static int setup_virtual_dirs(const vdir_t *const vdirs, int n_vdirs);
 static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause);
 static void *reconnect_threaded(void *unused);
-static bool retry_connection(void);
 static int setup_signal_handler(struct sigaction *orig_action);
 static void signal_handler(int signum);
 static int get_device_id_from_mac(uint8_t *const device_id,
@@ -66,17 +66,21 @@ static int is_zero_array(const uint8_t *array, size_t size);
 /*------------------------------------------------------------------------------
                          G L O B A L  V A R I A B L E S
 ------------------------------------------------------------------------------*/
+#ifdef ENABLE_RCI
 extern ccapi_rci_service_t rci_service;
 extern connector_remote_config_data_t rci_internal_data;
+#endif /* ENABLE_RCI */
 extern ccapi_receive_service_t receive_service;
 extern ccapi_streaming_cli_service_t streaming_cli_service;
 
 static volatile cc_status_t connection_status = CC_STATUS_DISCONNECTED;
 static pthread_t reconnect_thread;
 static bool reconnect_thread_valid;
-static bool initial_reconnection;
 static volatile bool stop_requested;
 cc_cfg_t *cc_cfg = NULL;
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+bool edp_cert_downloaded = false;
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
 
 /*------------------------------------------------------------------------------
                      F U N C T I O N  D E F I N I T I O N S
@@ -111,8 +115,11 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 	if (cc_cfg->log_console)
 		log_options = log_options | LOG_PERROR;
 	init_logger(cc_cfg->log_level, log_options);
+	if (ccimp_logging_init()) {
+		log_error("%s", "Failed to initialize logging");
 
-	initial_reconnection = true;
+		return CC_INIT_ERROR_UNKOWN;
+	}
 
 	ccapi_error = initialize_ccapi(cc_cfg);
 	switch(ccapi_error) {
@@ -249,6 +256,7 @@ cc_stop_error_t stop_cloud_connection(void)
 
 	stop_requested = true;
 	if (reconnect_thread_valid) {
+		reconnect_thread_valid = false;
 		pthread_cancel(reconnect_thread);
 		pthread_join(reconnect_thread, NULL);
 	}
@@ -286,6 +294,8 @@ cc_stop_error_t stop_cloud_connection(void)
 	free_configuration(cc_cfg);
 	close_configuration();
 	cc_cfg = NULL;
+
+	ccimp_logging_deinit();
 	closelog();
 
 	return stop_error;
@@ -330,7 +340,7 @@ static ccapi_start_error_t initialize_ccapi(const cc_cfg_t *const cc_cfg)
 
 	error = ccapi_start(start_st);
 	if (error != CCAPI_START_ERROR_NONE)
-		log_debug("Error initilizing Cloud connection: %d", error);
+		log_debug("Error initializing Cloud connection: %d", error);
 
 	free_ccapi_start_struct(start_st);
 
@@ -395,7 +405,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	ccapi_start_t *start = calloc(1, sizeof(*start));
 
 	if (start == NULL) {
-		log_error("Error initilizing Cloud connection: %s", "Out of memory");
+		log_error("Error initializing Cloud connection: %s", "Out of memory");
 		return NULL;
 	}
 
@@ -404,7 +414,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	start->vendor_id = cc_cfg->vendor_id;
 	start->status = NULL;
 	if (get_device_id_from_mac(start->device_id, get_primary_mac_address(mac_address)) != 0) {
-		log_error("Error initilizing Cloud connection: %s", "Cannot calculate Device ID");
+		log_error("Error initializing Cloud connection: %s", "Cannot calculate Device ID");
 		goto error;
 	}
 
@@ -415,10 +425,13 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	start->service.streaming_cli = &streaming_cli_service,
 
 	/* Initialize RCI service. */
+	start->service.rci = NULL;
+#ifdef ENABLE_RCI
 	start->service.rci = &rci_service;
 	rci_internal_data.firmware_target_zero_version = fw_string_to_int(cc_cfg->fw_version);
 	rci_internal_data.vendor_id = cc_cfg->vendor_id;
 	rci_internal_data.device_type = cc_cfg->device_type;
+#endif /* ENABLE_RCI */
 
 	/* Initialize device request service. */
 	start->service.receive = &receive_service;
@@ -468,7 +481,7 @@ static int create_ccapi_tcp_start_info_struct(const cc_cfg_t *const cc_cfg, ccap
 	tcp_info->callback.close = tcp_reconnect_cb;
 
 	tcp_info->callback.keepalive = NULL;
-	tcp_info->connection.max_transactions = 0;
+	tcp_info->connection.max_transactions = CCAPI_MAX_TRANSACTIONS_UNLIMITED;
 	tcp_info->connection.password = NULL;
 	tcp_info->connection.start_timeout = CONNECT_TIMEOUT;
 	tcp_info->connection.ip.type = CCAPI_IPV4;
@@ -478,7 +491,7 @@ static int create_ccapi_tcp_start_info_struct(const cc_cfg_t *const cc_cfg, ccap
 
 	/*
 	 * Some interfaces return a null MAC address (like ppp used by some
-	 * cellular modems). In those cases asume a WAN connection
+	 * cellular modems). In those cases assume a WAN connection
 	 */
 	if (is_zero_array(active_interface.mac, sizeof(active_interface.mac))) {
 		tcp_info->connection.type = CCAPI_CONNECTION_WAN;
@@ -562,7 +575,7 @@ static int setup_virtual_dirs(const vdir_t *const vdirs, int n_vdirs)
  * @cause:	Reason of the disconnection (disconnection, redirection, missing
  * 		keep alive, or any other data error).
  *
- * Return:	CCAPI_TRUE if Cloud Connector should reconnect, CCAPI_FALSE otherwise.
+ * Return:	CCAPI_TRUE to reconnect immediately, CCAPI_FALSE otherwise.
  */
 static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 {
@@ -583,8 +596,16 @@ static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 
 	reconnect_thread_valid = false;
 
-	if (!initial_reconnection && !retry_connection()) {
-		initial_reconnection = false;
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+	/*
+	 * Retry a connection if:
+	 *   * reconnect is enabled
+	 *   * client certificate path has just been downloaded
+	 */
+	if (!cc_cfg->enable_reconnect && !edp_cert_downloaded) {
+#else /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
+	if (!cc_cfg->enable_reconnect) {
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
 		set_cloud_connection_status(CC_STATUS_DISCONNECTED);
 		return CCAPI_FALSE;
 	}
@@ -604,23 +625,14 @@ static ccapi_bool_t tcp_reconnect_cb(ccapi_tcp_close_cause_t cause)
 		return CCAPI_FALSE;
 	}
 
-	error = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	if (error != 0) {
-		log_error("Unable to reconnect, cannot create reconnect thread: pthread_attr_setdetachstate() error %d",
-				error);
-		goto error;
-	}
-
-	error = pthread_create(&reconnect_thread, NULL, reconnect_threaded, NULL);
-	if (error != 0) {
+	reconnect_thread_valid = pthread_create(&reconnect_thread, NULL, reconnect_threaded, NULL);
+	if (reconnect_thread_valid != 0) {
 		log_error("Unable to reconnect, cannot create reconnect thread: pthread_create() error %d",
 				error);
 		goto error;
 	}
 
-	reconnect_thread_valid = true;
-
-	return CCAPI_TRUE;
+	return CCAPI_FALSE;
 
 error:
 	pthread_attr_destroy(&attr);
@@ -639,29 +651,20 @@ static void *reconnect_threaded(void *unused)
 
 	UNUSED_ARGUMENT(unused);
 
-	initial_reconnection = false;
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+	if (edp_cert_downloaded) {
+		log_info("%s", "Downloaded certificate, reconnecting...");
+		edp_cert_downloaded = false;
+	} else
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
+	{
+		log_info("Disconnected, attempting to reconnect in %d seconds", reconnect_time);
+		sleep(reconnect_time);
+	}
 
-	sleep(reconnect_time);
 	initialize_tcp_transport(cc_cfg);
 
 	return NULL;
-}
-
-static bool retry_connection(void)
-{
-	bool reconnect = cc_cfg->enable_reconnect;
-
-#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
-	/*
-	 * Retry a connection if:
-	 *   * reconnect is enabled
-	 *   * client certificate path is defined in the configuration
-	 *   * the file is not yet downloaded
-	 */
-	reconnect = reconnect || access(cc_cfg->client_cert_path, F_OK) != 0;
-#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
-
-	return reconnect;
 }
 
 /*

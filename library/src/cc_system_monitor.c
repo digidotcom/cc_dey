@@ -32,7 +32,7 @@
 #include "cc_init.h"
 #include "cc_logging.h"
 #include "cc_system_monitor.h"
-#include "file_utils.h"
+#include "utils.h"
 
 /*------------------------------------------------------------------------------
                              D E F I N I T I O N S
@@ -175,7 +175,7 @@ static ccapi_bool_t value_matches_wildcard_pattern(char* value, char* pattern);
                          G L O B A L  V A R I A B L E S
 ------------------------------------------------------------------------------*/
 static volatile bool stop_requested = false;
-static volatile ccapi_bool_t dp_thread_valid = CCAPI_FALSE;
+static volatile bool dp_thread_valid = false;
 static pthread_t dp_thread;
 static ccapi_dp_collection_handle_t dp_collection;
 static unsigned long long last_work = 0, last_total = 0;
@@ -274,7 +274,7 @@ cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
 	if (!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
 		return CC_SYS_MON_ERROR_NONE;
 
-	if (is_system_monitor_running())
+	if (dp_thread_valid)
 		return CC_SYS_MON_ERROR_NONE;
 
 	error = pthread_attr_init(&attr);
@@ -282,13 +282,13 @@ cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
 		/* On Linux this function always succeeds. */
 		log_sm_error("pthread_attr_init() error %d", error);
 	}
-	error = pthread_create(&dp_thread, &attr, system_monitor_threaded, (void *) cc_cfg);
-	if (error != 0) {
+	stop_requested = false;
+	dp_thread_valid = (pthread_create(&dp_thread, &attr, system_monitor_threaded, (void *) cc_cfg) == 0);
+	pthread_attr_destroy(&attr);
+	if (!dp_thread_valid) {
 		log_sm_error("Error while starting the system monitor, %d", error);
-		pthread_attr_destroy(&attr);
 		return CC_SYS_MON_ERROR_THREAD;
 	}
-	pthread_attr_destroy(&attr);
 
 	return CC_SYS_MON_ERROR_NONE;
 }
@@ -299,7 +299,7 @@ cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
  * Return: True if system monitor is running, false if it is not.
  */
 ccapi_bool_t is_system_monitor_running(void) {
-	return dp_thread_valid;
+	return dp_thread_valid ? CCAPI_TRUE : CCAPI_FALSE;
 }
 
 /*
@@ -310,6 +310,7 @@ void stop_system_monitor(void)
 	stop_requested = true;
 
 	if (dp_thread_valid) {
+		dp_thread_valid = false;
 		pthread_cancel(dp_thread);
 		pthread_join(dp_thread, NULL);
 	}
@@ -432,7 +433,7 @@ static ccapi_dp_error_t init_system_monitor(const cc_cfg_t *const cc_cfg)
 	/* Create data point collection. */
 	ccapi_dp_error_t dp_error = ccapi_dp_create_collection(&dp_collection);
 	if (dp_error != CCAPI_DP_ERROR_NONE) {
-		log_sm_error("Error initalizing system monitor, %d", dp_error);
+		log_sm_error("Error initializing system monitor, %d", dp_error);
 		return dp_error;
 	}
 
@@ -576,8 +577,7 @@ error:
 
 #ifdef ENABLE_BT
 /*
- * init_bt_streams() - Add the bluetooth interface data point streams to
- *                     collection
+ * init_bt_streams() - Add Bluetooth interface data point streams to collection
  *
  * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
  * 			settings parsed from the configuration file are stored.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,8 @@
 
 #ifndef rci_state_primary_interface_h
 #define rci_state_primary_interface_h
+
+#ifdef ENABLE_RCI
 
 #include "connector_api.h"
 #include "ccapi_rci_functions.h"
@@ -46,5 +48,7 @@ ccapi_state_primary_interface_error_id_t rci_state_primary_interface_connection_
 
 ccapi_state_primary_interface_error_id_t rci_state_primary_interface_ip_addr_get(ccapi_rci_info_t * const info, char const * * const value);
 #define rci_state_primary_interface_ip_addr_set    NULL
+
+#endif /* ENABLE_RCI */
 
 #endif

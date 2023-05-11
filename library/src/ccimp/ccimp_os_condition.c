@@ -18,8 +18,8 @@
  */
 
 #include "ccimp/ccimp_os_condition.h"
-#include "utils.h"
 #include "cc_logging.h"
+#include "_utils.h"
 
 #include <stdbool.h>
 #include <errno.h>

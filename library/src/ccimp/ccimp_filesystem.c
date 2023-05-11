@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -32,7 +32,7 @@
 
 #include "cc_logging.h"
 #include "ccimp/ccimp_filesystem.h"
-#include "file_utils.h"
+#include "_utils.h"
 
 /*------------------------------------------------------------------------------
 							 D E F I N I T I O N S

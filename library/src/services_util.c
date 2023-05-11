@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -213,7 +213,7 @@ static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeou
 	return (count > 0) ? -1 : 0;
 }
 
-static ssize_t read_line( int socket, void *buffer, size_t capacity, struct timeval *timeout )
+static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timeval *timeout)
 {
 	ssize_t bytes_read;
 	size_t total_read = 0, remaining = capacity;
@@ -249,9 +249,13 @@ static ssize_t read_line( int socket, void *buffer, size_t capacity, struct time
 			 */
 
 			bytes_read = recv(socket, buf, remaining, MSG_PEEK);
-			if ( bytes_read < 0 ) {
+			if (bytes_read < 0) {
 				if (errno == EINTR)
 					continue;
+				return -1;
+			}
+			if (bytes_read == 0) {
+				errno = EPIPE; /* Broken socket before terminator */
 				return -1;
 			}
 			if ((end = memchr(buf, TERMINATOR, bytes_read)) != 0) {/* Found terminator */
@@ -271,6 +275,10 @@ static ssize_t read_line( int socket, void *buffer, size_t capacity, struct time
 			if (bytes_read < 0) {
 				if (errno == EINTR)
 					continue;
+				return -1;
+			}
+			if (bytes_read == 0) {
+				errno = EPIPE;			/* overrun and broken socket */
 				return -1;
 			}
 			if (ch == TERMINATOR) {
@@ -331,7 +339,7 @@ int read_uint32(int fd, uint32_t * const result, struct timeval *timeout)
 	if (length > 2							/* Minimum req'd type, separator, terminator */
 		&& text[0] == DT_INTEGER			/* Verify correct type */
 		&& text[1] == SEPARATOR) {			/* A valid integer... so far */
-		*result = (uint32_t)strtoul( text+2, &end, 10);
+		*result = (uint32_t)strtoul(text+2, &end, 10);
 		if (*end == '\0')					/* All chars valid for an int */
 			return 0;
 	}
@@ -346,18 +354,18 @@ int write_uint32(int fd, const uint32_t value)
 
 	length = snprintf(text, (sizeof text)-1, "i:%u%c", value, TERMINATOR);
 	if (length > -1)
-		return send_amt( fd, text, length );
+		return send_amt(fd, text, length);
 
 	return -1;
 }
 
-static int send_blob(int fd, const char *type, const void *data, size_t data_length )
+static int send_blob(int fd, const char *type, const void *data, size_t data_length)
 {
 	char terminator = TERMINATOR;
 
 	if (send_amt(fd, type, strlen(type)) > -1			/* Send the blob type */
 		&& write_uint32(fd, data_length) > -1			/* & length */
-		&& send_amt(fd, data, data_length) > -1 ) {		/* then the data */
+		&& send_amt(fd, data, data_length) > -1) {		/* then the data */
 		return write(fd, &terminator, 1) == 1 ? 0 : -1;	/* and terminator */
 	}
 
@@ -399,14 +407,14 @@ static int recv_blob(int fd, char type, void **data, size_t *data_length, struct
 	return -1;
 }
 
-int write_string(int fd, const char *string )
+int write_string(int fd, const char *string)
 {
 	return send_blob(fd,"s:",string,strlen(string));
 }
 
 int read_string(int fd, char **string, size_t *length, struct timeval *timeout)
 {
-	return recv_blob(fd, DT_STRING, (void **)string, length, timeout );
+	return recv_blob(fd, DT_STRING, (void **)string, length, timeout);
 }
 
 int read_blob(int fd, void **buffer, size_t *length, struct timeval *timeout)
@@ -416,5 +424,5 @@ int read_blob(int fd, void **buffer, size_t *length, struct timeval *timeout)
 
 int write_blob(int fd, const void *data, size_t data_length)
 {
-	return send_blob(fd, "b:", data, data_length );
+	return send_blob(fd, "b:", data, data_length);
 }

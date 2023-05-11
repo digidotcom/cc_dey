@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,13 +17,37 @@
  * ===========================================================================
  */
 
-#ifndef STRING_UTILS_H
-#define STRING_UTILS_H
+#ifndef RCI_USENAMES_DEFINES_H
+#define RCI_USENAMES_DEFINES_H
 
-char *delete_quotes(char *str);
-char *delete_leading_spaces(char *str);
-char *delete_trailing_spaces(char *str);
-char *trim(char *str);
-char *delete_newline_character(char *str);
+#ifdef ENABLE_RCI
+
+#if !(defined RCI_ELEMENTS_NAME_MAX_SIZE)
+#define RCI_ELEMENTS_NAME_MAX_SIZE 22
+#else
+#if RCI_ELEMENTS_NAME_MAX_SIZE < 22
+#undef RCI_ELEMENTS_NAME_MAX_SIZE
+#define RCI_ELEMENTS_NAME_MAX_SIZE 22
+#endif
+#endif
+#if !(defined RCI_COLLECTIONS_NAME_MAX_SIZE)
+#define RCI_COLLECTIONS_NAME_MAX_SIZE 19
+#else
+#if RCI_COLLECTIONS_NAME_MAX_SIZE < 19
+#undef RCI_COLLECTIONS_NAME_MAX_SIZE
+#define RCI_COLLECTIONS_NAME_MAX_SIZE 19
+#endif
+#endif
+#if !(defined RCI_VALUES_NAME_MAX_SIZE)
+#define RCI_VALUES_NAME_MAX_SIZE 7
+#else
+#if RCI_VALUES_NAME_MAX_SIZE < 7
+#undef RCI_VALUES_NAME_MAX_SIZE
+#define RCI_VALUES_NAME_MAX_SIZE 7
+#endif
+#endif
+
+#endif /* ENABLE_RCI */
 
 #endif
+

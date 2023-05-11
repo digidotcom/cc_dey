@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,32 +17,22 @@
  * ===========================================================================
  */
 
-#ifndef RCI_USENAMES_DEFINES_H
-#define RCI_USENAMES_DEFINES_H
+#ifndef __UTILS_H__
+#define __UTILS_H__
 
-#if !(defined RCI_ELEMENTS_NAME_MAX_SIZE)
-#define RCI_ELEMENTS_NAME_MAX_SIZE 22
-#else
-#if RCI_ELEMENTS_NAME_MAX_SIZE < 22
-#undef RCI_ELEMENTS_NAME_MAX_SIZE
-#define RCI_ELEMENTS_NAME_MAX_SIZE 22
-#endif
-#endif
-#if !(defined RCI_COLLECTIONS_NAME_MAX_SIZE)
-#define RCI_COLLECTIONS_NAME_MAX_SIZE 19
-#else
-#if RCI_COLLECTIONS_NAME_MAX_SIZE < 19
-#undef RCI_COLLECTIONS_NAME_MAX_SIZE
-#define RCI_COLLECTIONS_NAME_MAX_SIZE 19
-#endif
-#endif
-#if !(defined RCI_VALUES_NAME_MAX_SIZE)
-#define RCI_VALUES_NAME_MAX_SIZE 7
-#else
-#if RCI_VALUES_NAME_MAX_SIZE < 7
-#undef RCI_VALUES_NAME_MAX_SIZE
-#define RCI_VALUES_NAME_MAX_SIZE 7
-#endif
-#endif
-#endif
+#define IPV4_GROUPS			4
+#define MAC_ADDRESS_GROUPS	6
 
+#define IP_STRING_LENGTH 	(4 * IPV4_GROUPS)
+#define IP_FORMAT			"%d.%d.%d.%d"
+#define MAC_STRING_LENGTH	(3 * MAC_ADDRESS_GROUPS)
+#define MAC_FORMAT			"%02x:%02x:%02x:%02x:%02x:%02x"
+
+int file_exists(const char * const filename);
+int file_readable(const char * const filename);
+int file_writable(const char * const filename);
+long read_file(const char *path, char *buffer, long file_size);
+int read_file_line(const char * const path, char *buffer, int bytes_to_read);
+int write_to_file(const char * const path, const char * const format, ...);
+
+#endif /* __UTILS_H__ */

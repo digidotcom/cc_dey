@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,87 +17,237 @@
  * ===========================================================================
  */
 
-#include "ccimp/ccimp_logging.h"
-#include "cc_logging.h"
+#include <errno.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
+#include "_utils.h"
+#include "cc_logging.h"
+#include "ccimp/ccimp_logging.h"
+
 #if (defined UNIT_TEST)
 #define ccimp_hal_logging_vprintf		ccimp_hal_logging_vprintf_real
 #endif
 
 #if (defined CCIMP_DEBUG_ENABLED)
-#include <stdio.h>
-#include <stdlib.h>
 
-#define MAX_CHARS				256
 #define CCAPI_DEBUG_PREFIX		"CCAPI: "
 
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
-static char * buffer = NULL;
-static size_t bufsize = 0;
+static struct {
+	pthread_mutex_t mutex;
+	char * data;
+	size_t length;
+	size_t offset;
+	size_t remaining;
+} buffer;
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-void ccimp_hal_logging_vprintf(debug_t const debug, char const *const format, va_list args)
+static bool enlarge_buffer(size_t const additional)
 {
-	switch (debug) {
-		case debug_beg: {
-			size_t offset = 0;
+	size_t const characters = 80;
+	size_t const lines = (additional + characters - 1) / characters;
+	size_t const length = buffer.length + (lines * characters);
+	char * const new = realloc(buffer.data, length);
+	bool const success = (new != NULL);
 
-			if (buffer == NULL) {
-				bufsize = MAX_CHARS + sizeof(CCAPI_DEBUG_PREFIX);
-				buffer = (char*) malloc(sizeof(char) * bufsize);
-			}
+	if (success) {
+		buffer.data = new;
+		buffer.length = length;
+		buffer.remaining = (buffer.length - buffer.offset);
+	}
 
-			snprintf(buffer, bufsize, "%s", CCAPI_DEBUG_PREFIX);
-			offset = strlen(buffer);
+	return success;
+}
 
-			vsnprintf(buffer + offset, bufsize - offset, format, args);
+static bool lock(void)
+{
+	static struct timespec const timeout = { .tv_sec = 1, .tv_nsec = 0 };
+	int result;
+
+	result = pthread_mutex_timedlock(&buffer.mutex, &timeout);
+	if (result == 0)
+		goto done;
+
+	if (result != EOWNERDEAD) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_mutex_timedlock() failure: %d", result);
+		goto done;
+	}
+
+	result = pthread_mutex_consistent(&buffer.mutex);
+	if (result != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_mutex_consistent() failure: %d", result);
+		goto done;
+	}
+
+done:
+	return (result == 0);
+}
+
+static void unlock(void)
+{
+	int const result = pthread_mutex_unlock(&buffer.mutex);
+
+	if (result != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_mutex_unlock() failure: %d", result);
+	}
+}
+
+static void buffer_printf(char const * const format, va_list args)
+{
+	bool retry = true;
+	for (;;) {
+		int const result = vsnprintf(buffer.data + buffer.offset, buffer.remaining, format, args);
+
+		if (result < 0) {
+			log_error(CCAPI_DEBUG_PREFIX "vsnprintf() failure: %d", result);
+			syslog(LOG_DEBUG, format, args);
 			break;
 		}
-		case debug_mid: {
-			size_t offset = strlen(buffer);
 
-			vsnprintf(buffer + offset, bufsize - offset, format, args);
+		if ((size_t)result < buffer.remaining) {
+			buffer.offset += result;
+			buffer.remaining -= result;
 			break;
 		}
-		case debug_end: {
-			size_t offset = strlen(buffer);
 
-			vsnprintf(buffer + offset, bufsize - offset, format, args);
-			log_debug("%s", buffer);
-			free(buffer);
-			buffer = NULL;
-			bufsize = 0;
+		if (!retry) {
+			log_error(CCAPI_DEBUG_PREFIX "buffer overflow: %d/%zu/%zu", result, buffer.remaining, buffer.length);
+			syslog(LOG_DEBUG, format, args);
 			break;
 		}
-		case debug_all: {
-			size_t offset = 0;
 
-			if (buffer == NULL) {
-				bufsize = MAX_CHARS + sizeof(CCAPI_DEBUG_PREFIX);
-				buffer = (char*) malloc(sizeof(char) * bufsize);
-			}
+		enlarge_buffer(result);
+		retry = false;
+	}
+}
 
-			snprintf(buffer, bufsize, "%s", CCAPI_DEBUG_PREFIX);
-			offset = strlen(buffer);
+static void buffer_flush(void)
+{
+	char * state;
+	char * line;
 
-			vsnprintf(buffer + offset, bufsize - offset, format, args);
-			log_debug("%s", buffer);
-			free(buffer);
-			buffer = NULL;
-			bufsize = 0;
-			break;
+	for (char * s = buffer.data; (line = strtok_r(s, "\n", &state)); s = NULL) {
+		syslog(LOG_DEBUG, "%s", line);
+	}
+
+	buffer.offset = 0;
+	buffer.remaining = buffer.length;
+}
+
+static void buffer_reset(void)
+{
+	if (buffer.offset != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "buffer invalid state: %zu", buffer.offset);
+		syslog(LOG_DEBUG, "%s", buffer.data);
+		buffer_flush();
+	}
+
+	strcpy(buffer.data, CCAPI_DEBUG_PREFIX);
+	buffer.offset = strlen(CCAPI_DEBUG_PREFIX);
+	buffer.remaining -= buffer.offset;
+}
+
+int ccimp_logging_init(void)
+{
+	pthread_mutexattr_t attribute;
+	int result;
+
+	result = pthread_mutexattr_init(&attribute);
+	if (result != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_attr_init() failure: %d", result);
+		return result; // no cleanup needed
+	}
+
+	result = pthread_mutexattr_settype(&attribute, PTHREAD_MUTEX_ERRORCHECK);
+	if (result != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_mutexattr_settype() failure: %d", result);
+		goto done;
+	}
+
+	result = pthread_mutexattr_setrobust(&attribute, PTHREAD_MUTEX_ROBUST);
+	if (result != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_mutexattr_setrobust() failure: %d", result);
+		goto done;
+	}
+
+	result = pthread_mutex_init(&buffer.mutex, &attribute);
+	if (result != 0) {
+		log_error(CCAPI_DEBUG_PREFIX "pthread_mutex_init() failure: %d", result);
+		goto done;
+	}
+
+	{
+		size_t const minimum = sizeof CCAPI_DEBUG_PREFIX;
+
+		if (!enlarge_buffer(minimum)) {
+			log_error(CCAPI_DEBUG_PREFIX "enlarge_buffer() failure: %zu", minimum);
+			goto done;
 		}
 	}
+
+	result = 0;
+
+done:
+	pthread_mutexattr_destroy(&attribute);
+	return result;
+}
+
+void ccimp_hal_logging_vprintf(debug_t const debug, char const * const format, va_list args)
+{
+	switch (debug)
+	{
+		case debug_beg:
+		case debug_all:
+		{
+			if (!lock()) {
+				syslog(LOG_DEBUG, format, args);
+				return;
+			}
+
+			buffer_reset();
+			break;
+		}
+
+		case debug_mid:
+		case debug_end:
+			break;
+	}
+
+	buffer_printf(format, args);
+
+	switch (debug)
+	{
+		case debug_end:
+		case debug_all:
+		{
+			buffer_flush();
+			unlock();
+			break;
+		}
+
+		case debug_beg:
+		case debug_mid:
+			break;
+	}
+
 	return;
 }
-#else
- /* to avoid ISO C forbids an empty translation unit compiler error */
-typedef int dummy;
-#endif
+
+void ccimp_logging_deinit(void)
+{
+	pthread_mutex_destroy(&buffer.mutex);
+	free(buffer.data);
+}
+
+#else /* CCIMP_DEBUG_ENABLED */
+int ccimp_logging_init(void)
+{
+	return 0;
+}
+
+void ccimp_logging_deinit(void)
+{
+	return;
+}
+#endif /* CCIMP_DEBUG_ENABLED */

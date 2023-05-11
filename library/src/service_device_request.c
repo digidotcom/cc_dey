@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -27,7 +27,7 @@
 #include "ccapi/ccapi.h"
 #include "services_util.h"
 #include "service_device_request.h"
-#include "string_utils.h"
+#include "_utils.h"
 
 #define TARGET_EDP_CERT_UPDATE	"builtin/edp_certificate_update"
 
@@ -76,6 +76,10 @@ static const char REQUEST_CB[] = "request";
 static const char STATUS_CB[] = "status";
 
 static request_data_darray_t active_requests = { 0 };
+
+#ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
+extern bool edp_cert_downloaded;
+#endif /* CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED */
 
 static const char *to_user_error_msg(ccapi_receive_error_t error) {
 	switch (error) {
@@ -512,6 +516,8 @@ static ccapi_receive_error_t edp_cert_update_cb(const char *const target,
 
 	UNUSED_ARGUMENT(response_buffer_info);
 
+	edp_cert_downloaded = false;
+
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 	if (request_buffer_info && request_buffer_info->buffer && request_buffer_info->length > 0) {
 		char *client_cert_path = get_client_cert_path();
@@ -531,6 +537,7 @@ static ccapi_receive_error_t edp_cert_update_cb(const char *const target,
 			ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		} else {
 			log_dr_debug("%s: certificate saved at %s", __func__, client_cert_path);
+			edp_cert_downloaded = true;
 			ret = CCAPI_RECEIVE_ERROR_NONE;
 		}
 		fclose(fp);
@@ -595,28 +602,23 @@ ccapi_receive_error_t register_builtin_requests(void)
 static ccapi_bool_t receive_default_accept_cb(char const *const target,
 		ccapi_transport_t const transport)
 {
-	ccapi_bool_t accept_target = CCAPI_TRUE;
-
-#if (defined CCIMP_UDP_TRANSPORT_ENABLED || defined CCIMP_SMS_TRANSPORT_ENABLED)
 	switch (transport) {
+		case CCAPI_TRANSPORT_TCP:
+			return CCAPI_TRUE;
 #if (defined CCIMP_UDP_TRANSPORT_ENABLED)
 		case CCAPI_TRANSPORT_UDP:
-#endif
+			/* intentional fall-through */
+#endif /* CCIMP_UDP_TRANSPORT_ENABLED */
 #if (defined CCIMP_SMS_TRANSPORT_ENABLED)
 		case CCAPI_TRANSPORT_SMS:
-#endif
+			/* intentional fall-through */
+#endif /* CCIMP_SMS_TRANSPORT_ENABLED */
+		default:
 			/* Don't accept requests from SMS and UDP transports */
 			log_dr_debug("%s: not accepted request - target='%s' - transport='%d'",
 				      __func__, target, transport);
-			accept_target = CCAPI_FALSE;
-			break;
+			return CCAPI_FALSE;
 	}
-#else
-	UNUSED_ARGUMENT(transport);
-	UNUSED_ARGUMENT(target);
-#endif
-
-	return accept_target;
 }
 
 /**
