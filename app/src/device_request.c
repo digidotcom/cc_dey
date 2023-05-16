@@ -1889,7 +1889,7 @@ done:
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(request_buffer_info->length + 1, sizeof(char));
+	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
 	if (response_buffer_info->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -2003,7 +2003,7 @@ done:
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(request_buffer_info->length + 1, sizeof(char));
+	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
 	if (response_buffer_info->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -2092,7 +2092,7 @@ done:
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(request_buffer_info->length + 1, sizeof(char));
+	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
 	if (response_buffer_info->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
