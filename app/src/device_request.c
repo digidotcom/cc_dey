@@ -1691,7 +1691,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 	}
 
 	/* Configure system monitor */
-	{
+	if (json_object_object_get_ex(req, CFG_ELEMENT_SYS_MONITOR, &json_element)) {
 		json_object *sm_item = NULL;
 		int err = set_system_monitor_config(sm_cfg);
 
