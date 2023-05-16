@@ -1271,7 +1271,7 @@ error:
 }
 
 /*
- * get_wifi_config() - Retrieves the Ethernet configurations from the JSon object
+ * get_eth_config() - Retrieves the Ethernet configurations from the JSon object
  *
  * @req:		Request JSon object.
  * @wifi_cfgs:	Pointer to store configurations.
@@ -1699,7 +1699,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 			goto bad_format; /* Should not occur */
 
 		if (err == 1)
-			response_buffer_info->buffer = strdup("Unable to star system monitor");
+			response_buffer_info->buffer = strdup("Unable to start system monitor");
 		else if (err == -1)
 			response_buffer_info->buffer = strdup("Unable to save configuration");
 
