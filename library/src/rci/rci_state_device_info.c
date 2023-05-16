@@ -37,7 +37,7 @@
 #define BOARD_VARIANT_FILE		"/proc/device-tree/digi,hwid,variant"
 #define BOARD_VERSION_FILE		"/proc/device-tree/digi,carrierboard,version"
 #define BOARD_ID_FILE			"/proc/device-tree/digi,carrierboard,id"
-#define GET_MCA_ADDR_CMD		"basename $(dirname $(grep -lv ioexp $(grep -l mca /sys/bus/i2c/devices/*/name)))"
+#define GET_MCA_ADDR_CMD		"grep -l mca /sys/bus/i2c/devices/*/name | xargs -r grep -lv ioexp | xargs -r dirname | xargs -r basename"
 #define MCA_SYS_BASEPATH		"/sys/bus/i2c/devices"
 #define MCA_FW_VERSION_FILE		"fw_version"
 #define MCA_HW_VERSION_FILE		"hw_version"

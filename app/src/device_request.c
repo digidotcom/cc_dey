@@ -671,40 +671,36 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		char hw_version[PARAM_LENGTH] = STRING_NA;
 		char *resp = NULL;
 
-		if (ldx_process_execute_cmd("basename $(dirname $(grep -lv ioexp $(grep -l mca /sys/bus/i2c/devices/*/name)))", &resp, 2) != 0 || resp == NULL) {
+		if (ldx_process_execute_cmd("grep -l mca /sys/bus/i2c/devices/*/name | xargs -r grep -lv ioexp | xargs -r dirname | xargs -r basename", &resp, 2) != 0 || resp == NULL) {
 			if (resp != NULL)
 				log_dr_error("Error getting MCA address: %s", resp);
 			else
 				log_dr_error("%s", "Error getting MCA address");
-			goto done;
+		} else {
+			if (strlen(resp) > 0)
+				resp[strlen(resp) - 1] = '\0';  /* Remove the last line feed */
+
+			/* MCA firmware version */
+			sprintf(path, "/sys/bus/i2c/devices/%s/fw_version", resp);
+			if (read_file_line(path, fw_version, PARAM_LENGTH) != 0)
+				log_dr_error("%s", "Error getting MCA firmware version");
+			else if (strlen(fw_version) > 0)
+				fw_version[strlen(fw_version) - 1] = '\0';  /* Remove the last line feed */
+
+			/* MCA hardware version */
+			sprintf(path, "/sys/bus/i2c/devices/%s/hw_version", resp);
+			if (read_file_line(path, hw_version, PARAM_LENGTH) != 0)
+				log_dr_error("%s", "Error getting MCA hardware version");
+			else if (strlen(hw_version) > 0)
+				hw_version[strlen(hw_version) - 1] = '\0';  /* Remove the last line feed */
 		}
 
-		if (strlen(resp) > 0)
-			resp[strlen(resp) - 1] = '\0';  /* Remove the last line feed */
-
-		/* MCA firmware version */
-		sprintf(path, "/sys/bus/i2c/devices/%s/fw_version", resp);
-		if (read_file_line(path, fw_version, PARAM_LENGTH) != 0)
-			log_dr_error("%s", "Error getting MCA firmware version");
-
-		if (strlen(fw_version) > 0)
-			fw_version[strlen(fw_version) - 1] = '\0';  /* Remove the last line feed */
+		free(resp);
 
 		if (json_object_object_add(root, "mca_fw_version", json_object_new_string(fw_version)) < 0) {
 			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
-			free(resp);
 			goto error;
 		}
-
-		/* MCA hardware version */
-		sprintf(path, "/sys/bus/i2c/devices/%s/hw_version", resp);
-		if (read_file_line(path, hw_version, PARAM_LENGTH) != 0)
-			log_dr_error("%s", "Error getting MCA hardware version");
-
-		if (strlen(hw_version) > 0)
-			hw_version[strlen(hw_version) - 1] = '\0';  /* Remove the last line feed */
-
-		free(resp);
 
 		if (json_object_object_add(root, "mca_hw_version", json_object_new_string(hw_version)) < 0) {
 			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
