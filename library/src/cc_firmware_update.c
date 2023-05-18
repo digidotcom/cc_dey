@@ -1475,19 +1475,26 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 
 	return 0;
 #else /* !ENABLE_RECOVERY_UPDATE || !ENABLE_ONTHEFLY_UPDATE */
-	uint8_t version[4];
+	uint8_t v[4];
 	ccapi_firmware_target_t *fw_list = NULL;
+	int len;
 
 	*fw_service = NULL;
 
 	if (fw_version == NULL)
 		return 0;
 
-	if (sscanf(fw_version, "%hhu.%hhu.%hhu.%hhu", &version[0], &version[1],
-			&version[2], &version[3]) != 4) {
+	len = sscanf(fw_version, "%hhu.%hhu.%hhu.%hhu", &v[0], &v[1], &v[2], &v[3]);
+	if (len <= 0) {
 		log_fw_error("Error initializing Cloud connection: Bad firmware_version string '%s', firmware update disabled",
 				fw_version);
 		return 0;
+	}
+	if (len < 4) {
+		int i;
+
+		for (i = len; i < 4; i++)
+			v[i] = 0;
 	}
 
 	fw_list = calloc(__CC_FW_TARGET_LAST, sizeof(*fw_list));
@@ -1502,19 +1509,19 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 	fw_list[CC_FW_TARGET_SWU].description = "System";
 	fw_list[CC_FW_TARGET_SWU].filespec = ".*\\.[sS][wW][uU]";
 	fw_list[CC_FW_TARGET_SWU].maximum_size = 0;
-	fw_list[CC_FW_TARGET_SWU].version.major = version[0];
-	fw_list[CC_FW_TARGET_SWU].version.minor = version[1];
-	fw_list[CC_FW_TARGET_SWU].version.revision = version[2];
-	fw_list[CC_FW_TARGET_SWU].version.build = version[3];
+	fw_list[CC_FW_TARGET_SWU].version.major = v[0];
+	fw_list[CC_FW_TARGET_SWU].version.minor = v[1];
+	fw_list[CC_FW_TARGET_SWU].version.revision = v[2];
+	fw_list[CC_FW_TARGET_SWU].version.build = v[3];
 
 	fw_list[CC_FW_TARGET_MANIFEST].chunk_size = 0;
 	fw_list[CC_FW_TARGET_MANIFEST].description = "Update manifest";
 	fw_list[CC_FW_TARGET_MANIFEST].filespec = "[mM][aA][nN][iI][fF][eE][sS][tT]\\.[tT][xX][tT]";
 	fw_list[CC_FW_TARGET_MANIFEST].maximum_size = 0;
-	fw_list[CC_FW_TARGET_MANIFEST].version.major = version[0];
-	fw_list[CC_FW_TARGET_MANIFEST].version.minor = version[1];
-	fw_list[CC_FW_TARGET_MANIFEST].version.revision = version[2];
-	fw_list[CC_FW_TARGET_MANIFEST].version.build = version[3];
+	fw_list[CC_FW_TARGET_MANIFEST].version.major = v[0];
+	fw_list[CC_FW_TARGET_MANIFEST].version.minor = v[1];
+	fw_list[CC_FW_TARGET_MANIFEST].version.revision = v[2];
+	fw_list[CC_FW_TARGET_MANIFEST].version.build = v[3];
 
 	(*fw_service)->target.count = __CC_FW_TARGET_LAST;
 	(*fw_service)->target.item = fw_list;

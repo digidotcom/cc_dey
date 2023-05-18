@@ -93,6 +93,9 @@
 
 #define SETTING_UNKNOWN				"__unknown"
 
+#define FW_VERSION_FILE_PREFIX		"file://"
+#define FW_VERSION_FILE_DEFAULT		"/etc/sw-versions"
+
 #define LOG_LEVEL_ERROR_STR			"error"
 #define LOG_LEVEL_INFO_STR			"info"
 #define LOG_LEVEL_DEBUG_STR			"debug"
@@ -188,7 +191,7 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 			/* General settings. */
 			CFG_STR		(SETTING_VENDOR_ID,		NULL,			CFGF_NODEFAULT),
 			CFG_STR		(SETTING_DEVICE_TYPE,	"DEY device",	CFGF_NONE),
-			CFG_STR		(SETTING_FW_VERSION,	NULL,			CFGF_NODEFAULT),
+			CFG_STR		(SETTING_FW_VERSION,	FW_VERSION_FILE_PREFIX FW_VERSION_FILE_DEFAULT,CFGF_NONE),
 			CFG_STR		(SETTING_DESCRIPTION,	"",				CFGF_NONE),
 			CFG_STR		(SETTING_CONTACT,		"",				CFGF_NONE),
 			CFG_STR		(SETTING_LOCATION,		"",				CFGF_NONE),
@@ -304,6 +307,8 @@ void free_configuration(cc_cfg_t *cc_cfg)
 
 		free(cc_cfg->device_type);
 		cc_cfg->device_type = NULL;
+		free(cc_cfg->fw_version_src);
+		cc_cfg->fw_version_src = NULL;
 		free(cc_cfg->fw_version);
 		cc_cfg->fw_version = NULL;
 		free(cc_cfg->description);
@@ -395,6 +400,69 @@ error:
 	return -1;
 }
 
+static char *get_fw_version(const char *const value) {
+	char data[256] = {0};
+	const char *path = NULL;
+
+	if (value == NULL || strlen(value) == 0)
+		path = FW_VERSION_FILE_DEFAULT;
+	else if (!strncmp(value, FW_VERSION_FILE_PREFIX, strlen(FW_VERSION_FILE_PREFIX)))
+		path = value + strlen(FW_VERSION_FILE_PREFIX);
+
+	/* If a version number is specified, just return it */
+	if (!path)
+		return strdup(value);
+
+	if (read_file_line(path, data, sizeof(data)) != 0) {
+		/* Return if we already read from default location */
+		if (value == NULL || strlen(value) == 0)
+			return NULL;
+		/* Try to read from default location */
+		if (read_file_line(FW_VERSION_FILE_DEFAULT, data, sizeof(data)) <= 0)
+			return NULL;
+	}
+
+	data[strlen(data) - 1] = 0;
+
+	{
+		regex_t regex;
+		char msgbuf[100];
+		char *tmp = NULL;
+		int ret, version_group = 2;
+		regmatch_t groups[version_group + 1];
+
+		ret = regcomp(&regex, "^([A-Za-z0-9_-]+[ =]{1})?([[0-9\\.]+)$", REG_EXTENDED);
+		if (ret != 0) {
+			regerror(ret, &regex, msgbuf, sizeof(msgbuf));
+			log_error("Could not compile regex: %s (%d)", msgbuf, ret);
+			goto done;
+		}
+		ret = regexec(&regex, data, version_group + 1, groups, 0);
+		if (ret != 0) {
+			regerror(ret, &regex, msgbuf, sizeof(msgbuf));
+			log_error("Invalid firmware version format '%s': %s (%d)", data, msgbuf, ret);
+			goto done;
+		}
+
+		if (groups[version_group].rm_so == -1) {
+			log_error("Invalid firmware version format '%s'", data);
+			goto done;
+		}
+
+		tmp = calloc(groups[version_group].rm_eo - groups[version_group].rm_so + 1, sizeof(*tmp));
+		if (!tmp) {
+			log_error("Cannot get firmware version: %s", "Out of memory");
+			goto done;
+		}
+
+		strncpy(tmp, data + groups[version_group].rm_so, sizeof(tmp) - 1);
+done:
+		regfree(&regex);
+
+		return tmp;
+	}
+}
+
 /*
  * fill_connector_config() - Fill the connector configuration struct
  *
@@ -411,7 +479,10 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 	/* Fill general settings. */
 	cc_cfg->vendor_id = strtoul(cfg_getstr(cfg, SETTING_VENDOR_ID), NULL, 16);
 	cc_cfg->device_type = strdup(cfg_getstr(cfg, SETTING_DEVICE_TYPE));
-	cc_cfg->fw_version = strdup(cfg_getstr(cfg, SETTING_FW_VERSION));
+	cc_cfg->fw_version_src = strdup(cfg_getstr(cfg, SETTING_FW_VERSION));
+	cc_cfg->fw_version = get_fw_version(cc_cfg->fw_version_src);
+	log_debug("Firmware version: %s", cc_cfg->fw_version);
+
 	cc_cfg->description = strdup(cfg_getstr(cfg, SETTING_DESCRIPTION));
 	cc_cfg->contact = strdup(cfg_getstr(cfg, SETTING_CONTACT));
 	cc_cfg->location = strdup(cfg_getstr(cfg, SETTING_LOCATION));
@@ -475,7 +546,7 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	snprintf(vid_str, sizeof vid_str, "0x%08"PRIX32, cc_cfg->vendor_id);
 	cfg_setstr(cfg, SETTING_VENDOR_ID, vid_str);
 	cfg_setstr(cfg, SETTING_DEVICE_TYPE, cc_cfg->device_type);
-	cfg_setstr(cfg, SETTING_FW_VERSION, cc_cfg->fw_version);
+	cfg_setstr(cfg, SETTING_FW_VERSION, cc_cfg->fw_version_src);
 	cfg_setstr(cfg, SETTING_DESCRIPTION, cc_cfg->description);
 	cfg_setstr(cfg, SETTING_CONTACT, cc_cfg->contact);
 	cfg_setstr(cfg, SETTING_LOCATION, cc_cfg->location);
@@ -662,29 +733,34 @@ static int cfg_check_fw_version(cfg_t *cfg, cfg_opt_t *opt)
 	regex_t regex;
 	char msgbuf[100];
 	int error = 0;
-	int ret;
+	char *version_str = NULL;
 	char *val = cfg_opt_getnstr(opt, 0);
 
-	if (val == NULL || strlen(val) == 0) {
-		cfg_error(cfg, "Invalid %s (%s): cannot be empty", opt->name, val);
+	version_str = get_fw_version(val);
+	if (version_str == NULL) {
+		if (val == NULL || strlen(val) == 0)
+			cfg_error(cfg, "Invalid %s (%s): cannot be empty", opt->name, val);
+		else
+			cfg_error(cfg, "Invalid %s (%s): Cannot get firmware version from file", opt->name, val);
 		return -1;
 	}
 
-	ret = regcomp(&regex, "^([0-9]+\\.){0,3}[0-9]+$", REG_EXTENDED);
-	if (ret != 0) {
-		regerror(ret, &regex, msgbuf, sizeof(msgbuf));
-		cfg_error(cfg, "Could not compile regex: %s (%d)", msgbuf, ret);
+	error = regcomp(&regex, "^([0-9]+\\.){0,3}[0-9]+$", REG_EXTENDED);
+	if (error != 0) {
+		regerror(error, &regex, msgbuf, sizeof(msgbuf));
+		cfg_error(cfg, "Could not compile regex: %s (%d)", msgbuf, error);
 		error = -1;
 		goto done;
 	}
-	ret = regexec(&regex, val, 0, NULL, 0);
-	if (ret != 0) {
-		regerror(ret, &regex, msgbuf, sizeof(msgbuf));
-		cfg_error(cfg, "Invalid %s (%s): %s (%d)", opt->name, val, msgbuf, ret);
+	error = regexec(&regex, version_str, 0, NULL, 0);
+	if (error != 0) {
+		regerror(error, &regex, msgbuf, sizeof(msgbuf));
+		cfg_error(cfg, "Invalid %s (%s): %s (%d)", opt->name, val, msgbuf, error);
 		error = -1;
 	}
 
 done:
+	free(version_str);
 	regfree(&regex);
 
 	return error;

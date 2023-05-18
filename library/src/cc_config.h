@@ -55,6 +55,7 @@ typedef struct {
  *
  * @vendor_id:					Identifier of the Remote Manager user account
  * @device_type:				Name of the device running Cloud Connector
+ * @fw_version_src:				Source of the firmware version
  * @fw_version:					Version of the firmware running Cloud Connector
  * @description:				Description of the device
  * @contact:					Contact information of the device
@@ -87,6 +88,7 @@ typedef struct {
 typedef struct {
 	uint32_t vendor_id;
 	char *device_type;
+	char *fw_version_src;
 	char *fw_version;
 	char *description;
 	char *contact;
