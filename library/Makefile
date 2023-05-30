@@ -13,7 +13,7 @@
 # OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 #
-# DDigi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
+# Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
 #
 # ***************************************************************************
 # Use GNU C Compiler
@@ -47,6 +47,7 @@ INSTALL_HEADERS_DIR = /usr/include/$(NAME)
 # Location of Platform Source Code.
 PLATFORM_DIR = $(SRC)/ccimp
 MINIUNZ_DIR = $(SRC)/miniunz
+SERVICES_DIR = $(SRC)/services
 
 # Resolves where to find Source files.
 vpath $(CCFSM_PRIVATE_DIR)/%.c
@@ -72,7 +73,8 @@ CC_PRIVATE_SRCS := $(CCFSM_PRIVATE_DIR)/connector_api.c
 CCAPI_PRIVATE_SRCS := $(wildcard $(CCAPI_PRIVATE_DIR)/*.c)
 PLATFORM_SRCS := $(wildcard $(PLATFORM_DIR)/*.c)
 CC_DEY_SRCS := $(wildcard $(SRC)/*.c)
-CC_MINIUNZ_SRCS := $(wildcard $(SRC)/miniunz/*.c)
+CC_MINIUNZ_SRCS := $(wildcard $(MINIUNZ_DIR)/*.c)
+CC_SERVICES_SRCS := $(wildcard $(SERVICES_DIR)/*.c)
 
 ifeq ($(CONFIG_DISABLE_RECOVERY_UPDATE),)
 CFLAGS += -DENABLE_RECOVERY_UPDATE $(shell pkg-config --cflags recovery)
@@ -99,9 +101,9 @@ CFLAGS += $(shell pkg-config --cflags libdigiapix)
 CFLAGS += -I $(SRC) $(RCI_HEADERS) -I $(CUSTOM_CCFSM_PUBLIC_HEADER_DIR) -I $(CCFSM_PUBLIC_HEADER_DIR)
 CFLAGS += -I $(CCAPI_PUBLIC_HEADER_DIR) -I $(CUSTOM_PUBLIC_HEADER_DIR)
 # Include Platform Header Files.
-CFLAGS += -I $(MINIUNZ_DIR) -I $(PLATFORM_DIR)
+CFLAGS += -I $(MINIUNZ_DIR) -I $(SERVICES_DIR) -I $(PLATFORM_DIR)
 
-SRCS = $(CC_DEY_SRCS) $(CC_DEY_RCI_SRCS) $(CC_MINIUNZ_SRCS) $(PLATFORM_SRCS) $(CC_PRIVATE_SRCS) $(CCAPI_PRIVATE_SRCS)
+SRCS = $(CC_DEY_SRCS) $(CC_SERVICES_SRCS) $(CC_DEY_RCI_SRCS) $(CC_MINIUNZ_SRCS) $(PLATFORM_SRCS) $(CC_PRIVATE_SRCS) $(CCAPI_PRIVATE_SRCS)
 
 OBJS = $(SRCS:.c=.o)
 
