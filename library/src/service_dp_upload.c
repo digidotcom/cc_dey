@@ -21,6 +21,7 @@
 
 #include "ccapi/ccapi.h"
 #include "cc_logging.h"
+#include "cc_error_msg.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
 

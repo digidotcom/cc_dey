@@ -17,21 +17,15 @@
  * ===========================================================================
  */
 
-#include <alloca.h>
 #include <arpa/inet.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/ioctl.h>
+#include <string.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include "services_util.h"
-#include "cc_logging.h"
 
 /*
  * This module encapsulates the local tcp/ip communication between cc_dey and
@@ -134,55 +128,6 @@
 	va_end(_ap);					\
 	_l;						\
 })
-
-
-const char *to_send_error_msg(ccapi_send_error_t error) {
-	switch (error) {
-		case CCAPI_SEND_ERROR_NONE:
-			return "Success";
-		case CCAPI_SEND_ERROR_CCAPI_NOT_RUNNING:
-			return "CCAPI not running";
-		case CCAPI_SEND_ERROR_TRANSPORT_NOT_STARTED:
-			return "Transport not started";
-		case CCAPI_SEND_ERROR_FILESYSTEM_NOT_SUPPORTED:
-			return "Filesystem not supported";
-		case CCAPI_SEND_ERROR_INVALID_CLOUD_PATH:
-			return "Invalid cloud path";
-		case CCAPI_SEND_ERROR_INVALID_CONTENT_TYPE:
-			return "Invalid content type";
-		case CCAPI_SEND_ERROR_INVALID_DATA:
-			return "Invalid data";
-		case CCAPI_SEND_ERROR_INVALID_LOCAL_PATH:
-			return "Invalid local path";
-		case CCAPI_SEND_ERROR_NOT_A_FILE:
-			return "Not a file";
-		case CCAPI_SEND_ERROR_ACCESSING_FILE:
-			return "Error accessing file";
-		case CCAPI_SEND_ERROR_INVALID_HINT_POINTER:
-			return "Invalid hint pointer";
-		case CCAPI_SEND_ERROR_INSUFFICIENT_MEMORY:
-			return "Out of memory";
-		case CCAPI_SEND_ERROR_LOCK_FAILED:
-			return "Lock failed";
-		case CCAPI_SEND_ERROR_INITIATE_ACTION_FAILED:
-			return "Initiate action failed";
-		case CCAPI_SEND_ERROR_STATUS_CANCEL:
-			return "Cancelled";
-		case CCAPI_SEND_ERROR_STATUS_TIMEOUT:
-			return "Timeout";
-		case CCAPI_SEND_ERROR_STATUS_SESSION_ERROR:
-			return "Session error";
-		case CCAPI_SEND_ERROR_RESPONSE_BAD_REQUEST:
-			return "Bad request";
-		case CCAPI_SEND_ERROR_RESPONSE_UNAVAILABLE:
-			return "Response unavailable";
-		case CCAPI_SEND_ERROR_RESPONSE_CLOUD_ERROR:
-			return "Cloud error";
-		default:
-			log_error("unknown internal connection error: ccapi_send_error_t[%d]", error);
-			return "Internal connector error";
-	}
-}
 
 static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeout)
 {
