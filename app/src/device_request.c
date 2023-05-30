@@ -671,40 +671,36 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		char hw_version[PARAM_LENGTH] = STRING_NA;
 		char *resp = NULL;
 
-		if (ldx_process_execute_cmd("basename $(dirname $(grep -lv ioexp $(grep -l mca /sys/bus/i2c/devices/*/name)))", &resp, 2) != 0 || resp == NULL) {
+		if (ldx_process_execute_cmd("grep -l mca /sys/bus/i2c/devices/*/name | xargs -r grep -lv ioexp | xargs -r dirname | xargs -r basename", &resp, 2) != 0 || resp == NULL) {
 			if (resp != NULL)
 				log_dr_error("Error getting MCA address: %s", resp);
 			else
 				log_dr_error("%s", "Error getting MCA address");
-			goto done;
+		} else {
+			if (strlen(resp) > 0)
+				resp[strlen(resp) - 1] = '\0';  /* Remove the last line feed */
+
+			/* MCA firmware version */
+			sprintf(path, "/sys/bus/i2c/devices/%s/fw_version", resp);
+			if (read_file_line(path, fw_version, PARAM_LENGTH) != 0)
+				log_dr_error("%s", "Error getting MCA firmware version");
+			else if (strlen(fw_version) > 0)
+				fw_version[strlen(fw_version) - 1] = '\0';  /* Remove the last line feed */
+
+			/* MCA hardware version */
+			sprintf(path, "/sys/bus/i2c/devices/%s/hw_version", resp);
+			if (read_file_line(path, hw_version, PARAM_LENGTH) != 0)
+				log_dr_error("%s", "Error getting MCA hardware version");
+			else if (strlen(hw_version) > 0)
+				hw_version[strlen(hw_version) - 1] = '\0';  /* Remove the last line feed */
 		}
 
-		if (strlen(resp) > 0)
-			resp[strlen(resp) - 1] = '\0';  /* Remove the last line feed */
-
-		/* MCA firmware version */
-		sprintf(path, "/sys/bus/i2c/devices/%s/fw_version", resp);
-		if (read_file_line(path, fw_version, PARAM_LENGTH) != 0)
-			log_dr_error("%s", "Error getting MCA firmware version");
-
-		if (strlen(fw_version) > 0)
-			fw_version[strlen(fw_version) - 1] = '\0';  /* Remove the last line feed */
+		free(resp);
 
 		if (json_object_object_add(root, "mca_fw_version", json_object_new_string(fw_version)) < 0) {
 			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
-			free(resp);
 			goto error;
 		}
-
-		/* MCA hardware version */
-		sprintf(path, "/sys/bus/i2c/devices/%s/hw_version", resp);
-		if (read_file_line(path, hw_version, PARAM_LENGTH) != 0)
-			log_dr_error("%s", "Error getting MCA hardware version");
-
-		if (strlen(hw_version) > 0)
-			hw_version[strlen(hw_version) - 1] = '\0';  /* Remove the last line feed */
-
-		free(resp);
 
 		if (json_object_object_add(root, "mca_hw_version", json_object_new_string(hw_version)) < 0) {
 			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -1073,7 +1069,7 @@ static int get_net_cfg_from_json(json_object *json_item, const char *iface_name,
 	json_object *cfg_field = NULL;
 	int valid_fields = 0, ret;
 
-	strncpy(net_cfg->name, iface_name, strlen(net_cfg->name));
+	strncpy(net_cfg->name, iface_name, sizeof(net_cfg->name) - 1);
 
 	if (json_object_object_get_ex(json_item, CFG_FIELD_ENABLE, &cfg_field)) {
 		if (!json_object_is_type(cfg_field, json_type_boolean))
@@ -1146,7 +1142,7 @@ static int get_wifi_cfg_from_json(json_object *json_item, const char *iface_name
 	json_object *cfg_field = NULL;
 	int valid_fields = 0;
 
-	strncpy(wifi_cfg->name, iface_name, strlen(wifi_cfg->name));
+	strncpy(wifi_cfg->name, iface_name, sizeof(wifi_cfg->name) - 1);
 
 	valid_fields = get_net_cfg_from_json(json_item, iface_name, &wifi_cfg->net_config);
 	if (valid_fields < 0)
@@ -1271,7 +1267,7 @@ error:
 }
 
 /*
- * get_wifi_config() - Retrieves the Ethernet configurations from the JSon object
+ * get_eth_config() - Retrieves the Ethernet configurations from the JSon object
  *
  * @req:		Request JSon object.
  * @wifi_cfgs:	Pointer to store configurations.
@@ -1691,7 +1687,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 	}
 
 	/* Configure system monitor */
-	{
+	if (json_object_object_get_ex(req, CFG_ELEMENT_SYS_MONITOR, &json_element)) {
 		json_object *sm_item = NULL;
 		int err = set_system_monitor_config(sm_cfg);
 
@@ -1699,7 +1695,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 			goto bad_format; /* Should not occur */
 
 		if (err == 1)
-			response_buffer_info->buffer = strdup("Unable to star system monitor");
+			response_buffer_info->buffer = strdup("Unable to start system monitor");
 		else if (err == -1)
 			response_buffer_info->buffer = strdup("Unable to save configuration");
 
@@ -1889,7 +1885,7 @@ done:
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(request_buffer_info->length + 1, sizeof(char));
+	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
 	if (response_buffer_info->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -2003,7 +1999,7 @@ done:
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(request_buffer_info->length + 1, sizeof(char));
+	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
 	if (response_buffer_info->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -2092,7 +2088,7 @@ done:
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(request_buffer_info->length + 1, sizeof(char));
+	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
 	if (response_buffer_info->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
