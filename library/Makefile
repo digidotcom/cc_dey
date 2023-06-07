@@ -21,8 +21,10 @@ CC ?= gcc
 
 # Generated Library name.
 NAME := cloudconnector
-MAJOR_VERSION := 1
-MINOR_VERSION := 0
+MAJOR := 1
+MINOR := 0
+REVISION := 0
+VERSION := $(MAJOR).$(MINOR).$(REVISION)
 
 # Location of Source Code.
 SRC = src
@@ -107,8 +109,11 @@ SRCS = $(CC_DEY_SRCS) $(CC_SERVICES_SRCS) $(CC_DEY_RCI_SRCS) $(CC_MINIUNZ_SRCS) 
 
 OBJS = $(SRCS:.c=.o)
 
-.PHONY: all
-all: lib$(NAME).a
+LDFLAGS += -shared -Wl,-soname,lib$(NAME).so.$(MAJOR),--sort-common
+
+
+.PHONY: all static dynamic
+all: static dynamic
 
 define PC_CONTENTS
 prefix=/usr
@@ -118,7 +123,7 @@ includedir=$${prefix}/include
 
 Name: $(NAME)
 Description: Cloud Connector library
-Version: $(MAJOR_VERSION).$(MINOR_VERSION)
+Version: $(MAJOR).$(MINOR)
 
 Requires.private: libconfuse openssl zlib libdigiapix $(PC_REQUIRES_PRIVATE)
 Libs: -L$${libdir} -l$(NAME)
@@ -128,17 +133,32 @@ endef
 
 export PC_CONTENTS
 
-lib$(NAME).a: $(OBJS)
+$(NAME).pc:
 	echo "$$PC_CONTENTS" >$(NAME).pc
-	$(AR) -rcs $@ $^
 
-.PHONY: install
-install: lib$(NAME).a
-	# Install library and pkg-config file
+lib$(NAME).a: $(OBJS)
+	$(AR) -rcs $@ $(OBJS)
+
+lib$(NAME).so: lib$(NAME).so.$(VERSION)
+	ln -sf lib$(NAME).so.$(VERSION) lib$(NAME).so.$(MAJOR)
+	ln -sf lib$(NAME).so.$(VERSION) lib$(NAME).so
+
+lib$(NAME).so.$(VERSION): $(OBJS)
+	$(CC) $(LDFLAGS) $(OBJS) $(LIBS) -o $@
+
+static: $(NAME).pc lib$(NAME).a
+
+dynamic: $(NAME).pc lib$(NAME).so
+
+
+.PHONY: install install-static install-dynamic
+install: install-static install-dynamic
+
+install-pkgconfig:
 	install -d $(DESTDIR)/usr/lib/pkgconfig
-	install -m 0644 lib$(NAME).a $(DESTDIR)/usr/lib/
 	install -m 0644 $(NAME).pc $(DESTDIR)/usr/lib/pkgconfig/
-	# Install header files
+
+install-headers:
 	install -d $(DESTDIR)/$(INSTALL_HEADERS_DIR)/ccapi/ \
 		  $(DESTDIR)/$(INSTALL_HEADERS_DIR)/custom/ \
 		  $(DESTDIR)/$(INSTALL_HEADERS_DIR)/ccimp/
@@ -147,9 +167,25 @@ install: lib$(NAME).a
 	install -m 0644 src/cc_api/include/ccimp/ccimp_types.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/ccimp/
 	install -m 0644 src/custom/custom_connector_config.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/custom/
 	install -m 0644 src/cloudconnector.h src/cc_config.h src/cc_init.h src/cc_logging.h src/cc_system_monitor.h src/utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/
-	# Install certificates
+
+install-certs:
 	install -d $(DESTDIR)/etc/ssl/certs
 	install -m 0644 src/cc_api/source/cc_ansic/public/certificates/*.crt $(DESTDIR)/etc/ssl/certs/
+
+install-static-lib:
+	install -d $(DESTDIR)/usr/lib
+	install -m 0644 lib$(NAME).a $(DESTDIR)/usr/lib/
+
+install-dynamic-lib:
+	install -d $(DESTDIR)/usr/lib
+	install -m 0644 lib$(NAME).so.$(VERSION) $(DESTDIR)/usr/lib/
+	ln -sf lib$(NAME).so.$(VERSION) $(DESTDIR)/usr/lib/lib$(NAME).so.$(MAJOR)
+	ln -sf lib$(NAME).so.$(VERSION) $(DESTDIR)/usr/lib/lib$(NAME).so
+
+install-static: install-static-lib install-pkgconfig install-headers install-certs
+
+install-dynamic: install-dynamic-lib install-pkgconfig install-headers install-certs
+
 
 .PHONY: clean
 clean:
