@@ -60,7 +60,7 @@
  * @args:	Additional arguments.
  */
 #define log_error(format, ...)										\
-	syslog(LOG_ERR, format, __VA_ARGS__)
+	syslog(LOG_ERR, "[ERROR] " format, __VA_ARGS__)
 
 /**
  * log_warning() - Log the given message as warning
@@ -69,7 +69,7 @@
  * @args:	Additional arguments.
  */
 #define log_warning(format, ...)									\
-	syslog(LOG_WARNING, format, __VA_ARGS__)
+	syslog(LOG_WARNING, "[WARN] " format, __VA_ARGS__)
 
 
 /**
@@ -79,7 +79,7 @@
  * @args:	Additional arguments.
  */
 #define log_info(format, ...)										\
-	syslog(LOG_INFO, format, __VA_ARGS__)
+	syslog(LOG_INFO, "[INFO] " format, __VA_ARGS__)
 
 /**
  * log_debug() - Log the given message as debug
@@ -88,6 +88,6 @@
  * @args:	Additional arguments.
  */
 #define log_debug(format, ...)										\
-	syslog(LOG_DEBUG, format, __VA_ARGS__)
+	syslog(LOG_DEBUG, "[DEBUG] " format, __VA_ARGS__)
 
 #endif /* CC_LOGGING_H_ */
