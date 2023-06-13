@@ -44,6 +44,7 @@
 #define SETTING_VENDOR_ID			"vendor_id"
 #define SETTING_VENDOR_ID_MAX		0xFFFFFFFFUL
 #define SETTING_DEVICE_TYPE			"device_type"
+#define SETTING_DEVICE_TYPE_MAX			255
 #define SETTING_FW_VERSION			"firmware_version"
 #define SETTING_DESCRIPTION			"description"
 #define SETTING_DESCRIPTION_MIN		0
@@ -712,8 +713,8 @@ static int cfg_check_device_type(cfg_t *cfg, cfg_opt_t *opt)
 		cfg_error(cfg, "Invalid %s (%s): cannot be empty", opt->name, val);
 		return -1;
 	}
-	if (strlen(val) > 32) {
-		cfg_error(cfg, "Invalid %s (%s): maximum length 32", opt->name, val);
+	if (strlen(val) > SETTING_DEVICE_TYPE_MAX) {
+		cfg_error(cfg, "Invalid %s (%s): maximum length %d", opt->name, val, SETTING_DEVICE_TYPE_MAX);
 		return -1;
 	}
 
