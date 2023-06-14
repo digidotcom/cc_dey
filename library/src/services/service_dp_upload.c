@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -24,13 +24,6 @@
 #include "cc_error_msg.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
-
-typedef enum {
-	upload_datapoint_file_terminate,
-	upload_datapoint_file_metrics,
-	upload_datapoint_file_events,
-	upload_datapoint_file_count
-} upload_datapoint_file_t;
 
 static ccapi_send_error_t upload_datapoint_file(char const * const buff, ccapi_string_info_t * const hint_string_info, size_t size, char const cloud_path[])
 {

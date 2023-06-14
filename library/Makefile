@@ -21,6 +21,7 @@ CC ?= gcc
 
 # Generated Library name.
 NAME := cloudconnector
+SRV_NAME := cloudconnector-srv
 MAJOR := 1
 MINOR := 0
 REVISION := 0
@@ -45,11 +46,13 @@ CCAPI_PUBLIC_HEADER_DIR = $(CCAPI_DIR)/include
 CUSTOM_PUBLIC_HEADER_DIR = $(SRC)/custom
 CUSTOM_CCFSM_PUBLIC_HEADER_DIR = $(CCAPI_DIR)/source/cc_ansic_custom_include
 INSTALL_HEADERS_DIR = /usr/include/$(NAME)
+INSTALL_HEADERS_DIR_SRV = /usr/include/$(SRV_NAME)
 
 # Location of Platform Source Code.
 PLATFORM_DIR = $(SRC)/ccimp
 MINIUNZ_DIR = $(SRC)/miniunz
 SERVICES_DIR = $(SRC)/services
+SERVICES_CLIENT_DIR = $(SRC)/services-client
 
 # Resolves where to find Source files.
 vpath $(CCFSM_PRIVATE_DIR)/%.c
@@ -77,6 +80,7 @@ PLATFORM_SRCS := $(wildcard $(PLATFORM_DIR)/*.c)
 CC_DEY_SRCS := $(wildcard $(SRC)/*.c)
 CC_MINIUNZ_SRCS := $(wildcard $(MINIUNZ_DIR)/*.c)
 CC_SERVICES_SRCS := $(wildcard $(SERVICES_DIR)/*.c)
+CC_SERVICES_CLIENT_SRCS := $(wildcard $(SERVICES_CLIENT_DIR)/*.c)
 
 ifeq ($(CONFIG_DISABLE_RECOVERY_UPDATE),)
 CFLAGS += -DENABLE_RECOVERY_UPDATE $(shell pkg-config --cflags recovery)
@@ -105,7 +109,7 @@ CFLAGS += -I $(CCAPI_PUBLIC_HEADER_DIR) -I $(CUSTOM_PUBLIC_HEADER_DIR)
 # Include Platform Header Files.
 CFLAGS += -I $(MINIUNZ_DIR) -I $(SERVICES_DIR) -I $(PLATFORM_DIR)
 
-SRCS = $(CC_DEY_SRCS) $(CC_SERVICES_SRCS) $(CC_DEY_RCI_SRCS) $(CC_MINIUNZ_SRCS) $(PLATFORM_SRCS) $(CC_PRIVATE_SRCS) $(CCAPI_PRIVATE_SRCS)
+SRCS = $(CC_DEY_SRCS) $(CC_SERVICES_SRCS) $(CC_SERVICES_CLIENT_SRCS) $(CC_DEY_RCI_SRCS) $(CC_MINIUNZ_SRCS) $(PLATFORM_SRCS) $(CC_PRIVATE_SRCS) $(CCAPI_PRIVATE_SRCS)
 
 OBJS = $(SRCS:.c=.o)
 
@@ -133,11 +137,32 @@ endef
 
 export PC_CONTENTS
 
+define PC_SRV_CONTENTS
+prefix=/usr
+exec_prefix=$${prefix}
+libdir=$${exec_prefix}/lib
+includedir=$${prefix}/include
+
+Name: $(SRV_NAME)
+Description: Cloud Connector client service library
+Version: $(MAJOR).$(MINOR)
+
+Requires.private: libconfuse openssl zlib libdigiapix $(PC_REQUIRES_PRIVATE)
+Libs: -L$${libdir} -l$(NAME)
+Libs.private: -lpthread -lutil $(PC_LIBS_PRIVATE)
+Cflags: -I$${includedir}/$(SRV_NAME) -I$${includedir}
+endef
+
+export PC_SRV_CONTENTS
+
 $(NAME).pc:
 	echo "$$PC_CONTENTS" >$(NAME).pc
 
 lib$(NAME).a: $(OBJS)
 	$(AR) -rcs $@ $(OBJS)
+
+$(SRV_NAME).pc:
+	echo "$$PC_SRV_CONTENTS" >$(SRV_NAME).pc
 
 lib$(NAME).so: lib$(NAME).so.$(VERSION)
 	ln -sf lib$(NAME).so.$(VERSION) lib$(NAME).so.$(MAJOR)
@@ -148,11 +173,11 @@ lib$(NAME).so.$(VERSION): $(OBJS)
 
 static: $(NAME).pc lib$(NAME).a
 
-dynamic: $(NAME).pc lib$(NAME).so
+dynamic: $(NAME).pc $(SRV_NAME).pc lib$(NAME).so
 
 
-.PHONY: install install-static install-dynamic
-install: install-static install-dynamic
+.PHONY: install install-static install-dynamic install-srv
+install: install-static install-dynamic install-srv
 
 install-pkgconfig:
 	install -d $(DESTDIR)/usr/lib/pkgconfig
@@ -186,7 +211,18 @@ install-static: install-static-lib install-pkgconfig install-headers install-cer
 
 install-dynamic: install-dynamic-lib install-pkgconfig install-headers install-certs
 
+install-srv-pkgconfig:
+	install -d $(DESTDIR)/usr/lib/pkgconfig
+	install -m 0644 $(SRV_NAME).pc $(DESTDIR)/usr/lib/pkgconfig/
+
+install-srv-client-headers:
+	install -d $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)
+	install -m 0644 src/cc_logging.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/services-client/cc_srv_services.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+
+install-srv: install-dynamic-lib install-srv-pkgconfig install-srv-client-headers install-certs
+
 
 .PHONY: clean
 clean:
-	-rm -f *.so* lib$(NAME).a $(NAME).pc $(OBJS)
+	-rm -f *.so* lib$(NAME).a $(NAME).pc $(SRV_NAME).pc $(OBJS)

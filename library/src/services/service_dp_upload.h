@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -21,6 +21,13 @@
 #define SERVICE_DP_UPLOAD_H
 
 #define REQ_TAG_DP_FILE_REQUEST	"upload_1_dp"
+
+typedef enum {
+	upload_datapoint_file_terminate,
+	upload_datapoint_file_metrics,
+	upload_datapoint_file_events,
+	upload_datapoint_file_count
+} upload_datapoint_file_t;
 
 int handle_datapoint_file_upload(int fd);
 
