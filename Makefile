@@ -1,5 +1,5 @@
 # ***************************************************************************
-# Copyright (c) 2017-2022 Digi International Inc.
+# Copyright (c) 2017-2023 Digi International Inc.
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,11 +17,12 @@
 #
 # ***************************************************************************
 
-SUBDIRS := library app
+SUBDIRS := library app app-server
 
 all: $(SUBDIRS)
 
 app: library
+app-server: library
 
 .PHONY: $(SUBDIRS)
 $(SUBDIRS):
