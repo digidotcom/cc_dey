@@ -21,6 +21,7 @@
 #define _CC_SRV_SERVICES_H_
 
 #include "cc_logging.h"
+#include "ccapi_datapoints.h"
 
 /*
  * cc_srv_send_dp_csv_file() - Send provided CSV file with data points to Cloud Connector server
@@ -74,5 +75,40 @@
  *  2 = args error
  */
 int cc_srv_send_dp_csv_file(const char *path, unsigned long const timeout, char **resp);
+
+/*
+ * cc_srv_send_dp_collection() - Send provided data point collection to Cloud Connector server
+ *
+ * @dp_collection:	Data point collection to send to Cloud Connector server.
+ * @resp:		Received response from Cloud Connector server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+int cc_srv_send_dp_collection(ccapi_dp_collection_handle_t const dp_collection, char **resp);
+
+/*
+ * cc_srv_send_dp_collection_with_timeout() - Send provided data point collection to Cloud Connector server
+ *
+ * @dp_collection:	Data point collection to send to Cloud Connector server.
+ * @timeout:		Number of seconds to wait for response from the server.
+ * @resp:		Received response from Cloud Connector server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+int cc_srv_send_dp_collection_with_timeout(ccapi_dp_collection_handle_t const dp_collection, unsigned long const timeout, char **resp);
 
 #endif /* _CC_SRV_SERVICES_H_ */

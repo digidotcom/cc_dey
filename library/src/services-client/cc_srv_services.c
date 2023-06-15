@@ -33,6 +33,8 @@
 
 #include "cc_logging.h"
 #include "cc_srv_services.h"
+#include "ccapi_datapoints.h"
+#include "dp_csv_generator.h"
 #include "service_dp_upload.h"
 #include "services.h"
 #include "services_util.h"
@@ -65,6 +67,37 @@
  */
 #define log_srv_error(format, ...)					\
 	log_error("%s " format, SERVICE_TAG, __VA_ARGS__)
+
+typedef enum {
+	CCAPI_DP_ARG_DATA_INT32,
+	CCAPI_DP_ARG_DATA_INT64,
+	CCAPI_DP_ARG_DATA_FLOAT,
+	CCAPI_DP_ARG_DATA_DOUBLE,
+	CCAPI_DP_ARG_DATA_STRING,
+	CCAPI_DP_ARG_DATA_JSON,
+	CCAPI_DP_ARG_DATA_GEOJSON,
+	CCAPI_DP_ARG_TS_EPOCH,
+	CCAPI_DP_ARG_TS_EPOCH_MS,
+	CCAPI_DP_ARG_TS_ISO8601,
+	CCAPI_DP_ARG_LOCATION,
+	CCAPI_DP_ARG_QUALITY,
+	CCAPI_DP_ARG_INVALID
+} ccapi_dp_argument_t;
+
+typedef struct ccapi_dp_data_stream {
+	connector_data_stream_t *ccfsm_data_stream;
+	struct {
+		ccapi_dp_argument_t *list;
+		unsigned int count;
+	} arguments;
+	struct ccapi_dp_data_stream * next;
+} ccapi_dp_data_stream_t;
+
+typedef struct ccapi_dp_collection {
+	ccapi_dp_data_stream_t *ccapi_data_stream_list;
+	uint32_t dp_count;
+	void * lock;
+} ccapi_dp_collection_t;
 
 /**
  * connect_cc_server() - Connect to Cloud Connector server
@@ -340,4 +373,220 @@ int cc_srv_send_dp_csv_file(const char *path, unsigned long const timeout, char 
 		log_srv_debug("Data points in '%s' uploaded", path);
 
 	return ret;
+}
+
+/*
+ * dp_generate_csv() - Generate the CSV contents in memory to send to the server
+ *
+ * @dp_collection:	Data point collection to send.
+ * @buf_info:		The buffer with the generated CSV.
+ *
+ * Buffer contains the result of the operation. It must be freed.
+ *
+ * Return: The size of the CSV buffer, -1 if error.
+ */
+static size_t dp_generate_csv(ccapi_dp_collection_t * const dp_collection, buffer_info_t *buf_info)
+{
+	csv_process_data_t process_data;
+
+	process_data.current_csv_field = csv_data;
+	process_data.current_data_stream = dp_collection->ccapi_data_stream_list->ccfsm_data_stream;
+	process_data.current_data_point = dp_collection->ccapi_data_stream_list->ccfsm_data_stream->point;
+	process_data.data.init = false;
+
+	buf_info->bytes_written = 0;
+	buf_info->bytes_available = 0;
+
+	buf_info->buffer = calloc(BUFSIZ, sizeof(*buf_info->buffer));
+	if (!buf_info->buffer) {
+		log_srv_error("Unable to generate data to send to Cloud Connector server: %s", "Out of memory");
+		return -1;
+	}
+	buf_info->bytes_available = BUFSIZ;
+
+	return generate_dp_csv(&process_data, buf_info);
+}
+
+static void chain_collection_ccfsm_data_streams(ccapi_dp_collection_t * const dp_collection)
+{
+	ccapi_dp_data_stream_t *current_ds = dp_collection->ccapi_data_stream_list;
+
+	while (current_ds != NULL) {
+		connector_data_stream_t *const ccfsm_ds = current_ds->ccfsm_data_stream;
+		ccapi_dp_data_stream_t *const next_ds = current_ds->next;
+
+		if (next_ds != NULL)
+			ccfsm_ds->next = next_ds->ccfsm_data_stream;
+
+		current_ds = current_ds->next;
+	}
+}
+
+/*
+ * dp_free_data_point() - Free the provided data point
+ *
+ * @data_point:	The data point to free.
+ * @type:	The type of the data point.
+ */
+static void dp_free_data_point(connector_data_point_t * data_point, connector_data_point_type_t type)
+{
+	if (data_point == NULL)
+		return;
+
+	switch (type) {
+		case connector_data_point_type_string:
+		{
+			free(data_point->data.element.native.string_value);
+			break;
+		}
+		case connector_data_point_type_integer:
+		case connector_data_point_type_long:
+		case connector_data_point_type_float:
+		case connector_data_point_type_double:
+		case connector_data_point_type_binary:
+		case connector_data_point_type_json:
+		case connector_data_point_type_geojson:
+			break;
+	}
+
+	switch(data_point->time.source) {
+		case connector_time_local_iso8601:
+		{
+			free(data_point->time.value.iso8601_string);
+			break;
+		}
+		case connector_time_cloud:
+		case connector_time_local_epoch_fractional:
+		case connector_time_local_epoch_whole:
+			break;
+	}
+	free(data_point);
+}
+
+/*
+ * dp_free_data_points_in_data_stream() - Free all data points in data stream
+ *
+ * @data_stream:	Data stream to free.
+ *
+ * Return: Number of freed data points.
+ */
+static unsigned int dp_free_data_points_in_data_stream(connector_data_stream_t * data_stream)
+{
+	connector_data_point_t * data_point = data_stream->point;
+	unsigned int dp_count = 0;
+
+	while (data_point != NULL) {
+		connector_data_point_t * const next_point = data_point->next;
+
+		dp_free_data_point(data_point, data_stream->type);
+
+		data_point = next_point;
+		dp_count++;
+	}
+
+	return dp_count;
+}
+
+/*
+ * dp_free_data_points_from_collection() - Free data points in the provided collection
+ *
+ * @dp_collection:	The data point collection with data points to free.
+ */
+static void dp_free_data_points_from_collection(ccapi_dp_collection_t * const dp_collection)
+{
+	ccapi_dp_data_stream_t *current_ds = dp_collection->ccapi_data_stream_list;
+
+	while (current_ds != NULL) {
+		connector_data_stream_t * const ccfsm_ds = current_ds->ccfsm_data_stream;
+		ccapi_dp_data_stream_t const * const next_ds = current_ds->next;
+
+		if (next_ds != NULL)
+			ccfsm_ds->next = next_ds->ccfsm_data_stream;
+
+		dp_free_data_points_in_data_stream(ccfsm_ds);
+		ccfsm_ds->point = NULL;
+		current_ds = current_ds->next;
+	}
+	dp_collection->dp_count = 0;
+}
+
+/*
+ * dp_send_collection() - Send data point collection to Cloud Connector server
+ *
+ * @dp_collection:	Data point collection to send.
+ * @timeout:		Number of seconds to wait for a response from the server.
+ * @resp:		The response from the server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+static int dp_send_collection(ccapi_dp_collection_t * const dp_collection,
+	unsigned long const timeout, char **resp)
+{
+	int ret = 0;
+	bool collection_lock_acquired = false;
+	buffer_info_t buf_info;
+
+	if (dp_collection == NULL || dp_collection->ccapi_data_stream_list == NULL) {
+		log_srv_error("%s", "Invalid data point collection");
+		ret = 2;
+		goto done;
+	}
+
+	/* TODO check if it is running */
+
+	switch (ccapi_lock_acquire(dp_collection->lock)) {
+		case CCIMP_STATUS_OK:
+			collection_lock_acquired = true;
+			break;
+		case CCIMP_STATUS_ERROR:
+		case CCIMP_STATUS_BUSY:
+			ret = 2;
+			log_srv_error("Data point collection %s", "busy");
+			goto done;
+	}
+
+	chain_collection_ccfsm_data_streams(dp_collection);
+
+	if (dp_generate_csv(dp_collection, &buf_info) > 0)
+		ret = send_dp_data(buf_info.buffer, buf_info.bytes_written, timeout, resp);
+	else
+		ret = 2;
+
+	free(buf_info.buffer);
+
+	dp_free_data_points_from_collection(dp_collection);
+
+done:
+	if (collection_lock_acquired) {
+		switch (ccapi_lock_release(dp_collection->lock))
+		{
+			case CCIMP_STATUS_OK:
+				break;
+			case CCIMP_STATUS_ERROR:
+			case CCIMP_STATUS_BUSY:
+				ret = 2;
+				log_srv_error("Data point collection %s", "busy");
+				break;
+		}
+	}
+
+	return ret;
+}
+
+int cc_srv_send_dp_collection(ccapi_dp_collection_t *const dp_collection, char **resp)
+{
+	return dp_send_collection(dp_collection, CCAPI_DP_WAIT_FOREVER, resp);
+}
+
+int cc_srv_send_dp_collection_with_timeout(ccapi_dp_collection_t *const dp_collection,
+	unsigned long const timeout, char **resp)
+{
+	return dp_send_collection(dp_collection, timeout, resp);
 }
