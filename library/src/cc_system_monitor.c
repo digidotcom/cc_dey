@@ -32,6 +32,7 @@
 #include "cc_init.h"
 #include "cc_logging.h"
 #include "cc_system_monitor.h"
+#include "cc_utils.h"
 #include "utils.h"
 
 /*------------------------------------------------------------------------------
@@ -128,7 +129,6 @@ static void add_net_samples(ccapi_timestamp_t timestamp);
 static ccapi_dp_error_t init_bt_streams(const cc_cfg_t *const cc_cfg);
 static void add_bt_samples(ccapi_timestamp_t timestamp);
 #endif /* ENABLE_BT */
-static ccapi_timestamp_t *get_timestamp(void);
 static double get_free_memory(void);
 static double get_used_memory(void);
 static double get_cpu_load(void);
@@ -136,7 +136,6 @@ static double get_cpu_temp(void);
 static unsigned long get_cpu_freq(void);
 static unsigned long get_uptime(void);
 static void free_stream_list(stream_list_t *stream_list);
-static void free_timestamp(ccapi_timestamp_t *timestamp);
 static ccapi_bool_t should_read_metric(char *metric_name, const cc_cfg_t *const cc_cfg);
 static ccapi_bool_t should_read_interface(char *iface_name, const cc_cfg_t *const cc_cfg);
 static ccapi_bool_t value_matches_wildcard_pattern(char* value, char* pattern);
@@ -189,21 +188,21 @@ static stream_t net_stream_formats[] = {
 		.name = METRIC_STATE,
 		.path = DATA_STREAM_NET_STATE,
 		.units = DATA_STREAM_STATE_UNITS,
-		.format = "int64 ts_iso",
+		.format = CCAPI_DP_KEY_DATA_INT64 " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_STATE
 	},
 	{
 		.name = METRIC_RX_BYTES,
 		.path = DATA_STREAM_NET_TRAFFIC_RX,
 		.units = DATA_STREAM_BYTES_UNITS,
-		.format = "int64 ts_iso",
+		.format = CCAPI_DP_KEY_DATA_INT64 " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_RX_BYTES
 	},
 	{
 		.name = METRIC_TX_BYTES,
 		.path = DATA_STREAM_NET_TRAFFIC_TX,
 		.units = DATA_STREAM_BYTES_UNITS,
-		.format = "int64 ts_iso",
+		.format = CCAPI_DP_KEY_DATA_INT64 " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_TX_BYTES
 	},
 };
@@ -212,42 +211,42 @@ static stream_t sys_streams_formats[] = {
 		.name = METRIC_FREE_MEMORY,
 		.path = DATA_STREAM_FREE_MEMORY,
 		.units = DATA_STREAM_MEMORY_UNITS,
-		.format = "double ts_iso",
+		.format = CCAPI_DP_KEY_DATA_DOUBLE " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_FREE_MEM
 	},
 	{
 		.name = METRIC_USED_MEMORY,
 		.path = DATA_STREAM_USED_MEMORY,
 		.units = DATA_STREAM_MEMORY_UNITS,
-		.format = "double ts_iso",
+		.format = CCAPI_DP_KEY_DATA_DOUBLE " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_USED_MEM
 	},
 	{
 		.name = METRIC_CPU_LOAD,
 		.path = DATA_STREAM_CPU_LOAD,
 		.units = DATA_STREAM_CPU_LOAD_UNITS,
-		.format = "double ts_iso",
+		.format = CCAPI_DP_KEY_DATA_DOUBLE " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_CPU_LOAD
 	},
 	{
 		.name = METRIC_CPU_TEMP,
 		.path = DATA_STREAM_CPU_TEMP,
 		.units = DATA_STREAM_CPU_TEMP_UNITS,
-		.format = "double ts_iso",
+		.format = CCAPI_DP_KEY_DATA_DOUBLE " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_CPU_TEMP
 	},
 	{
 		.name = METRIC_FREQ,
 		.path = DATA_STREAM_FREQ,
 		.units = DATA_STREAM_FREQ_UNITS,
-		.format = "int32 ts_iso",
+		.format = CCAPI_DP_KEY_DATA_INT32 " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_FREQ
 	},
 	{
 		.name = METRIC_UPTIME,
 		.path = DATA_STREAM_UPTIME,
 		.units = DATA_STREAM_UPTIME_UNITS,
-		.format = "int32 ts_iso",
+		.format = CCAPI_DP_KEY_DATA_INT32 " " CCAPI_DP_KEY_TS_EPOCH,
 		.type = STREAM_UPTIME
 	}
 };
@@ -694,6 +693,11 @@ static void add_samples(void)
 {
 	ccapi_timestamp_t *timestamp = get_timestamp();
 
+	if (!timestamp) {
+		log_sm_error("%s", "Cannot get samples timestamp");
+		return;
+	}
+
 	add_sys_samples(*timestamp);
 
 	add_net_samples(*timestamp);
@@ -873,39 +877,6 @@ static void add_bt_samples(ccapi_timestamp_t timestamp)
 #endif /* ENABLE_BT */
 
 /*
- * get_timestamp() - Get the current timestamp of the system
- *
- * Return: The timestamp of the system.
- */
-static ccapi_timestamp_t *get_timestamp(void)
-{
-	ccapi_timestamp_t *timestamp = NULL;
-	size_t len = strlen("2016-09-27T07:07:09.546Z") + 1;
-	char *date = NULL;
-	time_t now;
-
-	timestamp = (ccapi_timestamp_t*) malloc(sizeof(ccapi_timestamp_t));
-	if (timestamp == NULL)
-		return NULL;
-
-	date = (char*) malloc(sizeof(char) * len);
-	if (date == NULL) {
-		free(timestamp);
-		return NULL;
-	}
-
-	time(&now);
-	if (strftime(date, len, "%FT%TZ", gmtime(&now)) > 0) {
-		timestamp->iso8601 = date;
-	} else {
-		free(date);
-		timestamp->iso8601 = strdup("");
-	}
-
-	return timestamp;
-}
-
-/*
  * get_free_memory() - Get the free memory of the system
  *
  * Return: The free memory of the system in kB, -1 if error.
@@ -1076,24 +1047,6 @@ static void free_stream_list(stream_list_t *stream_list)
 	free(stream_list->streams);
 
 	stream_list->n_streams = 0;
-}
-
-/*
- * free_timestamp() - Free given timestamp structure
- *
- * @timestamp:	The timestamp structure to release.
- */
-static void free_timestamp(ccapi_timestamp_t *timestamp)
-{
-	if (timestamp == NULL)
-		return;
-
-	if (timestamp->iso8601 != NULL) {
-		free((char *) timestamp->iso8601);
-		timestamp->iso8601 = NULL;
-	}
-	free(timestamp);
-	timestamp = NULL;
 }
 
 /*

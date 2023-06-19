@@ -21,7 +21,6 @@
 #include <libdigiapix/gpio.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <time.h>
 
 #include "data_points.h"
 
@@ -61,8 +60,6 @@ static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection
 static gpio_t *get_user_button(void);
 static int button_interrupt_cb(void *arg);
 static void add_button_sample(button_cb_data_t *data);
-static ccapi_timestamp_t *get_timestamp(void);
-static void free_timestamp(ccapi_timestamp_t *timestamp);
 
 /*------------------------------------------------------------------------------
                                   M A C R O S
@@ -189,7 +186,7 @@ static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection
 	}
 
 	dp_error = ccapi_dp_add_data_stream_to_collection_extra(*dp_collection,
-			DATA_STREAM_USER_BUTTON, "int32 ts_iso", DATA_STREAM_BUTTON_UNITS, NULL);
+			DATA_STREAM_USER_BUTTON, CCAPI_DP_KEY_DATA_INT32 " " CCAPI_DP_KEY_TS_EPOCH, DATA_STREAM_BUTTON_UNITS, NULL);
 	if (dp_error != CCAPI_DP_ERROR_NONE) {
 		log_mon_error("Cannot add '%s' stream to data point collection, error %d",
 					DATA_STREAM_USER_BUTTON, dp_error);
@@ -248,6 +245,11 @@ static void add_button_sample(button_cb_data_t *data)
 	uint32_t count = 0;
 	ccapi_timestamp_t *timestamp = get_timestamp();
 
+	if (!timestamp) {
+		log_mon_error("%s", "Cannot get user_button sample timestamp");
+		return;
+	}
+
 	data->value = data->value ? GPIO_LOW : GPIO_HIGH;
 
 	dp_error = ccapi_dp_add(data->dp_collection, DATA_STREAM_USER_BUTTON,
@@ -267,55 +269,4 @@ static void add_button_sample(button_cb_data_t *data)
 		if (dp_error != CCAPI_DP_ERROR_NONE)
 			log_mon_error("Error sending monitor samples, %d", dp_error);
 	}
-}
-
-/*
- * get_timestamp() - Get the current timestamp of the system
- *
- * Return: The timestamp of the system.
- */
-static ccapi_timestamp_t *get_timestamp(void)
-{
-	ccapi_timestamp_t *timestamp = NULL;
-	size_t len = strlen("2016-09-27T07:07:09.546Z") + 1;
-	char *date = NULL;
-	time_t now;
-
-	timestamp = (ccapi_timestamp_t*) malloc(sizeof (ccapi_timestamp_t));
-	if (timestamp == NULL)
-		return NULL;
-
-	date = (char*) malloc(sizeof (char) * len);
-	if (date == NULL) {
-		free(timestamp);
-		return NULL;
-	}
-
-	time(&now);
-	if (strftime(date, len, "%FT%TZ", gmtime(&now)) > 0) {
-		timestamp->iso8601 = date;
-	} else {
-		free(date);
-		timestamp->iso8601 = strdup("");
-	}
-
-	return timestamp;
-}
-
-/*
- * free_timestamp() - Free given timestamp structure
- *
- * @timestamp:	The timestamp structure to release.
- */
-static void free_timestamp(ccapi_timestamp_t *timestamp)
-{
-	if (timestamp == NULL)
-		return;
-
-	if (timestamp->iso8601 != NULL) {
-		free((char *) timestamp->iso8601);
-		timestamp->iso8601 = NULL;
-	}
-	free(timestamp);
-	timestamp = NULL;
 }

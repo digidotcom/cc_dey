@@ -22,6 +22,7 @@
 
 #include "cc_logging.h"
 #include "ccapi_datapoints.h"
+#include "cc_utils.h"
 
 /*
  * cc_srv_send_dp_csv_file() - Send provided CSV file with data points to Cloud Connector server

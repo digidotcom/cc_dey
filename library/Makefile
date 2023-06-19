@@ -220,6 +220,7 @@ install-srv-client-headers:
 	install -m 0644 src/cc_logging.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/cc_srv_services.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/ccapi_datapoints.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/cc_utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 
 install-srv: install-dynamic-lib install-srv-pkgconfig install-srv-client-headers install-certs
 
