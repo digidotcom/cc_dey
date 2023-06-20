@@ -33,10 +33,11 @@
 
 #if (defined CCIMP_DEBUG_ENABLED)
 
-#define CCAPI_DEBUG_PREFIX		"CCAPI: "
+#define CCAPI_DEBUG_PREFIX		"[DEBUG] CCAPI: "
 
 static struct {
 	pthread_mutex_t mutex;
+	bool init;
 	char * data;
 	size_t length;
 	size_t offset;
@@ -96,6 +97,10 @@ static void unlock(void)
 static void buffer_printf(char const * const format, va_list args)
 {
 	bool retry = true;
+
+	if (!buffer.data)
+		return;
+
 	for (;;) {
 		int const result = vsnprintf(buffer.data + buffer.offset, buffer.remaining, format, args);
 
@@ -143,15 +148,20 @@ static void buffer_reset(void)
 		buffer_flush();
 	}
 
-	strcpy(buffer.data, CCAPI_DEBUG_PREFIX);
-	buffer.offset = strlen(CCAPI_DEBUG_PREFIX);
-	buffer.remaining -= buffer.offset;
+	if (buffer.data) {
+		strcpy(buffer.data, CCAPI_DEBUG_PREFIX);
+		buffer.offset = strlen(CCAPI_DEBUG_PREFIX);
+		buffer.remaining -= buffer.offset;
+	}
 }
 
 int ccimp_logging_init(void)
 {
 	pthread_mutexattr_t attribute;
 	int result;
+
+	if (buffer.init)
+		return 0;
 
 	result = pthread_mutexattr_init(&attribute);
 	if (result != 0) {
@@ -182,10 +192,12 @@ int ccimp_logging_init(void)
 
 		if (!enlarge_buffer(minimum)) {
 			log_error(CCAPI_DEBUG_PREFIX "enlarge_buffer() failure: %zu", minimum);
+			pthread_mutex_destroy(&buffer.mutex);
 			goto done;
 		}
 	}
 
+	buffer.init = true;
 	result = 0;
 
 done:
@@ -195,6 +207,9 @@ done:
 
 void ccimp_hal_logging_vprintf(debug_t const debug, char const * const format, va_list args)
 {
+	if (!buffer.init)
+		return;
+
 	switch (debug)
 	{
 		case debug_beg:
@@ -236,8 +251,16 @@ void ccimp_hal_logging_vprintf(debug_t const debug, char const * const format, v
 
 void ccimp_logging_deinit(void)
 {
+	if (!buffer.init)
+		return;
+
 	pthread_mutex_destroy(&buffer.mutex);
 	free(buffer.data);
+	buffer.data = NULL;
+	buffer.length = 0;
+	buffer.offset = 0;
+	buffer.remaining = 0;
+	buffer.init = false;
 }
 
 #else /* CCIMP_DEBUG_ENABLED */

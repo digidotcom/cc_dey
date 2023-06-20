@@ -116,7 +116,7 @@ int main(int argc, char *argv[])
 	start_connector(config_file);
 
 done:
-	closelog();
+	deinit_logger();
 
 	return result;
 }

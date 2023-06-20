@@ -38,12 +38,14 @@
  * init_logger() - Initialize the logger with the given log level
  *
  * @level:	Log level.
+ * @options:	Flags to open log.
  */
-#define init_logger(level, options)								\
-	do {														\
-		openlog(DAEMON_NAME, options, LOG_USER);				\
-		setlogmask(LOG_UPTO(level));							\
-	} while (0)
+int init_logger(int level, int options);
+
+/**
+ * deinit_logger() - Close the logger
+ */
+void deinit_logger(void);
 
 /**
  * set_log_level() - Set the new log level

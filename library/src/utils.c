@@ -34,6 +34,21 @@
 #include "_utils.h"
 #include "utils.h"
 
+int init_logger(int level, int options)
+{
+	openlog(DAEMON_NAME, options, LOG_USER);
+	setlogmask(LOG_UPTO(level));
+
+	/* Init CCAPI logging */
+	return ccimp_logging_init();
+}
+
+void deinit_logger(void)
+{
+	ccimp_logging_deinit();
+	closelog();
+}
+
 int file_exists(const char * const filename)
 {
 	return access(filename, F_OK) == 0;
