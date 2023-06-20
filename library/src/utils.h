@@ -28,11 +28,64 @@
 #define MAC_STRING_LENGTH	(3 * MAC_ADDRESS_GROUPS)
 #define MAC_FORMAT			"%02x:%02x:%02x:%02x:%02x:%02x"
 
+/**
+ * file_exists() - Check that the file with the given name exists
+ *
+ * @filename:	Full path of the file to check if it exists.
+ *
+ * Return: 1 if the file exits, 0 if it does not exist.
+ */
 int file_exists(const char * const filename);
+
+/**
+ * file_readable() - Check that the file with the given name can be read
+ *
+ * @filename:	Full path of the file to check if it is readable.
+ *
+ * Return: 1 if the file is readable, 0 if it cannot be read.
+ */
+
 int file_readable(const char * const filename);
+
+/**
+ * file_writable() - Check that the file with the given name can be written
+ *
+ * @filename:	Full path of the file to check if it is writable.
+ *
+ * Return: 1 if the file is writable, 0 if it cannot be written.
+ */
 int file_writable(const char * const filename);
+
+/**
+ * read_file() - Read the given file and returns its contents
+ *
+ * @path:		Absolute path of the file to read.
+ * @buffer:		Buffer to store the contents of the file.
+ * @file_size:	The number of bytes to read.
+ *
+ * Return: The number of read bytes.
+ */
 long read_file(const char *path, char *buffer, long file_size);
+
+/**
+ * read_file_line() - Read the first line of the file and return its contents
+ *
+ * @path:			Absolute path of the file to read.
+ * @buffer:			Buffer to store the contents of the file.
+ * @bytes_to_read:	The number of bytes to read.
+ *
+ * Return: 0 on success, -1 on error.
+ */
 int read_file_line(const char * const path, char *buffer, int bytes_to_read);
+
+/**
+ * write_to_file() - Write data to a file
+ *
+ * @path:		Absolute path of the file to be written.
+ * @format:		String that contains the text to be written to the file.
+ *
+ * Return: 0 if the file was written successfully, -1 otherwise.
+ */
 int write_to_file(const char * const path, const char * const format, ...);
 
 #endif /* __UTILS_H__ */
