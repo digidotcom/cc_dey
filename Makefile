@@ -17,12 +17,13 @@
 #
 # ***************************************************************************
 
-SUBDIRS := library app app-server
+SUBDIRS := library app app-server app-demo
 
 all: $(SUBDIRS)
 
 app: library
 app-server: library
+app-demo: app-server
 
 .PHONY: $(SUBDIRS)
 $(SUBDIRS):
