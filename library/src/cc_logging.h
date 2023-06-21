@@ -23,11 +23,6 @@
 #include <syslog.h>
 
 /*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define DAEMON_NAME			"CONNECTOR"
-
-/*------------------------------------------------------------------------------
                                   M A C R O S
 ------------------------------------------------------------------------------*/
 #ifndef UNUSED_ARGUMENT
@@ -39,8 +34,9 @@
  *
  * @level:	Log level.
  * @options:	Flags to open log.
+ * @name:	Name to log. If NULL, 'CONNECTOR' is used.
  */
-int init_logger(int level, int options);
+int init_logger(int level, int options, char *name);
 
 /**
  * deinit_logger() - Close the logger

@@ -114,7 +114,7 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 	closelog();
 	if (cc_cfg->log_console)
 		log_options = log_options | LOG_PERROR;
-	if (init_logger(cc_cfg->log_level, log_options)) {
+	if (init_logger(cc_cfg->log_level, log_options, NULL)) {
 		log_error("%s", "Failed to initialize logging");
 
 		return CC_INIT_ERROR_UNKOWN;

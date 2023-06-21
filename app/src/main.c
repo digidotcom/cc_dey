@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
 	};
 
 	/* Initialize the logging interface. */
-	init_logger(LOG_DEBUG, log_options);
+	init_logger(LOG_DEBUG, log_options, name);
 
 	while (1) {
 		opt = getopt_long(argc, argv, short_options, long_options,

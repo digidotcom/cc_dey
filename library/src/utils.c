@@ -34,9 +34,14 @@
 #include "_utils.h"
 #include "utils.h"
 
-int init_logger(int level, int options)
+#define DAEMON_NAME			"CONNECTOR"
+
+int init_logger(int level, int options, char *name)
 {
-	openlog(DAEMON_NAME, options, LOG_USER);
+	if (!name)
+		openlog(DAEMON_NAME, options, LOG_USER);
+	else
+		openlog(name, options, LOG_USER);
 	setlogmask(LOG_UPTO(level));
 
 	/* Init CCAPI logging */
