@@ -429,10 +429,10 @@ static char *get_fw_version(const char *const value) {
 		regex_t regex;
 		char msgbuf[100];
 		char *tmp = NULL;
-		int ret, version_group = 2;
+		int ret, version_group = 2, version_len;
 		regmatch_t groups[version_group + 1];
 
-		ret = regcomp(&regex, "^([A-Za-z0-9_-]+[ =]{1})?([[0-9\\.]+)$", REG_EXTENDED);
+		ret = regcomp(&regex, "^([A-Za-z0-9_-]+[ =]{1})?([0-9\\.]+)$", REG_EXTENDED);
 		if (ret != 0) {
 			regerror(ret, &regex, msgbuf, sizeof(msgbuf));
 			log_error("Could not compile regex: %s (%d)", msgbuf, ret);
@@ -450,13 +450,15 @@ static char *get_fw_version(const char *const value) {
 			goto done;
 		}
 
-		tmp = calloc(groups[version_group].rm_eo - groups[version_group].rm_so + 1, sizeof(*tmp));
+		version_len = groups[version_group].rm_eo - groups[version_group].rm_so;
+
+		tmp = calloc(version_len + 1, sizeof(*tmp));
 		if (!tmp) {
 			log_error("Cannot get firmware version: %s", "Out of memory");
 			goto done;
 		}
 
-		strncpy(tmp, data + groups[version_group].rm_so, sizeof(tmp) - 1);
+		strncpy(tmp, data + groups[version_group].rm_so, version_len);
 done:
 		regfree(&regex);
 
