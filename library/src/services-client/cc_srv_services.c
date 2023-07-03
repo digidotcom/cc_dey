@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#include "_srv_client_utils.h"
 #include "cc_logging.h"
 #include "cc_srv_services.h"
 #include "ccapi_datapoints.h"
@@ -99,12 +100,8 @@ typedef struct ccapi_dp_collection {
 	void * lock;
 } ccapi_dp_collection_t;
 
-/**
- * connect_cc_server() - Connect to Cloud Connector server
- *
- * Returns: The file descriptor if success, -1 otherwise.
- */
-static int connect_cc_server(void)
+
+int connect_cc_server(void)
 {
 	const struct sockaddr_in sa = {
 		.sin_family = AF_INET,
@@ -130,25 +127,7 @@ static int connect_cc_server(void)
 	return s;
 }
 
-/*
- * parse_cc_server_response() - Parse received response from Cloud Connector server
- *
- * @fd:		Socket to read response from.
- * @resp:	Buffer to store the response.
- * @timeout:	Number of seconds to wait for a response.
- *
- * Response may contain the result of the operation. It must be freed.
- *
- * Returns: 0 if no error messages received.
- *
- * Expects the reply sequence "i:0" or "i:1 b:error-msg".
- * Returns 0 if no error messages received:
- * -2 = out of memory
- * -1 = protocol errors
- *  0 = success
- *  1 = received error
- */
-static int parse_cc_server_response(int fd, char **resp, unsigned long timeout)
+int parse_cc_server_response(int fd, char **resp, unsigned long timeout)
 {
 	uint32_t code;
 	void *msg = NULL;
