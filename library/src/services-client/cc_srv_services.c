@@ -31,6 +31,8 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#include "ccimp/ccimp_types.h"
+
 #include "_srv_client_utils.h"
 #include "cc_logging.h"
 #include "cc_srv_services.h"
@@ -100,6 +102,86 @@ typedef struct ccapi_dp_collection {
 	void * lock;
 } ccapi_dp_collection_t;
 
+void * ccapi_lock_create_and_release(void);
+ccimp_status_t ccapi_lock_acquire(void *lock);
+ccimp_status_t ccapi_lock_release(void *lock);
+ccimp_status_t ccapi_lock_destroy(void *lock);
+
+void *get_lock(void)
+{
+	return ccapi_lock_create_and_release();
+}
+
+int lock_acquire(void *lock)
+{
+	ccimp_status_t status;
+
+	if (!lock)
+		return 1;
+
+	status = ccapi_lock_acquire(lock);
+	switch (status) {
+		case CCIMP_STATUS_OK:
+			return 0;
+		case CCIMP_STATUS_ERROR:
+		case CCIMP_STATUS_BUSY:
+			break;
+		default:
+			/* Should not occur */
+			log_srv_error("Unknown lock acquire status %d", status);
+			break;
+	}
+
+	return 1;
+}
+
+int lock_release(void *lock)
+{
+	ccimp_status_t status;
+
+	if (!lock)
+		return 1;
+
+	status = ccapi_lock_release(lock);
+	switch (status) {
+		case CCIMP_STATUS_OK:
+			return 0;
+		case CCIMP_STATUS_ERROR:
+		case CCIMP_STATUS_BUSY:
+			break;
+		default:
+			/* Should not occur */
+			log_srv_error("Unknown lock release status %d", status);
+			break;
+	}
+
+	return 1;
+}
+
+int lock_destroy(void *lock)
+{
+	ccimp_status_t status;
+	int ret = 1;
+
+	if (!lock)
+		return 1;
+
+	status = ccapi_lock_destroy(lock);
+	switch (status) {
+		case CCIMP_STATUS_OK:
+			ret = 0;
+			break;
+		case CCIMP_STATUS_ERROR:
+		case CCIMP_STATUS_BUSY:
+			break;
+		default:
+			/* Should not occur */
+			log_srv_error("Unknown lock release status %d", status);
+			break;
+	}
+
+	return ret;
+}
 
 int connect_cc_server(void)
 {
@@ -520,16 +602,12 @@ static int dp_send_collection(ccapi_dp_collection_t * const dp_collection,
 
 	/* TODO check if it is running */
 
-	switch (ccapi_lock_acquire(dp_collection->lock)) {
-		case CCIMP_STATUS_OK:
-			collection_lock_acquired = true;
-			break;
-		case CCIMP_STATUS_ERROR:
-		case CCIMP_STATUS_BUSY:
-			ret = 2;
-			log_srv_error("Data point collection %s", "busy");
-			goto done;
+	if (lock_acquire(dp_collection->lock) != 0) {
+		ret = 2;
+		log_srv_error("Data point collection %s", "busy");
+		goto done;
 	}
+	collection_lock_acquired = true;
 
 	chain_collection_ccfsm_data_streams(dp_collection);
 
@@ -543,17 +621,9 @@ static int dp_send_collection(ccapi_dp_collection_t * const dp_collection,
 	dp_free_data_points_from_collection(dp_collection);
 
 done:
-	if (collection_lock_acquired) {
-		switch (ccapi_lock_release(dp_collection->lock))
-		{
-			case CCIMP_STATUS_OK:
-				break;
-			case CCIMP_STATUS_ERROR:
-			case CCIMP_STATUS_BUSY:
-				ret = 2;
-				log_srv_error("Data point collection %s", "busy");
-				break;
-		}
+	if (collection_lock_acquired && lock_release(dp_collection->lock) != 0) {
+		ret = 2;
+		log_srv_error("Data point collection %s", "busy");
 	}
 
 	return ret;

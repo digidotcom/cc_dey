@@ -84,7 +84,4 @@ typedef struct {
 
 size_t generate_dp_csv(csv_process_data_t * const csv_process_data, buffer_info_t * const buffer_info);
 
-ccimp_status_t ccapi_lock_acquire(void *lock);
-ccimp_status_t ccapi_lock_release(void *lock);
-
 #endif /* _DP_CSV_GENERATOR_H_ */
