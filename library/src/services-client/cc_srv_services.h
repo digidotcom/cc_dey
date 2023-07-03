@@ -21,8 +21,16 @@
 #define _CC_SRV_SERVICES_H_
 
 #include "cc_logging.h"
+#include "ccapi_receive.h"
 #include "ccapi_datapoints.h"
 #include "cc_utils.h"
+
+typedef ccapi_receive_error_t (*cc_srv_request_data_cb_t)(char const * const target,
+	ccapi_buffer_info_t const * const request_buffer_info,
+	ccapi_buffer_info_t * const response_buffer_info);
+typedef void (*cc_srv_request_status_cb_t)(char const * const target,
+	ccapi_buffer_info_t * const response_buffer_info,
+	int receive_error, const char * const receive_error_hint);
 
 /*
  * cc_srv_send_dp_csv_file() - Send provided CSV file with data points to Cloud Connector server
@@ -111,5 +119,86 @@ int cc_srv_send_dp_collection(ccapi_dp_collection_handle_t const dp_collection, 
  * 	2 = args error
  */
 int cc_srv_send_dp_collection_with_timeout(ccapi_dp_collection_handle_t const dp_collection, unsigned long const timeout, char **resp);
+
+/*
+ * cc_srv_add_request_target() - Register a request target
+ *
+ * @target:	Target name to register.
+ * @data_cb:	Callback function executed when a request for the provided
+ *		target is received.
+ * @status_cb:	Callback function executed when the receive process has completed.
+ * @resp:	Received response from Cloud Connector server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+int cc_srv_add_request_target(char const * const target,
+	cc_srv_request_data_cb_t data_cb, cc_srv_request_status_cb_t status_cb,
+	char **resp);
+
+/*
+ * cc_srv_add_request_target_with_timeout() - Register a request target
+ *
+ * @target:	Target name to register.
+ * @data_cb:	Callback function executed when a request for the provided
+ *		target is received.
+ * @status_cb:	Callback function executed when the receive process has completed.
+ * @timeout:	Number of seconds to wait for response from the server.
+ * @resp:	Received response from Cloud Connector server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+int cc_srv_add_request_target_with_timeout(char const * const target,
+	cc_srv_request_data_cb_t data_cb, cc_srv_request_status_cb_t status_cb,
+	unsigned long timeout, char **resp);
+
+/*
+ * cc_srv_remove_request_target() - Unregister a request target
+ *
+ * @target:	Target name to unregister.
+ * @resp:	Received response from Cloud Connector server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+int cc_srv_remove_request_target(char const * const target, char **resp);
+
+/*
+ * cc_srv_remove_request_target_with_timeout() - Unregister a request target
+ *
+ * @target:	Target name to unregister.
+ * @timeout:	Number of seconds to wait for response from the server.
+ * @resp:	Received response from Cloud Connector server.
+ *
+ * Response may contain the result of the operation. It must be freed.
+ *
+ * Return: 0 if success, otherwise:
+ * 	-2 = out of memory
+ * 	-1 = protocol errors
+ * 	0 = success
+ * 	1 = received error
+ * 	2 = args error
+ */
+int cc_srv_remove_request_target_with_timeout(char const * const target,
+	unsigned long timeout, char **resp);
 
 #endif /* _CC_SRV_SERVICES_H_ */

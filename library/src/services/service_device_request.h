@@ -23,6 +23,9 @@
 #define REQ_TAG_REGISTER_DR	"register_devicerequest"
 #define REQ_TAG_UNREGISTER_DR	"unregister_devicerequest"
 
+#define REQ_TYPE_REQUEST_CB	"request"
+#define REQ_TYPE_STATUS_CB	"status"
+
 int handle_register_device_request(int fd);
 int handle_unregister_device_request(int fd);
 

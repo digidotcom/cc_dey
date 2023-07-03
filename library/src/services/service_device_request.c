@@ -72,8 +72,6 @@ typedef struct {
 	size_t max_size;
 } request_data_darray_t;
 
-static const char REQUEST_CB[] = "request";
-static const char STATUS_CB[] = "status";
 
 static request_data_darray_t active_requests = { 0 };
 
@@ -200,6 +198,7 @@ static ccapi_receive_error_t device_request(const char *target,
 {
 	int ret = 1; /* Assume errors */
 	int sock_fd = get_socket_for_target(target);
+	ccapi_receive_error_t error = CCAPI_RECEIVE_ERROR_NONE;
 	struct timeval timeout = {
 		.tv_sec = SOCKET_READ_TIMEOUT_SEC,
 		.tv_usec = 0
@@ -212,16 +211,18 @@ static ccapi_receive_error_t device_request(const char *target,
 	}
 
 	/* Send: request_type, request_target_name, request_payload */
-	if (write_string(sock_fd, REQUEST_CB)  ||											/* The request type */
+	if (write_string(sock_fd, REQ_TYPE_REQUEST_CB)  ||											/* The request type */
 		write_string(sock_fd, target) ||												/* The registered target device name */
 		write_blob(sock_fd, request_buffer_info->buffer, request_buffer_info->length)) {/* The payload data passed to the device callback */
 		log_dr_error("Could not write device request to socket: %s", strerror(errno));
+		error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto out;
 	}
 	/* Read the blob response from the device */
-	if (read_blob(sock_fd, &response_buffer_info->buffer, &response_buffer_info->length, &timeout)) {
+	if (read_uint32(sock_fd, &error, &timeout) ||
+		read_blob(sock_fd, &response_buffer_info->buffer, &response_buffer_info->length, &timeout)) {
 		log_dr_error("Could not recv device request data from socket: %s", strerror(errno));
-		response_buffer_info->length = 0;
+		error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto out;
 	}
 
@@ -236,7 +237,7 @@ out:
 	if (sock_fd >= 0)
 		close(sock_fd);
 
-	return CCAPI_RECEIVE_ERROR_NONE;
+	return error;
 }
 
 static void device_request_done(const char *target,
@@ -256,7 +257,7 @@ static void device_request_done(const char *target,
 		goto out;
 
 	/* Send the status callback to the target device */
-	if (write_string(sock_fd, STATUS_CB)	/* The Status callback type */
+	if (write_string(sock_fd, REQ_TYPE_STATUS_CB)	/* The Status callback type */
 		|| write_string(sock_fd, target)		/* The registered target name */
 		|| write_uint32(sock_fd, error_code)	/* The DRM call return status code */
 		|| write_string(sock_fd, err_msg)) {		/* And a text description of the status code */

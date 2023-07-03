@@ -27,9 +27,14 @@
 
 #include "_srv_client_utils.h"
 #include "cc_logging.h"
+/* Keep 'dp_csv_generator.h' before 'cc_srv_services.h' because of:
+  1. 'dp_csv_generator.h' includes 'ccimp/ccimp_types.h' where
+    'ccapi_buffer_info_t' is defined.
+  2. 'cc_srv_services.h' includes 'ccapi_receive.h' that redefines
+    'ccapi_buffer_info_t' only if 'ccimp/ccimp_types.h' is not included. */
+#include "dp_csv_generator.h"
 #include "cc_srv_services.h"
 #include "ccapi_datapoints.h"
-#include "dp_csv_generator.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
 
