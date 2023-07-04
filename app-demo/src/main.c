@@ -29,6 +29,7 @@
 
 #include "cc_srv_services.h"
 #include "data_points.h"
+#include "device_request.h"
 
 #define VERSION		"0.1" GIT_REVISION
 
@@ -136,6 +137,8 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
+	register_custom_device_requests();
+
 	/* Do the real work. */
 	if (start_monitoring() != 0) {
 		log_error("%s", "Cannot start monitoring");
@@ -147,6 +150,8 @@ int main(int argc, char *argv[])
 	} while (!stop_requested);
 
 	stop_monitoring();
+
+	unregister_custom_device_requests();
 
 done:
 	deinit_logger();

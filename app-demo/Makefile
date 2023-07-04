@@ -50,6 +50,7 @@ CFLAGS += -I $(SRC)
 CFLAGS += -I$(CC_LIB_SRC)/services-client -I$(CC_LIB_SRC)
 CFLAGS += $(shell PKG_CONFIG_PATH=../library:$${PKG_CONFIG_PATH} pkg-config --cflags cloudconnector-srv)
 CFLAGS += $(shell pkg-config --cflags libdigiapix)
+CFLAGS += $(shell pkg-config --cflags json-c)
 
 # Target output to generate.
 SRCS = $(wildcard $(SRC)/*.c)
@@ -57,6 +58,7 @@ SRCS = $(wildcard $(SRC)/*.c)
 # Libraries to Link
 LIBS += $(shell PKG_CONFIG_PATH=../library:$${PKG_CONFIG_PATH} pkg-config --libs --static cloudconnector-srv)
 LIBS += $(shell pkg-config --libs --static libdigiapix)
+LIBS += $(shell pkg-config --libs json-c)
 
 # Generated Executable Name.
 EXECUTABLE = cloudconnector-demo
