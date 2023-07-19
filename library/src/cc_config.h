@@ -20,6 +20,7 @@
 #ifndef CC_CONFIG_H_
 #define CC_CONFIG_H_
 
+#include <confuse.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -131,6 +132,8 @@ typedef struct {
 int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg);
 void free_configuration(cc_cfg_t *const config);
 int get_configuration(cc_cfg_t *cc_cfg);
+cfg_t *get_confuse_configuration(void);
+int apply_configuration(cc_cfg_t *cc_cfg);
 int save_configuration(cc_cfg_t *cc_cfg);
 void close_configuration(void);
 char *get_client_cert_path(void);

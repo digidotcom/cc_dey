@@ -373,6 +373,34 @@ int get_configuration(cc_cfg_t *cc_cfg)
 }
 
 /*
+ * get_confuse_configuration() - Retrieve current confuse connector configuration
+ *
+ * Return: Struct (cfg_t) that holds the current connector configuration.
+ */
+cfg_t *get_confuse_configuration(void)
+{
+	return cfg;
+}
+
+/*
+ * apply_configuration() - Apply provided configuration
+ *
+ * Return: 0 if success,
+ *	   1 if there was any error with the provided values,
+ *	   2 if there was an error writing to the file.
+ */
+int apply_configuration(cc_cfg_t *cc_cfg)
+{
+	if (fill_connector_config(cc_cfg) != 0)
+		return 1;
+
+	if (save_configuration(cc_cfg) != 0)
+		return 2;
+
+	return 0;
+}
+
+/*
  * save_configuration() - Save the given connector configuration
  *
  * @cc_cfg:	Connector configuration struct (cc_cfg_t) containing
