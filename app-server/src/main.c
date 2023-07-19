@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #include "daemonize.h"
+#include "device_requests.h"
 
 #define VERSION		"0.1" GIT_REVISION
 
@@ -41,6 +42,9 @@
 	"  -h  --help                Print help and exit\n" \
 	"\n"
 
+#define REQUEST_TARGETS_DUMP_PATH	"/tmp/cc_request_targets.bin"
+
+volatile bool restart = false;
 static volatile bool stop = false;
 
 /**
@@ -91,8 +95,8 @@ static int setup_signal_handler(void)
 /*
  * start_connector() - Start Cloud Connector
  *
- * @config_file:	Absolute path of the configuration file to use. NULL to use
- * 					the default one (/etc/cc.conf).
+ * @config_file:	Absolute path of the configuration file to use. NULL to
+ * 			use the default one (/etc/cc.conf).
  *
  * Return: 0 on success, 1 otherwise.
  */
@@ -104,23 +108,31 @@ static int start_connector(const char *config_file)
 	if (setup_signal_handler())
 		return EXIT_FAILURE;
 
-	init_error = init_cloud_connection(config_file);
-	if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
-		log_error("Cannot initialize cloud connection, error %d", init_error);
-		return EXIT_FAILURE;
-	}
-
-	start_error = start_cloud_connection();
-	if (start_error != CC_START_ERROR_NONE) {
-		log_error("Cannot start cloud connection, error %d", start_error);
-		return EXIT_FAILURE;
-	}
-
 	do {
-		sleep(2);
-	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && !stop);
+		restart = false;
 
-	stop_cloud_connection();
+		init_error = init_cloud_connection(config_file);
+		if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
+			log_error("Cannot initialize cloud connection, error %d", init_error);
+			return EXIT_FAILURE;
+		}
+
+		register_cc_device_requests();
+
+		start_error = start_cloud_connection();
+		if (start_error != CC_START_ERROR_NONE) {
+			log_error("Cannot start cloud connection, error %d", start_error);
+			return EXIT_FAILURE;
+		}
+
+		do {
+			sleep(2);
+		} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && !stop && !restart);
+
+		unregister_cc_device_requests();
+
+		stop_cloud_connection();
+	} while (restart);
 
 	return EXIT_SUCCESS;
 }
