@@ -493,6 +493,7 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 	cc_cfg->vendor_id = strtoul(cfg_getstr(cfg, SETTING_VENDOR_ID), NULL, 16);
 	cc_cfg->device_type = strdup(cfg_getstr(cfg, SETTING_DEVICE_TYPE));
 	cc_cfg->fw_version_src = strdup(cfg_getstr(cfg, SETTING_FW_VERSION));
+	free(cc_cfg->fw_version);
 	cc_cfg->fw_version = get_fw_version(cc_cfg->fw_version_src);
 	log_debug("Firmware version: %s", cc_cfg->fw_version);
 
@@ -1128,6 +1129,8 @@ static void get_virtual_directories(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
 	unsigned int i;
 	cfg_t *virtual_dir_cfg = cfg_getsec(cfg, GROUP_VIRTUAL_DIRS);
 
+	free(cc_cfg->vdirs);
+
 	cc_cfg->n_vdirs = cfg_size(virtual_dir_cfg, GROUP_VIRTUAL_DIR);
 
 	cc_cfg->vdirs = calloc(cc_cfg->n_vdirs, sizeof(*cc_cfg->vdirs));
@@ -1174,6 +1177,10 @@ static int get_log_level(void)
 static void get_sys_mon_metrics(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
 {
 	unsigned int i;
+
+	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++)
+		free(cc_cfg->sys_mon_metrics[i]);
+	free(cc_cfg->sys_mon_metrics);
 
 	cc_cfg->n_sys_mon_metrics = cfg_size(cfg, SETTING_SYS_MON_METRICS);
 	cc_cfg->sys_mon_metrics = calloc(cc_cfg->n_sys_mon_metrics, sizeof(*cc_cfg->sys_mon_metrics));
