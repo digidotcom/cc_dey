@@ -108,6 +108,7 @@
 ------------------------------------------------------------------------------*/
 static int fill_connector_config(cc_cfg_t *cc_cfg);
 static int set_connector_config(cc_cfg_t *cc_cfg);
+static void conf_error_func(cfg_t *cfg, const char *format, va_list args);
 static int check_cfg(void);
 static int cfg_check_vendor_id(cfg_t *cfg, cfg_opt_t *opt);
 static int cfg_check_device_type(cfg_t *cfg, cfg_opt_t *opt);
@@ -246,6 +247,15 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 
 	cfg_path = filename;
 	cfg = cfg_init(opts, CFGF_IGNORE_UNKNOWN);
+	if (!cfg) {
+		log_error("Failed initializing configuration file parser: %s (%d)",
+			strerror(errno), errno);
+		return -1;
+	}
+
+	/* Custom logging, rather than default Confuse stderr logging */
+	cfg_set_error_function(cfg, conf_error_func);
+
 	cfg_set_validate_func(cfg, SETTING_VENDOR_ID, cfg_check_vendor_id);
 	cfg_set_validate_func(cfg, SETTING_DEVICE_TYPE, cfg_check_device_type);
 	cfg_set_validate_func(cfg, SETTING_FW_VERSION, cfg_check_fw_version);
@@ -596,6 +606,27 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	cfg_setbool(cfg, SETTING_LOG_CONSOLE, (cfg_bool_t) cc_cfg->log_console);
 
 	return 0;
+}
+
+/**
+ * conf_error_func() - Error reporting function to send error to syslog
+ *
+ * @cfg:	The configuration with an error.
+ * @format:	The format of the error to log.
+ * @args:	Arguments of the error to log.
+ */
+static void conf_error_func(cfg_t *cfg, const char *format, va_list args)
+{
+	char fmt[256];
+
+	if (cfg && cfg->filename && cfg->line)
+		snprintf(fmt, sizeof(fmt), "[ERROR] %s:%d: %s", cfg->filename, cfg->line, format);
+	else if (cfg && cfg->filename)
+		snprintf(fmt, sizeof(fmt), "[ERROR] %s: %s", cfg->filename, format);
+	else
+		snprintf(fmt, sizeof(fmt), "[ERROR] %s", format);
+
+	vsyslog(LOG_ERR, fmt, args);
 }
 
 /*
