@@ -29,9 +29,6 @@
 int handle_register_device_request(int fd);
 int handle_unregister_device_request(int fd);
 
-int import_devicerequests(const char *file_path);
-int dump_devicerequests(const char *file_path);
-
 ccapi_receive_error_t register_builtin_requests(void);
 
 #endif

@@ -138,4 +138,7 @@ int save_configuration(cc_cfg_t *cc_cfg);
 void close_configuration(void);
 char *get_client_cert_path(void);
 
+int import_devicerequests(const char *file_path);
+int dump_devicerequests(const char *file_path);
+
 #endif /* CC_CONFIG_H_ */

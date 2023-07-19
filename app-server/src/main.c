@@ -119,6 +119,8 @@ static int start_connector(const char *config_file)
 
 		register_cc_device_requests();
 
+		import_devicerequests(REQUEST_TARGETS_DUMP_PATH);
+
 		start_error = start_cloud_connection();
 		if (start_error != CC_START_ERROR_NONE) {
 			log_error("Cannot start cloud connection, error %d", start_error);
@@ -128,6 +130,9 @@ static int start_connector(const char *config_file)
 		do {
 			sleep(2);
 		} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && !stop && !restart);
+
+		if (restart)
+			dump_devicerequests(REQUEST_TARGETS_DUMP_PATH);
 
 		unregister_cc_device_requests();
 
