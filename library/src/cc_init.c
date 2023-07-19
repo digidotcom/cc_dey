@@ -98,6 +98,7 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 {
 	int log_options = LOG_CONS | LOG_NDELAY | LOG_PID;
 	ccapi_start_error_t ccapi_error;
+	cc_init_error_t ret = CC_INIT_ERROR_NONE;
 
 	stop_requested = false;
 
@@ -108,16 +109,18 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 		return CC_INIT_ERROR_INSUFFICIENT_MEMORY;
 	}
 
-	if (parse_configuration(config_file ? config_file : CC_CONFIG_FILE, cc_cfg) != 0)
-		return CC_INIT_ERROR_PARSE_CONFIGURATION;
+	if (parse_configuration(config_file ? config_file : CC_CONFIG_FILE, cc_cfg) != 0) {
+		ret = CC_INIT_ERROR_PARSE_CONFIGURATION;
+		goto error;
+	}
 
 	closelog();
 	if (cc_cfg->log_console)
 		log_options = log_options | LOG_PERROR;
 	if (init_logger(cc_cfg->log_level, log_options, NULL)) {
 		log_error("%s", "Failed to initialize logging");
-
-		return CC_INIT_ERROR_UNKOWN;
+		ret = CC_INIT_ERROR_UNKOWN;
+		goto error;
 	}
 
 	ccapi_error = initialize_ccapi(cc_cfg);
@@ -125,44 +128,70 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 		case CCAPI_START_ERROR_NONE:
 			break;
 		case CCAPI_START_ERROR_NULL_PARAMETER:
-			return CC_INIT_CCAPI_START_ERROR_NULL_PARAMETER;
+			ret = CC_INIT_CCAPI_START_ERROR_NULL_PARAMETER;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_VENDORID:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_VENDORID;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_VENDORID;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_DEVICEID:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_DEVICEID;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_DEVICEID;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_URL:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_URL;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_URL;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_DEVICETYPE:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_DEVICETYPE;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_DEVICETYPE;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_CLI_REQUEST_CALLBACK:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_CLI_REQUEST_CALLBACK;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_CLI_REQUEST_CALLBACK;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_RCI_REQUEST_CALLBACK:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_RCI_REQUEST_CALLBACK;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_RCI_REQUEST_CALLBACK;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_FIRMWARE_INFO:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_FIRMWARE_INFO;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_FIRMWARE_INFO;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_FIRMWARE_DATA_CALLBACK:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_FIRMWARE_DATA_CALLBACK;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_FIRMWARE_DATA_CALLBACK;
+			goto error;
 		case CCAPI_START_ERROR_INVALID_SM_ENCRYPTION_CALLBACK:
-			return CC_INIT_CCAPI_START_ERROR_INVALID_SM_ENCRYPTION_CALLBACK;
+			ret = CC_INIT_CCAPI_START_ERROR_INVALID_SM_ENCRYPTION_CALLBACK;
+			goto error;
 		case CCAPI_START_ERROR_INSUFFICIENT_MEMORY:
-			return CC_INIT_CCAPI_START_ERROR_INSUFFICIENT_MEMORY;
+			ret = CC_INIT_CCAPI_START_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
 		case CCAPI_START_ERROR_THREAD_FAILED:
-			return CC_INIT_CCAPI_START_ERROR_THREAD_FAILED;
+			ret = CC_INIT_CCAPI_START_ERROR_THREAD_FAILED;
+			goto error;
 		case CCAPI_START_ERROR_LOCK_FAILED:
-			return CC_INIT_CCAPI_START_ERROR_LOCK_FAILED;
+			ret = CC_INIT_CCAPI_START_ERROR_LOCK_FAILED;
+			goto error;
 		case CCAPI_START_ERROR_ALREADY_STARTED:
-			return CC_INIT_CCAPI_START_ERROR_ALREADY_STARTED;
+			ret = CC_INIT_CCAPI_START_ERROR_ALREADY_STARTED;
+			goto error;
 		default:
-			return CC_INIT_ERROR_UNKOWN;
+			ret = CC_INIT_ERROR_UNKOWN;
+			goto error;
 	}
 
-	if (register_builtin_requests() != CCAPI_RECEIVE_ERROR_NONE)
-		return CC_INIT_ERROR_REG_BUILTIN_REQUESTS;
+	if (register_builtin_requests() != CCAPI_RECEIVE_ERROR_NONE) {
+		ret = CC_INIT_ERROR_REG_BUILTIN_REQUESTS;
+		goto error;
+	}
 
-	if (setup_virtual_dirs(cc_cfg->vdirs, cc_cfg->n_vdirs) != 0)
-		return CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY;
+	if (setup_virtual_dirs(cc_cfg->vdirs, cc_cfg->n_vdirs) != 0) {
+		ret = CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY;
+		goto error;
+	}
 
 	return CC_INIT_ERROR_NONE;
+
+error:
+	free_configuration(cc_cfg);
+	close_configuration();
+	cc_cfg = NULL;
+
+	return ret;
 }
 
 /*
