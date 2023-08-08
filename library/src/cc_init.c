@@ -309,6 +309,12 @@ cc_stop_error_t stop_cloud_connection(void)
 	}
 #endif
 
+	/*
+	 * Wait some time to properly stop transports.
+	 * Required not to get locked during the stop process
+	 */
+	sleep(1);
+
 	ccapi_error = ccapi_stop(CCAPI_STOP_GRACEFULLY);
 	if (ccapi_error == CCAPI_STOP_ERROR_NONE) {
 		log_info("%s", "Cloud connection stopped");
