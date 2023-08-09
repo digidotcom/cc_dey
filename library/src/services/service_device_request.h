@@ -20,14 +20,18 @@
 #ifndef SERVICE_DEVICE_REQUEST_H
 #define SERVICE_DEVICE_REQUEST_H
 
-#define REQ_TAG_REGISTER_DR	"register_devicerequest"
-#define REQ_TAG_UNREGISTER_DR	"unregister_devicerequest"
+#define REQ_TAG_REGISTER_DR		"register_devicerequest"
+#define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
+#define REQ_TAG_REGISTER_DR_IPV4		"register_devicerequest_ipv4"
+#define REQ_TAG_UNREGISTER_DR_IPV4	"unregister_devicerequest_ipv4"
 
 #define REQ_TYPE_REQUEST_CB	"request"
 #define REQ_TYPE_STATUS_CB	"status"
 
 int handle_register_device_request(int fd);
 int handle_unregister_device_request(int fd);
+int handle_register_device_request_ipv4(int fd);
+int handle_unregister_device_request_ipv4(int fd);
 
 ccapi_receive_error_t register_builtin_requests(void);
 

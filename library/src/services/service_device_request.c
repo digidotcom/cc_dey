@@ -61,7 +61,8 @@
 	log_error("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
 
 typedef struct {
-	uint16_t port;
+	/* If IPv6 support gets added, this will change to struct sockaddr_storage.*/
+	struct sockaddr_in recipient;
 	char *target;
 } request_data_t;
 
@@ -116,7 +117,7 @@ static int add_registered_target(const request_data_t *target)
 	active_requests.array[active_requests.size].target = strdup(target->target);
 	if (active_requests.array[active_requests.size].target == NULL)
 		return -1;
-	active_requests.array[active_requests.size++].port = target->port;
+	memcpy(&active_requests.array[active_requests.size++].recipient, &target->recipient, sizeof(target->recipient));
 
 	return 0;
 }
@@ -154,7 +155,6 @@ static int remove_registered_target(const char * target) {
 static int get_socket_for_target(const char *target)
 {
 	request_data_t *req = find_request_data(target);
-	struct sockaddr_in serv_addr;
 	int sock_fd = -1;
 	int ret = -1; /* Assume error */
 
@@ -163,19 +163,12 @@ static int get_socket_for_target(const char *target)
 		goto out;
 	}
 
-	if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	if ((sock_fd = socket(req->recipient.sin_family, SOCK_STREAM, 0)) < 0) {
 		log_dr_error("Could not open socket to send device request: %s", strerror(errno));
 		goto out;
 	}
 
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(req->port);
-	if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
-		log_dr_error("Could not set serv_addr.sin_addr: %s", strerror(errno));
-		goto out;
-	}
-
-	if (connect(sock_fd, (struct sockaddr *)&serv_addr, sizeof serv_addr) < 0) {
+	if (connect(sock_fd, (struct sockaddr *)&req->recipient, sizeof(struct sockaddr_in)) < 0) {
 		log_dr_error("Could not connect to socket to deliver device request: %s", strerror(errno));
 		goto out;
 	}
@@ -272,20 +265,41 @@ out:
 		close(sock_fd);
 }
 
-static int read_request(int fd, request_data_t *out)
+static int read_request(int fd, request_data_t *out, bool expect_ip, int expected_ip_af)
 {
-	/* Receive a local device registration request */
+	/* Receive a device registration request */
 	uint32_t end, port;
 	struct timeval timeout = {
 		.tv_sec = SOCKET_READ_TIMEOUT_SEC,
 		.tv_usec = 0
 	};
 
+	if (expect_ip) {
+		char *ip = NULL;
+		int valid_ip;
+
+		if (read_string(fd, &ip, NULL, &timeout)) {
+			send_error(fd, "Failed to read IP");
+			return -1;
+		}
+
+		/* Parse the IP address string directly into .sin_addr */
+		valid_ip = inet_pton(expected_ip_af, ip, &out->recipient.sin_addr);
+		/* Either way, we no longer need this string */
+		free(ip);
+
+		if (!valid_ip) {
+			send_error(fd, "Invalid IP");
+			return -1;
+		}
+		out->recipient.sin_family = expected_ip_af;
+	}
+
 	if (read_uint32(fd, &port, &timeout)) {
 		send_error(fd, "Failed to read port");
 		return -1;
 	}
-	out->port = port;
+	out->recipient.sin_port = htons(port);
 
 	if (read_string(fd, &out->target, NULL, &timeout)) {
 		send_error(fd, "Failed to read target");
@@ -333,9 +347,11 @@ static int register_device_request(int fd, const request_data_t *req_data)
 			if (fd >= 0)
 				send_error(fd, "Internal connector error");
 		} else {
+			/* Future: Log remote IP address, if not localhost */
 			log_dr_warning("Target %s has been overriden by new process listening on port %d",
-				req_data->target, req_data->port);
-			previously_registered_req->port = req_data->port;
+				req_data->target, ntohs(req_data->recipient.sin_port));
+			memcpy(&previously_registered_req->recipient, &req_data->recipient,
+					sizeof(req_data->recipient));
 		}
 	} else if (status != CCAPI_RECEIVE_ERROR_NONE) {
 		log_dr_error("Could not register device request: %d", status);
@@ -357,14 +373,13 @@ exit:
 	return result;
 }
 
-int handle_register_device_request(int fd)
+static int
+_handle_register(int fd, request_data_t *req, bool expect_to_read_ip, int expected_ip_af)
 {
-	request_data_t req_data;
-
-	if (read_request(fd, &req_data))
+	if (read_request(fd, req, expect_to_read_ip, expected_ip_af))
 		return -1;
 
-	if (register_device_request(fd, &req_data))
+	if (register_device_request(fd, req))
 		return -1;
 
 	send_ok(fd);
@@ -372,15 +387,15 @@ int handle_register_device_request(int fd)
 	return 0;
 }
 
-int handle_unregister_device_request(int fd)
+static int
+_handle_unregister(int fd, request_data_t *req, bool expect_to_read_ip, int expected_ip_af)
 {
-	request_data_t req_data;
 	ccapi_receive_error_t status;
 
-	if (read_request(fd, &req_data))
+	if (read_request(fd, req, expect_to_read_ip, expected_ip_af))
 		return -1;
 
-	status = unregister_target(req_data.target);
+	status = unregister_target(req->target);
 	if (status != CCAPI_RECEIVE_ERROR_NONE) {
 		send_error(fd, to_user_error_msg(status));
 		return status;
@@ -389,6 +404,48 @@ int handle_unregister_device_request(int fd)
 	send_ok(fd);
 
 	return 0;
+}
+
+int handle_register_device_request(int fd)
+{
+	request_data_t req_data;
+
+	/* This registration command assumes localhost IPv4 */
+	req_data.recipient.sin_family = AF_INET;
+	req_data.recipient.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+	return _handle_register(fd, &req_data, false, 0);
+}
+
+int handle_register_device_request_ipv4(int fd)
+{
+	request_data_t req_data;
+
+	/* Registration request payload is expected to include an IPv4 string */
+	return _handle_register(fd, &req_data, true, AF_INET);
+}
+
+int handle_unregister_device_request(int fd)
+{
+	request_data_t req_data;
+
+	/* This un-registration command assumes localhost IPv4.
+	   NOTE: Technically unregister_target doesn't even look at these;
+	   but we set these fields to be forward-looking */
+	req_data.recipient.sin_family = AF_INET;
+	req_data.recipient.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+	return _handle_unregister(fd, &req_data, false, 0);
+}
+
+int handle_unregister_device_request_ipv4(int fd)
+{
+	request_data_t req_data;
+
+	/* Unregistration request payload is expected to include an IPv4 string.
+	   NOTE: Technically unregister_target doesn't even look at the address;
+	   but we take it in to be forward-looking */
+	return _handle_unregister(fd, &req_data, true, AF_INET);
 }
 
 int import_devicerequests(const char *file_path)
@@ -413,7 +470,7 @@ int import_devicerequests(const char *file_path)
 	}
 
 	for (i = 0; i < n; i++) {
-		if (fread(&temp.port, sizeof temp.port, 1, file) != 1
+		if (fread(&temp.recipient, sizeof temp.recipient, 1, file) != 1
 			|| fread(&string_len, sizeof string_len, 1, file) != 1) {
 			log_dr_error("Could not read registered target %zu", i);
 			goto out;
@@ -488,7 +545,7 @@ int dump_devicerequests(const char *file_path)
 		const request_data_t *dr = &active_requests.array[i];
 		size_t target_len = strlen(dr->target);
 
-		if (fwrite(&dr->port, sizeof dr->port, 1, file) != 1
+		if (fwrite(&dr->recipient, sizeof dr->recipient, 1, file) != 1
 			|| fwrite(&target_len, sizeof target_len, 1, file) != 1
 			|| fwrite(dr->target, target_len, 1, file) != 1) {
 			log_dr_error("Could not write registered targets: %s", strerror(errno));

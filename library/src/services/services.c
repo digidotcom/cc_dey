@@ -51,8 +51,16 @@ struct handler_t {
 		handle_register_device_request
 	},
 	{
+		REQ_TAG_REGISTER_DR_IPV4,
+		handle_register_device_request_ipv4
+	},
+	{
 		REQ_TAG_UNREGISTER_DR,
 		handle_unregister_device_request
+	},
+	{
+		REQ_TAG_UNREGISTER_DR_IPV4,
+		handle_unregister_device_request_ipv4
 	}
 };
 
