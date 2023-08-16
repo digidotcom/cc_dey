@@ -33,6 +33,35 @@
 #include "cc_logging.h"
 #include "signals.h"
 
+#define CLI_TAG			"CLI:"
+
+/**
+ * log_cli_debug() - Log the given message as debug
+ *
+ * @format:	Debug message to log.
+ * @args:	Additional arguments.
+ */
+#define log_cli_debug(format, ...)			\
+	log_debug("%s " format, CLI_TAG, __VA_ARGS__)
+
+/**
+ * log_cli_info() - Log the given message as info
+ *
+ * @format:	Info message to log.
+ * @args:	Additional arguments.
+ */
+#define log_cli_info(format, ...)			\
+	log_info("%s " format, CLI_TAG, __VA_ARGS__)
+
+/**
+ * log_cli_error() - Log the given message as error
+ *
+ * @format:	Error message to log.
+ * @args:	Additional arguments.
+ */
+#define log_cli_error(format, ...)			\
+	log_error("%s " format, CLI_TAG, __VA_ARGS__)
+
 typedef enum {
 	sessionless_execute_state_init,
 	sessionless_execute_state_running,
@@ -68,7 +97,6 @@ static int exec_cli(void)
 	envp[0] = NULL; /* No environment variables */
 
 	ret = execve(argv[0], (char * const *)argv, (char * const *)envp);
-	log_error("%s: Error executing execve()", __func__);   /* execve() returns only on error */
 
 	return ret;
 }
@@ -85,7 +113,11 @@ static void *kill_session_thread(void *arg)
 	connection_handle_t *conn = (connection_handle_t *) arg;
 	pid_t pid = conn->pid;
 
-	log_debug("Stopping CLI process %u", pid);
+	if (conn->pid != -1)
+		log_cli_debug("Kill session '%u'", pid);
+	else
+		log_cli_debug("%s", "Kill session");
+
 	if (conn->pty != -1)
 		close(conn->pty);
 
@@ -94,7 +126,7 @@ static void *kill_session_thread(void *arg)
 
 		waitpid(conn->pid, NULL, 0);
 		conn->pid = -1;
-		log_debug("Stopped CLI process %u", pid);
+		log_cli_debug("Killed session '%u'", pid);
 	}
 	free(conn);
 
@@ -125,28 +157,34 @@ static connector_callback_status_t start_session(connector_streaming_cli_session
 	int master = 0;
 	int ret;
 
-	log_debug("    Called '%s'", __func__);
+	log_cli_info("%s", "Start session");
+
 	if (request->terminal_mode != connector_cli_terminal_vt100) {
-		log_error("%s: Rejecting non-VT100 terminal_mode of: %d", __func__, request->terminal_mode);
+		log_cli_error("Failed to start session: non-VT100 terminal mode (mode: %d)",
+			request->terminal_mode);
+
 		return connector_callback_error;
 	}
 
 	conn = calloc(1, sizeof(*conn));
-	if (!conn)
+	if (!conn) {
+		log_cli_error("Failed to start session: %s", "Out of memory");
+
 		return connector_callback_error;
+	}
 
 	child_process = forkpty(&master, NULL, NULL, NULL);
 	if (child_process == 0) {
 		if (enable_signals() == 0) {
 			ret = exec_cli();
-			log_error("%s: Error executing CLI (%d)", __func__, ret);
+			log_cli_error("Failed to start session (%d)", ret);
 		} else {
-			log_error("%s: Error enabling process signals", __func__);
+			log_cli_error("Failed to start session: %s", "Error enabling signals");
 		}
 
 		exit(1);
 	} else if (child_process == -1) {
-		log_debug("Failed to start CLI process. errno: %d", errno);
+		log_cli_error("Failed to start session: %s (%d)", strerror(errno), errno);
 		close(master);
 		free(conn);
 
@@ -158,12 +196,16 @@ static connector_callback_status_t start_session(connector_streaming_cli_session
 	conn->execute.timeout = 0;
 
 	if (configure_pty(master)) {
+		log_cli_error("Failed to configure session: %s (%d)", strerror(errno), errno);
+
 		kill_session(conn);
 
 		return connector_callback_error;
 	}
 
 	request->handle = conn;
+
+	log_cli_debug("Session started: '%u'", conn->pid);
 
 	return connector_callback_continue;
 }
@@ -173,8 +215,11 @@ static connector_callback_status_t poll_session(connector_streaming_cli_poll_req
 	connection_handle_t *conn = request->handle;
 	int n_bytes;
 
-	if (ioctl(conn->pty, FIONREAD, &n_bytes) || n_bytes < 0)
+	if (ioctl(conn->pty, FIONREAD, &n_bytes) || n_bytes < 0) {
+		log_cli_error("Unable to check data to read: %s (%d)", strerror(errno), errno);
+
 		return connector_callback_error;
+	}
 
 	if (n_bytes == 0) {
 		struct pollfd fd = {
@@ -204,7 +249,9 @@ static connector_callback_status_t send_data(connector_streaming_cli_session_sen
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			return connector_callback_busy;
 
+		log_cli_error("Failed to send data: %s (%d)", strerror(errno), errno);
 		request->bytes_used = 0;
+
 		return connector_callback_error;
 	}
 	request->bytes_used = n_read;
@@ -221,10 +268,13 @@ static connector_callback_status_t receive_data(connector_streaming_cli_session_
 
 	n_written = write(conn->pty, request->buffer, request->bytes_available);
 	if (n_written < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			n_written = 0;
-		else
+		} else {
+			log_cli_error("Failed to receive data: %s (%d)", strerror(errno), errno);
+
 			return connector_callback_error;
+		}
 	}
 
 	request->bytes_used = n_written;
@@ -236,7 +286,11 @@ static connector_callback_status_t end_session(connector_streaming_cli_session_e
 {
 	connection_handle_t *conn = request->handle;
 
-	log_debug("    Called '%s'", __func__);
+	if (conn->pid != -1)
+		log_cli_info("End session '%u'", conn->pid);
+	else
+		log_cli_info("%s", "End session");
+
 	if (conn->execute.file_command != NULL) {
 		fclose(conn->execute.file_command);
 		conn->execute.file_command = NULL;
@@ -256,7 +310,7 @@ static connector_callback_status_t sessionless_execute(connector_streaming_cli_s
 {
 	UNUSED_ARGUMENT(request);
 
-	log_debug("    Called '%s'", __func__);
+	log_cli_info("%s", "Execute command");
 
 	return connector_callback_continue;
 }
@@ -265,7 +319,7 @@ static connector_callback_status_t sessionless_store(connector_streaming_cli_ses
 {
 	UNUSED_ARGUMENT(request);
 
-	log_debug("    Called '%s'", __func__);
+	log_cli_info("%s", "Store command");
 
 	return connector_callback_continue;
 }
