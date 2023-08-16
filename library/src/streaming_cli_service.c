@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <libdigiapix/process.h>
 #include <poll.h>
 #include <pthread.h>
 #include <pty.h>
@@ -61,6 +62,8 @@
  */
 #define log_cli_error(format, ...)			\
 	log_error("%s " format, CLI_TAG, __VA_ARGS__)
+
+#define DEFAULT_TIMEOUT_STR		"10"
 
 typedef enum {
 	sessionless_execute_state_init,
@@ -308,18 +311,173 @@ static connector_callback_status_t end_session(connector_streaming_cli_session_e
 
 static connector_callback_status_t sessionless_execute(connector_streaming_cli_session_sessionless_execute_run_request_t * const request)
 {
-	UNUSED_ARGUMENT(request);
+	connection_handle_t *conn = (connection_handle_t *) request->handle;
+	FILE *file_command = conn->execute.file_command;
+	FILE *file_output = conn->execute.file_output;
 
 	log_cli_info("%s", "Execute command");
+
+	if (conn->execute.state == sessionless_execute_state_init) {
+		int timeout_length = snprintf(NULL, 0, "%d", conn->execute.timeout);
+		char *timeout_str = calloc(timeout_length + 1, sizeof(*timeout_str));
+
+		if (timeout_str)
+			snprintf(timeout_str, timeout_length + 1, "%d", conn->execute.timeout);
+		else
+			log_cli_info("Unable to get timeout (using default value '%s'): Out of memory", DEFAULT_TIMEOUT_STR);
+
+		fseek(file_command, 0, SEEK_SET);
+		fseek(file_output, 0, SEEK_SET);
+
+		conn->execute.start = (int) time(NULL);
+
+		conn->pid = ldx_process_exec_fd(fileno(file_command),
+			fileno(file_output), fileno(file_output),
+			"timeout", timeout_str != NULL ? timeout_str : DEFAULT_TIMEOUT_STR,
+			"/bin/sh");
+
+		free(timeout_str);
+		request->more_data = connector_true;
+
+		conn->execute.state = sessionless_execute_state_running;
+
+		log_cli_info("Start command execution: '%u'", conn->pid);
+	}
+
+	if (conn->execute.state == sessionless_execute_state_running) {
+		int status;
+		int ret = waitpid(conn->pid, &status, WNOHANG);
+
+		if (ret == 0) {
+			int time_elapsed = (int) time(NULL) - conn->execute.start;
+			if (time_elapsed > conn->execute.timeout) {
+				kill(conn->pid, SIGKILL);
+
+				waitpid(conn->pid, NULL, 0);
+				request->status = -13;
+			} else {
+				sleep(1); /* Avoid flooding the request */
+
+				return connector_callback_busy;
+			}
+		} else if (ret != conn->pid) {
+			request->status = -257;
+		} else if (WIFEXITED(status)) {
+			request->status = WEXITSTATUS(status);
+		} else if (WIFSIGNALED(status)) {
+			request->status = -WTERMSIG(status);
+		} else {
+			request->status = -258;
+		}
+		conn->pid = -1;
+		request->more_data = connector_true;
+		conn->execute.state = sessionless_execute_state_reading;
+
+		log_cli_debug("Execution status: 0x%x (%d)", request->status, request->status);
+	}
+
+	if (conn->execute.state == sessionless_execute_state_reading) {
+		int n_left;
+		ssize_t n_read;
+
+		fseek(file_output, 0, SEEK_SET);
+		ioctl(fileno(conn->execute.file_output), FIONREAD, &n_left);
+		n_read = read(fileno(conn->execute.file_output), request->buffer, request->bytes_available);
+
+		fseek(file_output, n_read, SEEK_CUR);
+		if (n_read < 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				return connector_callback_busy;
+
+			request->bytes_used = 0;
+			log_cli_error("Failed to get response: %s (%d)", strerror(errno), errno);
+
+			return connector_callback_error;
+		}
+		request->bytes_used = n_read;
+		request->more_data = n_read < n_left ? connector_true : connector_false;
+
+		if (!request->more_data) {
+			conn->execute.state = sessionless_execute_state_clean;
+		} else {
+			FILE *resize_file = conn->execute.file_output;
+			char *old_contents = NULL;
+			char *new_contents = NULL;
+			/* Get total message size */
+			size_t bytes_remaining = 0;
+
+			fseek(resize_file, 0, SEEK_END);
+			bytes_remaining = (size_t) ftell(resize_file);
+			/* Get old message contents */
+			fseek(resize_file, 0, SEEK_SET);
+			old_contents = calloc(bytes_remaining, sizeof(*old_contents));
+			if (old_contents) {
+				n_read = fread(old_contents, 1, bytes_remaining, resize_file);
+				/* Get new message (old message minus what we sent) */
+				new_contents = old_contents;
+				new_contents += request->bytes_used;
+				/* Close file to delete, then create a new empty file */
+				fclose(resize_file);
+				resize_file = tmpfile();
+				/* Save and tidy */
+				conn->execute.file_output = resize_file;
+				n_read = write(fileno(resize_file), new_contents, bytes_remaining - request->bytes_used);
+				free(old_contents);
+			} else {
+				log_cli_error("Failed to get response: %s", "Out of memory");
+			}
+		}
+	}
+
+	if (conn->execute.state == sessionless_execute_state_clean) {
+		fclose(conn->execute.file_command);
+		conn->execute.file_command = NULL;
+		fclose(conn->execute.file_output);
+		conn->execute.file_output = NULL;
+
+		conn->execute.state = sessionless_execute_state_done;
+	}
 
 	return connector_callback_continue;
 }
 
 static connector_callback_status_t sessionless_store(connector_streaming_cli_session_sessionless_execute_store_request_t * const request)
 {
-	UNUSED_ARGUMENT(request);
+	connection_handle_t *conn = NULL;
+	ssize_t n_written = 0;
 
-	log_cli_info("%s", "Store command");
+	log_cli_info("Store command: '%s'", request->buffer);
+
+	if (request->init) {
+		conn = calloc(1, sizeof(*conn));
+		if (!conn) {
+			log_cli_error("Failed to store command: %s", "Out of memory");
+
+			return connector_callback_error;
+		}
+		conn->pty = -1;
+		conn->pid = -1;
+		conn->execute.file_command = tmpfile();
+		conn->execute.file_output = tmpfile();
+		conn->execute.timeout = request->timeout;
+		conn->execute.state = sessionless_execute_state_init;
+
+		request->handle = conn;
+	} else {
+		conn = (connection_handle_t *) request->handle;
+	}
+
+	n_written = write(fileno(conn->execute.file_command), request->buffer, request->bytes_available);
+	if (n_written < 0) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			n_written = 0;
+		} else {
+			log_cli_error("Failed to store command: %s (%d)", strerror(errno), errno);
+
+			return connector_callback_error;
+		}
+	}
+	request->bytes_used = n_written;
 
 	return connector_callback_continue;
 }
