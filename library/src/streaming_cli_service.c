@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -45,8 +45,8 @@ typedef enum {
 typedef struct
 {
 	int timeout;
-	FILE* file_command;
-	FILE* file_output;
+	FILE *file_command;
+	FILE *file_output;
 	int start;
 	sessionless_execute_state_t state;
 } connection_handle_execute_t;
@@ -80,9 +80,9 @@ static int configure_pty(int pty)
 	return fcntl(pty, F_SETFL, current | O_NONBLOCK | O_CLOEXEC);
 }
 
-static void * kill_session_thread(void * arg)
+static void *kill_session_thread(void *arg)
 {
-	connection_handle_t * conn = (connection_handle_t *) arg;
+	connection_handle_t *conn = (connection_handle_t *) arg;
 	pid_t pid = conn->pid;
 
 	log_debug("Stopping CLI process %u", pid);
@@ -101,7 +101,7 @@ static void * kill_session_thread(void * arg)
 	return NULL;
 }
 
-static void kill_session(connection_handle_t * conn)
+static void kill_session(connection_handle_t *conn)
 {
 	pthread_t thread;
 	pthread_attr_t attr;
@@ -112,14 +112,15 @@ static void kill_session(connection_handle_t * conn)
 
 	err = pthread_create(&thread, &attr, kill_session_thread, conn);
 	if (err)
+		/* Last resort: kill the child directly and let this process wait */
 		kill_session_thread(conn);
 
 	pthread_attr_destroy(&attr);
 }
 
-static connector_callback_status_t start_session(connector_streaming_cli_session_start_request_t * request)
+static connector_callback_status_t start_session(connector_streaming_cli_session_start_request_t *request)
 {
-	connection_handle_t * conn;
+	connection_handle_t *conn;
 	pid_t child_process = 0;
 	int master = 0;
 	int ret;
@@ -130,8 +131,8 @@ static connector_callback_status_t start_session(connector_streaming_cli_session
 		return connector_callback_error;
 	}
 
-	conn = calloc(1, sizeof *conn);
-	if (conn == NULL)
+	conn = calloc(1, sizeof(*conn));
+	if (!conn)
 		return connector_callback_error;
 
 	child_process = forkpty(&master, NULL, NULL, NULL);
@@ -167,15 +168,15 @@ static connector_callback_status_t start_session(connector_streaming_cli_session
 	return connector_callback_continue;
 }
 
-static connector_callback_status_t poll_session(connector_streaming_cli_poll_request_t * request)
+static connector_callback_status_t poll_session(connector_streaming_cli_poll_request_t *request)
 {
-	connection_handle_t * conn = request->handle;
-	int numbytes;
+	connection_handle_t *conn = request->handle;
+	int n_bytes;
 
-	if (ioctl(conn->pty, FIONREAD, &numbytes) || numbytes < 0) 
+	if (ioctl(conn->pty, FIONREAD, &n_bytes) || n_bytes < 0)
 		return connector_callback_error;
 
-	if (numbytes == 0) {
+	if (n_bytes == 0) {
 		struct pollfd fd = {
 			conn->pty,
 			POLLIN,
@@ -191,59 +192,59 @@ static connector_callback_status_t poll_session(connector_streaming_cli_poll_req
 	return connector_callback_continue;
 }
 
-static connector_callback_status_t send_data(connector_streaming_cli_session_send_data_t * request)
+static connector_callback_status_t send_data(connector_streaming_cli_session_send_data_t *request)
 {
-	connection_handle_t * conn = request->handle;
-	int nleft;
-	ssize_t nread;
+	connection_handle_t *conn = request->handle;
+	int n_left;
+	ssize_t n_read;
 
-	ioctl(conn->pty, FIONREAD, &nleft);
-	nread = read(conn->pty, request->buffer, request->bytes_available);
-	if (nread < 0) {
+	ioctl(conn->pty, FIONREAD, &n_left);
+	n_read = read(conn->pty, request->buffer, request->bytes_available);
+	if (n_read < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			return connector_callback_busy;
 
 		request->bytes_used = 0;
 		return connector_callback_error;
 	}
-	request->bytes_used = nread;
+	request->bytes_used = n_read;
 
-	request->more_data = nread < nleft ? connector_true : connector_false;
+	request->more_data = n_read < n_left ? connector_true : connector_false;
 
 	return connector_callback_continue;
 }
 
-static connector_callback_status_t receive_data(connector_streaming_cli_session_receive_data_t * request)
+static connector_callback_status_t receive_data(connector_streaming_cli_session_receive_data_t *request)
 {
-	ssize_t nwritten = 0;
-	connection_handle_t * conn = request->handle;
+	ssize_t n_written = 0;
+	connection_handle_t *conn = request->handle;
 
-	nwritten = write(conn->pty, request->buffer, request->bytes_available);
-	if (nwritten < 0) {
+	n_written = write(conn->pty, request->buffer, request->bytes_available);
+	if (n_written < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			nwritten = 0;
+			n_written = 0;
 		else
 			return connector_callback_error;
 	}
 
-	request->bytes_used = nwritten;
+	request->bytes_used = n_written;
 
 	return connector_callback_continue;
 }
 
 static connector_callback_status_t end_session(connector_streaming_cli_session_end_request_t * const request)
 {
-	connection_handle_t * conn = request->handle;
+	connection_handle_t *conn = request->handle;
 
 	log_debug("    Called '%s'", __func__);
 	if (conn->execute.file_command != NULL) {
-			fclose(conn->execute.file_command);
-			conn->execute.file_command = NULL;
+		fclose(conn->execute.file_command);
+		conn->execute.file_command = NULL;
 	}
 
 	if (conn->execute.file_output != NULL) {
-			fclose(conn->execute.file_output);
-			conn->execute.file_output = NULL;
+		fclose(conn->execute.file_output);
+		conn->execute.file_output = NULL;
 	}
 
 	kill_session(conn);
