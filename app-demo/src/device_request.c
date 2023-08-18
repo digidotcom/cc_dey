@@ -2064,23 +2064,31 @@ static void request_status_cb(char const *const target,
 int register_custom_device_requests(void)
 {
 	unsigned int i;
-	int error;
+	cc_srv_comm_error_t ret;
 
 	for (i = 0; i < ARRAY_SIZE(request_handlers); i++) {
-		char *resp = NULL;
 		const struct handler_t *handler = &request_handlers[i];
+		cc_srv_resp_t resp;
 
-		error = cc_srv_add_request_target(handler->target,
+		ret = cc_srv_add_request_target(handler->target,
 			handler->data_cb, handler->status_cb, &resp);
 
-		if (error != 0) {
-			log_dr_error("Cannot register target '%s', error %d",
-				handler->target, error);
-			break;
+		if (ret != CC_SRV_SEND_ERROR_NONE) {
+			log_dr_error("Cannot register target '%s': Service error %d",
+				handler->target, ret);
+		} else if (resp.code != 0) {
+			if (resp.hint)
+				log_dr_error("Cannot register target '%s': Server error, %s (%d)",
+					handler->target, resp.hint, resp.code);
+			else
+				log_dr_error("Cannot register target '%s': Server error, %d",
+					handler->target, resp.code);
 		}
+
+		free(resp.hint);
 	}
 
-	return error;
+	return ret;
 }
 
 void unregister_custom_device_requests(void)
@@ -2088,12 +2096,22 @@ void unregister_custom_device_requests(void)
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(request_handlers); i++) {
-		char *resp = NULL;
 		const struct handler_t *handler = &request_handlers[i];
-		int error = cc_srv_remove_request_target(handler->target, &resp);
+		cc_srv_resp_t resp;
+		cc_srv_comm_error_t ret = cc_srv_remove_request_target(handler->target, &resp);
 
-		if (error != 0)
-			log_dr_error("Cannot unregister target '%s', error %d",
-				handler->target, error);
+		if (ret != CC_SRV_SEND_ERROR_NONE) {
+			log_dr_error("Cannot unregister target '%s': Service error %d",
+				handler->target, ret);
+		} else if (resp.code != 0) {
+			if (resp.hint)
+				log_dr_error("Cannot unregister target '%s': Server error, %s (%d)",
+					handler->target, resp.hint, resp.code);
+			else
+				log_dr_error("Cannot unregister target '%s': Server error, %d",
+					handler->target, resp.code);
+		}
+
+		free(resp.hint);
 	}
 }

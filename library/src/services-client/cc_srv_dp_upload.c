@@ -25,14 +25,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "_srv_client_utils.h"
 #include "cc_logging.h"
-/* Keep 'dp_csv_generator.h' before 'cc_srv_services.h' because of:
+/* Keep 'dp_csv_generator.h' before 'cc_srv_services.h' and '_srv_client_utils.h' because:
   1. 'dp_csv_generator.h' includes 'ccimp/ccimp_types.h' where
     'ccapi_buffer_info_t' is defined.
   2. 'cc_srv_services.h' includes 'ccapi_receive.h' that redefines
-    'ccapi_buffer_info_t' only if 'ccimp/ccimp_types.h' is not included. */
+    'ccapi_buffer_info_t' only if 'ccimp/ccimp_types.h' is not included.
+  3. '_srv_client_utils.h' includes 'cc_srv_services.h' (see point 2) */
 #include "dp_csv_generator.h"
+#include "_srv_client_utils.h"
 #include "cc_srv_services.h"
 #include "ccapi_datapoints.h"
 #include "service_dp_upload.h"
@@ -184,34 +185,39 @@ done:
  * @data:	Data points to send in csv format.
  * @length:	Total number of bytes to send.
  * @timeout:	Number of seconds to wait for a response from the server.
- * @resp:	The response from the server.
+ * @resp:	Received response from Cloud Connector server.
  *
- * Response may contain the result of the operation. It must be freed.
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
  *
- * Return: 0 if success, otherwise: 
- * 	-2 = out of memory
- * 	-1 = protocol errors
- * 	0 = success
- * 	1 = received error
- * 	2 = args error
+ * Return: CC_SRV_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the service fails.
  */
-static int send_dp_data(const char *data, size_t length, unsigned long timeout, char **resp)
+static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigned long timeout, cc_srv_resp_t *resp)
 {
-	int fd = -1, ret;
+	cc_srv_comm_error_t ret = CC_SRV_SEND_ERROR_NONE;
+	int fd = -1;
 
 	if (!data || !length) {
 		if (!data)
 			log_dp_error("%s", "Unable to upload NULL");
 		if (!length)
 			log_dp_error("%s", "Number of bytes to upload must be greater than 0");
-		return 2;
+		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		resp->code = ret;
+
+		return ret;
 	}
 
 	log_dp_info("%s", "Sending data points to Cloud Connector server");
 
 	fd = connect_cc_server();
-	if (fd < 0)
-		return 2;
+	if (fd < 0) {
+		ret = CC_SRV_SEND_UNABLE_TO_CONNECT_TO_SRV;
+		resp->code = ret;
+
+		return ret;
+	}
 
 	if (write_string(fd, REQ_TAG_DP_FILE_REQUEST)			/* The request type */
 		|| write_uint32(fd, upload_datapoint_file_metrics)	/* CSV data */
@@ -219,7 +225,8 @@ static int send_dp_data(const char *data, size_t length, unsigned long timeout, 
 		|| write_uint32(fd, upload_datapoint_file_terminate)) { /* End of message */
 		log_dp_error("Could not send data points request to Cloud Connector server: %s (%d)",
 			strerror(errno), errno);
-		ret = -1;
+		ret = CC_SRV_SEND_ERROR_BAD_RESPONSE;
+		resp->code = ret;
 		goto done;
 	}
 
@@ -231,22 +238,27 @@ done:
 	return ret;
 }
 
-int cc_srv_send_dp_csv_file(const char *path, unsigned long const timeout, char **resp)
+cc_srv_comm_error_t cc_srv_send_dp_csv_file(const char *path, unsigned long const timeout, cc_srv_resp_t *resp)
 {
 	char *data = NULL;
 	size_t size = 0;
-	int ret;
+	cc_srv_comm_error_t ret;
+
+	resp->hint = NULL;
 
 	data = read_csv_file(path, &size);
-	if (!data)
-		return 2;
+	if (!data) {
+		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		resp->code = ret;
+
+		return ret;
+	}
 
 	ret = send_dp_data(data, size, timeout, resp);
+	if (ret == CC_SRV_SEND_ERROR_NONE)
+		log_dp_debug("Data points in '%s' uploaded", path);
 
 	free(data);
-
-	if (ret == 0)
-		log_dp_debug("Data points in '%s' uploaded", path);
 
 	return ret;
 }
@@ -391,66 +403,71 @@ static void dp_free_data_points_from_collection(ccapi_dp_collection_t * const dp
  *
  * @dp_collection:	Data point collection to send.
  * @timeout:		Number of seconds to wait for a response from the server.
- * @resp:		The response from the server.
+ * @resp:		Received response from Cloud Connector server.
  *
- * Response may contain the result of the operation. It must be freed.
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
  *
- * Return: 0 if success, otherwise:
- * 	-2 = out of memory
- * 	-1 = protocol errors
- * 	0 = success
- * 	1 = received error
- * 	2 = args error
+ * Return: CC_SRV_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the service fails.
  */
-static int dp_send_collection(ccapi_dp_collection_t * const dp_collection,
-	unsigned long const timeout, char **resp)
+static cc_srv_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_collection,
+	unsigned long const timeout, cc_srv_resp_t *resp)
 {
-	int ret = 0;
+	cc_srv_comm_error_t ret = CC_SRV_SEND_ERROR_NONE;
 	bool collection_lock_acquired = false;
 	buffer_info_t buf_info;
 
+	resp->hint = NULL;
+
 	if (dp_collection == NULL || dp_collection->ccapi_data_stream_list == NULL) {
 		log_dp_error("%s", "Invalid data point collection");
-		ret = 2;
-		goto done;
+		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		resp->code = ret;
+
+		return ret;
 	}
 
 	/* TODO check if it is running */
 
 	if (lock_acquire(dp_collection->lock) != 0) {
-		ret = 2;
 		log_dp_error("Data point collection %s", "busy");
-		goto done;
+		ret = CC_SRV_SEND_ERROR_LOCK;
+		resp->code = ret;
+
+		return ret;
 	}
 	collection_lock_acquired = true;
 
 	chain_collection_ccfsm_data_streams(dp_collection);
 
-	if (dp_generate_csv(dp_collection, &buf_info) > 0)
+	if (dp_generate_csv(dp_collection, &buf_info) > 0) {
 		ret = send_dp_data(buf_info.buffer, buf_info.bytes_written, timeout, resp);
-	else
-		ret = 2;
+	} else {
+		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		resp->code = ret;
+	}
 
 	free(buf_info.buffer);
 
 	dp_free_data_points_from_collection(dp_collection);
 
-done:
 	if (collection_lock_acquired && lock_release(dp_collection->lock) != 0) {
-		ret = 2;
+		if (ret == CC_SRV_SEND_ERROR_NONE)
+			ret = CC_SRV_SEND_ERROR_LOCK;
 		log_dp_error("Data point collection %s", "busy");
 	}
 
 	return ret;
 }
 
-int cc_srv_send_dp_collection(ccapi_dp_collection_t *const dp_collection, char **resp)
+cc_srv_comm_error_t cc_srv_send_dp_collection(ccapi_dp_collection_t *const dp_collection, cc_srv_resp_t *resp)
 {
 	return dp_send_collection(dp_collection, CCAPI_DP_WAIT_FOREVER, resp);
 }
 
-int cc_srv_send_dp_collection_with_timeout(ccapi_dp_collection_t *const dp_collection,
-	unsigned long const timeout, char **resp)
+cc_srv_comm_error_t cc_srv_send_dp_collection_with_timeout(ccapi_dp_collection_t *const dp_collection,
+	unsigned long const timeout, cc_srv_resp_t *resp)
 {
 	return dp_send_collection(dp_collection, timeout, resp);
 }

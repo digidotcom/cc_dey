@@ -158,11 +158,21 @@ static void add_button_sample(button_cb_data_t *data)
 
 	ccapi_dp_get_collection_points_count(data->dp_collection, &count);
 	if (count >= data->num_samples_upload) {
-		char *resp = NULL;
+		cc_srv_comm_error_t ret;
+		cc_srv_resp_t resp;
 
 		log_mon_debug("Sending %s samples", USER_BUTTON_ALIAS);
-		if (cc_srv_send_dp_collection_with_timeout(data->dp_collection, 5, &resp) != 0)
-			log_mon_error("%s", "Error sending monitor samples");
+		ret = cc_srv_send_dp_collection_with_timeout(data->dp_collection, 5, &resp);
+		if (ret != CC_SRV_SEND_ERROR_NONE) {
+			log_mon_error("Error sending monitor samples: Service error %d", ret);
+		} else if (resp.code != 0) {
+			if (resp.hint)
+				log_mon_error("Error sending monitor samples: Server error, %s (%d)", resp.hint, resp.code);
+			else
+				log_mon_error("Error sending monitor samples: Server error, %d", resp.code);
+		}
+
+		free(resp.hint);
 	}
 }
 

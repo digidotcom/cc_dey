@@ -103,11 +103,6 @@
 #define	DT_STRING	's'
 #define	DT_BLOB		'b'
 
-/* Upper protocol constants */
-
-#define RESP_END_OF_MESSAGE	0
-#define RESP_ERROR			1
-
 #define concat_va_list(arg) __extension__({		\
 	__typeof__(arg) *_l;				\
 	va_list _ap;					\
@@ -268,11 +263,22 @@ int send_ok(int fd)
 	return send_end_of_response(fd);
 }
 
-int send_error(int fd, const char *msg) {
-
+int send_error(int fd, const char *msg)
+{
 	if (write_uint32(fd, RESP_ERROR) == 0 && write_blob(fd, msg, strlen(msg)) == 0) {
 		return send_end_of_response(fd);
 	}
+	return -1;
+}
+
+int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue)
+{
+	if (write_uint32(fd, RESP_ERRORCODE) == 0
+		&& write_uint32(fd, errorvalue) == 0
+		&& write_blob(fd, msg, strlen(msg)) == 0) {
+			return send_end_of_response(fd);
+	}
+
 	return -1;
 }
 

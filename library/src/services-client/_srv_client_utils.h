@@ -20,6 +20,8 @@
 #ifndef _CC_SRV_CLIENT_UTILS_H_
 #define _CC_SRV_CLIENT_UTILS_H_
 
+#include "cc_srv_services.h"
+
 /**
  * get_lock() - Create a lock
  *
@@ -65,20 +67,17 @@ int connect_cc_server(void);
  * parse_cc_server_response() - Parse received response from Cloud Connector server
  *
  * @fd:		Socket to read response from.
- * @resp:	Buffer to store the response.
+ * @resp:	Received response from Cloud Connector server.
  * @timeout:	Number of seconds to wait for a response.
  *
- * Response may contain the result of the operation. It must be freed.
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
  *
- * Returns: 0 if no error messages received.
+ * Return: CC_SRV_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the service fails.
  *
  * Expects the reply sequence "i:0" or "i:1 b:error-msg".
- * Returns 0 if no error messages received:
- * -2 = out of memory
- * -1 = protocol errors
- *  0 = success
- *  1 = received error
  */
-int parse_cc_server_response(int fd, char **resp, unsigned long timeout);
+cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsigned long timeout);
 
 #endif /* _CC_SRV_CLIENT_UTILS_H_ */

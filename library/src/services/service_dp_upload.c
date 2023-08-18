@@ -25,17 +25,16 @@
 #include "service_dp_upload.h"
 #include "services_util.h"
 
-static ccapi_send_error_t upload_datapoint_file(char const * const buff, ccapi_string_info_t * const hint_string_info, size_t size, char const cloud_path[])
+static ccapi_send_error_t upload_datapoint_file(char const * const buff, size_t size, char const cloud_path[], ccapi_string_info_t * const hint_string_info, ccapi_optional_uint8_t *err_from_server)
 {
 #define TIMEOUT 5
 	ccapi_send_error_t send_error;
 	char const file_type[] = "text/plain";
-	send_error = ccapi_send_data_with_reply(CCAPI_TRANSPORT_TCP,
-											cloud_path, file_type,
-											buff, size,
-											CCAPI_SEND_BEHAVIOR_OVERWRITE,
-											TIMEOUT,
-											hint_string_info);
+
+	send_error = ccapi_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+		cloud_path, file_type, buff, size,
+		CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+
 	if (send_error != CCAPI_SEND_ERROR_NONE)
 		log_error("Send error: %d Hint: %s", send_error, hint_string_info->string);
 
@@ -56,6 +55,7 @@ int handle_datapoint_file_upload(int fd)
 		};
 		char hint[256];
 		ccapi_string_info_t hint_string_info;
+		ccapi_optional_uint8_t err_from_server;
 
 		hint[0] = '\0';
 		hint_string_info.length = sizeof hint;
@@ -93,7 +93,7 @@ int handle_datapoint_file_upload(int fd)
 		}
 
 		/* Upload the blob to the cloud */
-		ret = upload_datapoint_file(blob, &hint_string_info, size, cloud_path);
+		ret = upload_datapoint_file(blob, size, cloud_path, &hint_string_info, &err_from_server);
 
 		free(blob);
 
@@ -101,11 +101,16 @@ int handle_datapoint_file_upload(int fd)
 			char const * const err_msg = to_send_error_msg(ret);
 			char * err_msg_with_hint = NULL;
 
+			if (!err_from_server.known) {
+				/* Use a sentinel value of 255 to indicate something went wrong */
+				err_from_server.value = 255;
+			}
+
 			if ((hint[0] != '\0') && (asprintf(&err_msg_with_hint, "%s, %s", err_msg, hint) > 0)) {
-				send_error(fd, err_msg_with_hint);
+				send_error_with_code(fd, err_msg_with_hint, err_from_server.value);
 				free(err_msg_with_hint);
 			} else {
-				send_error(fd, err_msg);
+				send_error_with_code(fd, err_msg, err_from_server.value);
 			}
 		} else {
 			send_ok(fd);

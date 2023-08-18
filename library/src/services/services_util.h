@@ -24,6 +24,12 @@
 #include <inttypes.h>
 #include <sys/time.h>
 
+/* Upper protocol constants */
+
+#define RESP_END_OF_MESSAGE	0
+#define RESP_ERROR		1
+#define RESP_ERRORCODE		2
+
 /*
  * DRM imposes a timeout of 75 seconds for synchronous SCI requests, so
  * it does not make sense for the connector to wait any longer for
@@ -44,5 +50,6 @@ int write_blob(int fd, const void *data, size_t data_length);
 
 int send_ok(int fd);
 int send_error(int fd, const char *msg);
+int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue);
 
 #endif

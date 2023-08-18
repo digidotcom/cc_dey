@@ -170,76 +170,66 @@ int connect_cc_server(void)
 	return s;
 }
 
-int parse_cc_server_response(int fd, char **resp, unsigned long timeout)
+cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsigned long timeout)
 {
 	uint32_t code;
 	void *msg = NULL;
 	size_t msg_len = 0;
 	struct timeval timeout_val;
 
+	resp->hint = NULL;
+
 	timeout_val.tv_sec = timeout;
 	timeout_val.tv_usec = 0;
 
 	if (read_uint32(fd, &code, timeout > 0 ? &timeout_val : NULL) < 0) {
-		*resp = strdup("Failed to read data type");
-		if (!*resp) {
-			log_srv_error("Cannot read Cloud Connector server answer: %s",
-				"Out of memory");
-			return -2;
-		}
+		resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
 		log_srv_error("Bad response: %s",
-			"Failed to read data type from Cloud Connector server");
-		return -1;
+				"Failed to read data type from Cloud Connector service");
+
+		return resp->code;
 	}
 
-	if (code == 0) {
-		log_srv_debug("%s", "Success from Cloud Connector server");
+	switch(code) {
+		case RESP_END_OF_MESSAGE:
+			resp->code = 0;
+			log_srv_debug("%s", "Success from Cloud Connector server");
 
-		return 0;
+			return CC_SRV_SEND_ERROR_NONE;
+		case RESP_ERRORCODE:
+			/* Read error code first */
+			if (read_uint32(fd, (uint32_t *) &resp->code, timeout > 0 ? &timeout_val : NULL) < 0) {
+				resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
+				log_srv_error("Bad response: %s",
+						"Failed to read error code from Cloud Connector service");
+
+				return resp->code;
+			}
+			break;
+		case RESP_ERROR:
+			resp->code = 255;
+			break;
+		default:
+			resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
+			log_srv_error("Bad response: Received unknown data type code %" PRIu32 "from Cloud Connector service", code);
+
+			return resp->code;
 	}
 
-	if (code != 1) {
-		int len = snprintf(NULL, 0, "Received an unknown response code %" PRIu32, code);
-
-		*resp = calloc(len + 1, sizeof(char));
-		if (*resp == NULL){
-			log_srv_error("Cannot read Cloud Connector server answer: %s",
-				"Out of memory");
-			return -2;
-		}
-
-		sprintf(*resp, "Received an unknown response code %" PRIu32, code);
-
-		log_srv_error("Bad response: Received an unknown response from Cloud Connector server %" PRIu32,
-			code);
-
-		return -1;
-	}
-
+	/* Read the error message */
 	if (read_blob(fd, &msg, &msg_len, timeout > 0 ? &timeout_val : NULL) < 0) {
-		int err = errno;
-		int len = snprintf(NULL, 0, "Could not read response: %s (%d)", strerror(err), err);
+		log_srv_error("Failed to read response: %s (%d)", strerror(errno), errno);
+		resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
 
-		*resp = calloc(len + 1, sizeof(char));
-		if (*resp == NULL) {
-			log_srv_error("Cannot read Cloud Connector server answer: %s",
-				"Out of memory");
-			return -2;
-		}
-
-		sprintf(*resp, "Could not read response: %s (%d)", strerror(err), err);
-
-		log_srv_error("Cannot read response: %s (%d)", strerror(err), err);
-
-		return -1;
+		return resp->code;
 	}
 
-	*resp = (char *)msg;
+	resp->hint = (char *)msg;
 
-	if (*resp != NULL)
-		log_srv_debug("Error from Cloud Connector service: %s", *resp);
+	if (resp->hint)
+		log_srv_debug("Error from Cloud Connector service: %s (%d)", resp->hint, resp->code);
 	else
-		log_srv_debug("%s", "Error from Cloud Connector service");
+		log_srv_debug("Error from Cloud Connector service (%d)", resp->code);
 
-	return 1;
+	return CC_SRV_SEND_ERROR_FROM_CLOUD;
 }

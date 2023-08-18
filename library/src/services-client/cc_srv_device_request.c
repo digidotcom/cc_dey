@@ -234,11 +234,14 @@ done:
 	return server_sock;
 }
 
-static int send_device_request_data(devreq_action_type_t type, int port,
-	char const * const target, unsigned long timeout, char **resp)
+static cc_srv_comm_error_t send_device_request_data(devreq_action_type_t type, int port,
+	char const * const target, unsigned long timeout, cc_srv_resp_t *resp)
 {
-	int fd = -1, ret;
+	cc_srv_comm_error_t ret;
+	int fd = -1;
 	char *type_tag = NULL;
+
+	resp->hint = NULL;
 
 	switch (type) {
 		case REQ_KEY_REGISTER_DR:
@@ -249,14 +252,21 @@ static int send_device_request_data(devreq_action_type_t type, int port,
 			break;
 		default:
 			log_dr_error("Unknown device request action '%d'", type);
-			return -1;
+			ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+			resp->code = ret;
+
+			return ret;
 	}
 
 	type_tag = devreq_action_type_tags[type];
 
 	fd = connect_cc_server();
-	if (fd < 0)
-		return 2;
+	if (fd < 0) {
+		ret = CC_SRV_SEND_UNABLE_TO_CONNECT_TO_SRV;
+		resp->code = ret;
+
+		return ret;
+	}
 
 	if (write_string(fd, type_tag)		/* The request type */
 		|| write_uint32(fd, port)	/* Port */
@@ -265,7 +275,8 @@ static int send_device_request_data(devreq_action_type_t type, int port,
 		log_dr_error("Could not %s '%s' device request: %s (%d)",
 			type == REQ_KEY_REGISTER_DR ? "register" : "unregister",
 			target, strerror(errno), errno);
-		ret = -1;
+		ret = CC_SRV_SEND_ERROR_BAD_RESPONSE;
+		resp->code = ret;
 		goto done;
 	}
 
@@ -475,24 +486,29 @@ static void stop_listening_for_local_requests(void)
 	}
 }
 
-int cc_srv_add_request_target(char const * const target,
+cc_srv_comm_error_t cc_srv_add_request_target(char const * const target,
 	cc_srv_request_data_cb_t data_cb, cc_srv_request_status_cb_t status_cb,
-	char **resp)
+	cc_srv_resp_t *resp)
 {
 	return cc_srv_add_request_target_with_timeout(target, data_cb, status_cb, 0, resp);
 }
 
-int cc_srv_add_request_target_with_timeout(char const * const target,
+cc_srv_comm_error_t cc_srv_add_request_target_with_timeout(char const * const target,
 	cc_srv_request_data_cb_t data_cb, cc_srv_request_status_cb_t status_cb,
-	unsigned long timeout, char **resp)
+	unsigned long timeout, cc_srv_resp_t *resp)
 {
-	int ret = 0;
+	cc_srv_comm_error_t ret = CC_SRV_SEND_ERROR_NONE;
 	request_data_t *req_data = NULL;
 	bool lock_acquired = false;
 
+	resp->hint = NULL;
+
 	if (!target) {
 		log_dr_error("%s", "Invalid device request target");
-		return 2;
+		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		resp->code = ret;
+
+		return ret;
 	}
 
 	if (!active_requests.lock) {
@@ -500,14 +516,20 @@ int cc_srv_add_request_target_with_timeout(char const * const target,
 		if (!active_requests.lock) {
 			log_dr_error("Error adding target '%s': Unable to create lock, device request service busy",
 					target);
-			return 2;
+			ret = CC_SRV_SEND_ERROR_LOCK;
+			resp->code = ret;
+
+			return ret;
 		}
 	}
 	if (lock_acquire(active_requests.lock) != 0) {
 		log_dr_error("Error adding target '%s': Unable to lock, device request service busy",
 				target);
 		lock_destroy(active_requests.lock);
-		return 2;
+		ret = CC_SRV_SEND_ERROR_LOCK;
+		resp->code = ret;
+
+		return ret;
 	}
 	lock_acquired = true;
 
@@ -518,7 +540,8 @@ int cc_srv_add_request_target_with_timeout(char const * const target,
 		request_data_t new_req_data;
 
 		if (sock.fd == -1) {
-			ret = 2;
+			ret = CC_SRV_SEND_UNABLE_TO_CONNECT_TO_SRV;
+			resp->code = ret;
 			goto done;
 		}
 
@@ -548,35 +571,51 @@ int cc_srv_add_request_target_with_timeout(char const * const target,
 	}
 done:
 	if (lock_acquired && lock_release(active_requests.lock) != 0) {
-		ret = 2;
+		if (ret == CC_SRV_SEND_ERROR_NONE)
+			ret = CC_SRV_SEND_ERROR_LOCK;
 		log_dr_error("Error adding target '%s': Unable to release lock, device request service busy",
 				target);
 	}
 
-	if (!ret)
+	if (ret == CC_SRV_SEND_ERROR_NONE)
 		listen_thread_valid = start_listening_for_requests();
 
 	return ret;
 }
 
-int cc_srv_remove_request_target(char const * const target, char **resp)
+cc_srv_comm_error_t cc_srv_remove_request_target(char const * const target, cc_srv_resp_t *resp)
 {
 	return cc_srv_remove_request_target_with_timeout(target, 0, resp);
 }
 
-int cc_srv_remove_request_target_with_timeout(char const * const target, unsigned long timeout, char **resp)
+cc_srv_comm_error_t cc_srv_remove_request_target_with_timeout(char const * const target, unsigned long timeout, cc_srv_resp_t *resp)
 {
-	int ret = 0;
+	cc_srv_comm_error_t ret;
+
+	resp->hint = NULL;
 
 	if (!target) {
 		log_dr_error("%s", "Invalid device request target");
-		return 2;
+		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		resp->code = ret;
+
+		return ret;
+	}
+
+	if (active_requests.size == 0) {
+		ret = CCCS_SEND_ERROR_NONE;
+		resp->code = ret;
+
+		return ret;
 	}
 
 	if (lock_acquire(active_requests.lock) != 0) {
 		log_dr_error("Error removing target '%s': Unable to lock, device request service busy",
 				target);
-		return 2;
+		ret = CC_SRV_SEND_ERROR_LOCK;
+		resp->code = ret;
+
+		return ret;
 	}
 
 	if (remove_registered_target(target)) {
@@ -595,7 +634,8 @@ int cc_srv_remove_request_target_with_timeout(char const * const target, unsigne
 	if (lock_release(active_requests.lock) != 0) {
 		log_dr_error("Error removing target '%s': Unable to release lock, device request service busy",
 				target);
-		ret = 2;
+		if (ret == CC_SRV_SEND_ERROR_NONE)
+			ret = CC_SRV_SEND_ERROR_LOCK;
 	}
 
 	if (active_requests.size == 0) {
