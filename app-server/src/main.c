@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 #include "daemonize.h"
-#include "device_requests.h"
+#include "device_request.h"
 
 #define VERSION		"0.1" GIT_REVISION
 

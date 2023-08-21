@@ -22,7 +22,7 @@
 #include <json_tokener.h>
 #include <json_util.h>
 
-#include "device_requests.h"
+#include "device_request.h"
 
 #define TARGET_CC_GET_CONFIG		"cc_get_config"
 #define TARGET_CC_SET_CONFIG		"cc_set_config"
