@@ -25,17 +25,10 @@
 #include "ccimp/ccimp_hal.h"
 #include "cc_logging.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 #if (defined UNIT_TEST)
 #define ccimp_hal_halt			ccimp_hal_halt_real
 #define ccimp_hal_reset			ccimp_hal_reset_real
 #endif
-
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 
 #if (defined CCIMP_DEBUG_ENABLED)
 ccimp_status_t ccimp_hal_halt(void)
@@ -61,4 +54,3 @@ ccimp_status_t ccimp_hal_reset(void)
 	/* Should not get here */
 	return CCIMP_STATUS_OK;
 }
-

@@ -34,31 +34,16 @@
 #include "ccimp/ccimp_filesystem.h"
 #include "_utils.h"
 
-/*------------------------------------------------------------------------------
-							 D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define MIN_VALUE(a, b)			((a) < (b) ? (a) : (b))
+#define MIN_VALUE(a, b)		((a) < (b) ? (a) : (b))
 #define APP_HASH_BUFFER_SIZE	1024
 
-#define ERROR_SESSION			"Session error %d"
+#define ERROR_SESSION		"Session error %d"
 
-/*------------------------------------------------------------------------------
-					F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static ccimp_status_t app_calc_md(char const *const path,
-		uint8_t *hash_value, size_t const hash_value_len,
-		EVP_MD const * const hash_value_type);
-static ccimp_status_t app_calc_crc32(char const *const path,
-		uint8_t *hash_value, size_t const hash_value_len);
-
-/*------------------------------------------------------------------------------
-						 G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
 /**
  * struct dir_data_t - Struct used as handle typedef for directory operations
  *
  * @dirp:	The directory stream object.
- * @dir_entry:	dirent structure representing a directory entry. It includes
+ * @dir_entry:	Dirent structure representing a directory entry. It includes
  * 		the name of the directory.
  *
  */
@@ -68,9 +53,6 @@ typedef struct
 	struct dirent dir_entry;
 } dir_data_t;
 
-/*------------------------------------------------------------------------------
-					 F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 /**
  * app_convert_file_open_mode() - Get the open mode based on the given flags
  *
@@ -116,9 +98,9 @@ ccimp_status_t ccimp_fs_file_open(ccimp_fs_file_open_t *const file_open_data)
 	int const oflag = app_convert_file_open_mode(file_open_data->flags);
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH; /* 0664 = Owner RW + Group RW + Others R */
 	int fd;
-	char * tmp = strdupa(file_open_data->path);
+	char *tmp = strdupa(file_open_data->path);
 
-	if(tmp == NULL) {
+	if (tmp == NULL) {
 		file_open_data->errnum = errno;
 		return CCIMP_STATUS_ERROR;
 	}
@@ -511,8 +493,102 @@ ccimp_status_t ccimp_fs_hash_alg(ccimp_fs_get_hash_alg_t \
 	}
 
 	return CCIMP_STATUS_OK;
+}
 
+/**
+ * app_calc_crc32() - Calculate the CRC32 hash of a file
+ *
+ * @path:		Full path of the file to calculate its CRC32 hash.
+ * @hash_value:		CRC32 hash that has been calculated.
+ * @hash_value_len:	Length of the hash.
+ *
+ * Returns: The status of the operation.
+ */
+static ccimp_status_t app_calc_crc32(char const *const path,
+		uint8_t *hash_value, size_t const hash_value_len)
+{
+	uint32_t crc32;
+	size_t i;
+	int const retval = crc32file(path, &crc32);
 
+	if (retval < 0)
+		return CCIMP_STATUS_ERROR;
+
+	for (i = 0; i < hash_value_len; i++) {
+		uint32_t const mask = 0xFF000000 >> (8 * i);
+		uint8_t const shift = 8 * (hash_value_len - (i + 1));
+
+		hash_value[i] = (crc32 & mask) >> shift;
+	}
+
+	return CCIMP_STATUS_OK;
+}
+
+/**
+ * app_calc_md() - Calculate the hash of a file
+ *
+ * @path:		Full path of the file to calculate its hash.
+ * @hash_value:		Hash that has been calculated.
+ * @hash_value_len:	Length of the hash
+ * @hash_value_type:	Type of the hash.
+ *
+ * Returns: The status of the operation.
+ */
+static ccimp_status_t app_calc_md(char const *const path,
+		uint8_t *const hash_value, size_t const hash_value_len,
+		EVP_MD const * const hash_value_type)
+{
+	int ret;
+	char buf[APP_HASH_BUFFER_SIZE];
+	ccapi_bool_t finished = CCAPI_FALSE;
+	ccimp_status_t status;
+	EVP_MD_CTX * ctx = NULL;
+	int const fd = open(path, O_RDONLY);
+
+	if (fd == -1) {
+		/* Cannot access the path, return OK but with a hash of 0. */
+		memset(hash_value, 0, hash_value_len);
+		return CCIMP_STATUS_OK;
+	}
+
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+	ctx = EVP_MD_CTX_create();
+#else
+	ctx = EVP_MD_CTX_new();
+#endif
+	if (ctx == NULL || (EVP_DigestInit_ex(ctx, hash_value_type, NULL) == 0)) {
+		goto error;
+	}
+
+	do {
+		ret = read(fd, buf, sizeof buf);
+		if (ret > 0) {
+			if (EVP_DigestUpdate(ctx, buf, ret) != 1) {
+				finished = CCAPI_TRUE;
+				ret = -1;
+			}
+		} else if (ret == 0 || (ret == -1 && errno != EAGAIN)) {
+			finished = CCAPI_TRUE;
+		}
+	} while (finished == CCAPI_FALSE);
+
+	if (ret == 0 && EVP_DigestFinal_ex(ctx, hash_value, NULL) == 1) {
+		status = CCIMP_STATUS_OK;
+		goto done;
+	}
+
+error:
+	memset(hash_value, 0, hash_value_len);
+	status = CCIMP_STATUS_ERROR;
+
+done:
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+	EVP_MD_CTX_destroy(ctx);
+#else
+	EVP_MD_CTX_free(ctx);
+#endif
+	close(fd);
+	return status;
 }
 
 /**
@@ -635,105 +711,11 @@ ccimp_status_t ccimp_fs_error_desc(ccimp_fs_error_desc_t \
 ccimp_status_t ccimp_fs_session_error(ccimp_fs_session_error_t \
 		*const session_error_data)
 {
-	log_error(ERROR_SESSION, session_error_data->session_error);
-	if (session_error_data->imp_context != NULL)
-		free(session_error_data->imp_context);
-
-	return CCIMP_STATUS_OK;
-}
-
- /**
- * app_calc_md() - Calculate the hash of a file
- *
- * @path:		Full path of the file to calculate its hash.
- * @hash_value:		Hash that has been calculated.
- * @hash_value_len:	Length of the hash
- * @hash_value_type:	Type of the hash.
- *
- * Returns: The status of the operation.
- */
-static ccimp_status_t app_calc_md(char const *const path,
-		uint8_t *const hash_value, size_t const hash_value_len,
-		EVP_MD const * const hash_value_type)
-{
-	int ret;
-	char buf[APP_HASH_BUFFER_SIZE];
-	ccapi_bool_t finished = CCAPI_FALSE;
-	ccimp_status_t status;
-	EVP_MD_CTX * ctx = NULL;
-	int const fd = open(path, O_RDONLY);
-
-	if (fd == -1) {
-		/* Cannot access the path, return OK but with a hash of 0. */
-		memset(hash_value, 0, hash_value_len);
+	if (!session_error_data)
 		return CCIMP_STATUS_OK;
-	}
 
-#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
-	ctx = EVP_MD_CTX_create();
-#else
-	ctx = EVP_MD_CTX_new();
-#endif
-	if (ctx == NULL || (EVP_DigestInit_ex(ctx, hash_value_type, NULL) == 0)) {
-		goto error;
-	}
-
-	do {
-		ret = read(fd, buf, sizeof buf);
-		if (ret > 0) {
-			if (EVP_DigestUpdate(ctx, buf, ret) != 1) {
-				finished = CCAPI_TRUE;
-				ret = -1;
-			}
-		} else if (ret == 0 || (ret == -1 && errno != EAGAIN)) {
-			finished = CCAPI_TRUE;
-		}
-	} while (finished == CCAPI_FALSE);
-
-	if (ret == 0 && EVP_DigestFinal_ex(ctx, hash_value, NULL) == 1) {
-		status = CCIMP_STATUS_OK;
-		goto done;
-	}
-
-error:
-	memset(hash_value, 0, hash_value_len);
-	status = CCIMP_STATUS_ERROR;
-
-done:
-#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
-	EVP_MD_CTX_destroy(ctx);
-#else
-	EVP_MD_CTX_free(ctx);
-#endif
-	close(fd);
-	return status;
-}
-
-/**
- * app_calc_crc32() - Calculate the CRC32 hash of a file
- *
- * @path:		Full path of the file to calculate its CRC32 hash.
- * @hash_value:		CRC32 hash that has been calculated.
- * @hash_value_len:	Length of the hash.
- *
- * Returns: The status of the operation.
- */
-static ccimp_status_t app_calc_crc32(char const *const path,
-		uint8_t *hash_value, size_t const hash_value_len)
-{
-	uint32_t crc32;
-	size_t i;
-	int const retval = crc32file(path, &crc32);
-
-	if (retval < 0)
-		return CCIMP_STATUS_ERROR;
-
-	for (i = 0; i < hash_value_len; i++) {
-		uint32_t const mask = 0xFF000000 >> (8 * i);
-		uint8_t const shift = 8 * (hash_value_len - (i + 1));
-
-		hash_value[i] = (crc32 & mask) >> shift;
-	}
+	log_error(ERROR_SESSION, session_error_data->session_error);
+	free(session_error_data->imp_context);
 
 	return CCIMP_STATUS_OK;
 }

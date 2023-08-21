@@ -136,7 +136,7 @@ static json_object *get_config_setting_value(cfg_opt_t cfg_opt)
  * @cfg:	The configuration to convert to JSON.
  *
  * Return: A JSON object with the configuration settings and their values,
- *	   NULL if it fails.
+ *         NULL if it fails.
  */
 static json_object *convert_cfg_to_json(cfg_t *cfg)
 {
@@ -613,7 +613,7 @@ static ccapi_receive_error_t set_cc_config_cb(char const *const target,
 
 		ret = apply_configuration(cc_cfg);
 		resp = json_object_new_object();
-		switch(ret) {
+		switch (ret) {
 			case 0: /* Success */
 				restart = true;
 				if (!resp
@@ -685,7 +685,7 @@ done:
  * request_status_cb() - Status callback for cc device requests
  *
  * @target:		Target ID of the device request.
- * @transport: 		Communication transport used by the device request.
+ * @transport:		Communication transport used by the device request.
  * @resp_buffer:	Buffer containing the response data.
  * @receive_error:	The error status of the receive process.
  *

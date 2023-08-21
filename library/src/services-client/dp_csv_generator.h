@@ -27,8 +27,8 @@
 #include "stringify_tools.h"
 
 /************************************************************************
-** WARNING: Don't change the order of the state unless default		 **
-**		  CSV format described in the Cloud documentation changes.   **
+** WARNING: Don't change the order of the state unless default         **
+**          CSV format described in the Cloud documentation changes.   **
 ************************************************************************/
 typedef enum {
 	csv_data,

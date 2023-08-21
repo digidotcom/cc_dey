@@ -21,6 +21,7 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -28,9 +29,6 @@
 #include "data_points.h"
 #include "device_request.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 #define VERSION		"0.1" GIT_REVISION
 
 #define USAGE \
@@ -46,22 +44,107 @@
 	"  -h  --help                Print help and exit\n" \
 	"\n"
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static int start_connector(const char *config_file);
-static int setup_signal_handler(void);
-static void signal_handler(int signum);
-static void usage(char const *const name);
+static volatile bool stop = false;
 
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
-static volatile ccapi_bool_t stop = CCAPI_FALSE;
+/**
+ * signal_handler() - Manage signal received.
+ *
+ * @sig_num: Received signal.
+ */
+static void signal_handler(int sig_num)
+{
+	log_debug("%s: Received signal %d to close Cloud connection.", __func__, sig_num);
+	stop = true;
+}
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
+/*
+ * setup_signal_handler() - Setup process signals
+ *
+ * Return: 0 on success, 1 otherwise.
+ */
+static int setup_signal_handler(void)
+{
+	struct sigaction new_action, old_action;
+	sigset_t set;
+
+	memset(&new_action, 0, sizeof(new_action));
+	new_action.sa_handler = signal_handler;
+	sigemptyset(&new_action.sa_mask);
+	new_action.sa_flags = 0;
+
+	sigaction(SIGINT, NULL, &old_action);
+	if (old_action.sa_handler != SIG_IGN) {
+		if (sigaction(SIGINT, &new_action, NULL)) {
+			log_error("%s", "Failed to install signal handler");
+			return 1;
+		}
+	}
+
+	sigemptyset(&set);
+	sigaddset(&set, SIGINT);
+
+	if (pthread_sigmask(SIG_UNBLOCK, &set, NULL)) {
+		log_error("%s", "Failed to unblock SIGTERM");
+		return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * start_connector() - Start Cloud Connector
+ *
+ * @config_file:	Absolute path of the configuration file to use. NULL to
+ * 			use the default one (/etc/cc.conf).
+ *
+ * Return: 0 on success, 1 otherwise.
+ */
+static int start_connector(const char *config_file)
+{
+	cc_init_error_t init_error;
+	cc_start_error_t start_error;
+
+	if (setup_signal_handler())
+		return EXIT_FAILURE;
+
+	init_error = init_cloud_connection(config_file);
+	if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
+		log_error("Cannot initialize cloud connection, error %d", init_error);
+		return EXIT_FAILURE;
+	}
+
+	register_custom_device_requests();
+
+	start_error = start_cloud_connection();
+	if (start_error != CC_START_ERROR_NONE) {
+		log_error("Cannot start cloud connection, error %d", start_error);
+		return EXIT_FAILURE;
+	}
+
+	if (start_monitoring() != 0)
+		log_error("%s", "Cannot start monitoring");
+
+	do {
+		sleep(2);
+	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && stop == CCAPI_FALSE);
+
+	stop_monitoring();
+
+	stop_cloud_connection();
+
+	return EXIT_SUCCESS;
+}
+
+/**
+ * usage() - Print usage information
+ *
+ * @name:	Name of the daemon.
+ */
+static void usage(char const *const name)
+{
+	printf(USAGE, VERSION, name);
+}
+
 int main(int argc, char *argv[])
 {
 	int result = EXIT_SUCCESS;
@@ -119,103 +202,4 @@ done:
 	deinit_logger();
 
 	return result;
-}
-
-/*
- * start_connector() - Start Cloud Connector
- *
- * @config_file:	Absolute path of the configuration file to use. NULL to use
- * 					the default one (/etc/cc.conf).
- *
- * Return: 0 on success, 1 otherwise.
- */
-static int start_connector(const char *config_file)
-{
-	cc_init_error_t init_error;
-	cc_start_error_t start_error;
-
-	if (setup_signal_handler())
-		return EXIT_FAILURE;
-
-	init_error = init_cloud_connection(config_file);
-	if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
-		log_error("Cannot initialize cloud connection, error %d", init_error);
-		return EXIT_FAILURE;
-	}
-
-	register_custom_device_requests();
-
-	start_error = start_cloud_connection();
-	if (start_error != CC_START_ERROR_NONE) {
-		log_error("Cannot start cloud connection, error %d", start_error);
-		return EXIT_FAILURE;
-	}
-
-	if (start_monitoring() != 0)
-		log_error("%s", "Cannot start monitoring");
-
-	do {
-		sleep(2);
-	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && stop == CCAPI_FALSE);
-
-	stop_monitoring();
-
-	stop_cloud_connection();
-
-	return EXIT_SUCCESS;
-}
-
-/*
- * setup_signal_handler() - Setup process signals
- *
- * Return: 0 on success, 1 otherwise.
- */
-static int setup_signal_handler(void)
-{
-	struct sigaction new_action, old_action;
-	sigset_t set;
-
-	memset(&new_action, 0, sizeof(new_action));
-	new_action.sa_handler = signal_handler;
-	sigemptyset(&new_action.sa_mask);
-	new_action.sa_flags = 0;
-
-	sigaction(SIGINT, NULL, &old_action);
-	if (old_action.sa_handler != SIG_IGN) {
-		if (sigaction(SIGINT, &new_action, NULL)) {
-			log_error("%s", "Failed to install signal handler");
-			return 1;
-		}
-	}
-
-	sigemptyset(&set);
-	sigaddset(&set, SIGINT);
-
-	if (pthread_sigmask(SIG_UNBLOCK, &set, NULL)) {
-		log_error("%s", "Failed to unblock SIGTERM");
-		return 1;
-	}
-
-	return 0;
-}
-
-/**
- * signal_handler() - Manage signal received.
- *
- * @signum: Received signal.
- */
-static void signal_handler(int signum)
-{
-	log_debug("%s: Received signal %d to close Cloud connection.", __func__, signum);
-	stop = CCAPI_TRUE;
-}
-
-/**
- * usage() - Print usage information
- *
- * @name:	Name of the daemon.
- */
-static void usage(char const *const name)
-{
-	printf(USAGE, VERSION, name);
 }

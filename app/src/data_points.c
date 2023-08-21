@@ -24,53 +24,20 @@
 
 #include "data_points.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define LOOP_MS						100UL
-
-#define USER_BUTTON_ALIAS			"USER_BUTTON"
-
+#define LOOP_MS				100UL
+#define USER_BUTTON_ALIAS		"USER_BUTTON"
 #define DATA_STREAM_USER_BUTTON		"demo_monitor/user_button"
-
 #define DATA_STREAM_BUTTON_UNITS	"state"
 
-#define MONITOR_TAG					"MON:"
+#define MONITOR_TAG			"MON:"
 
-/*------------------------------------------------------------------------------
-                 D A T A    T Y P E S    D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-/**
- * button_cb_data_t - Data for button interrupt
- *
- * @button:			GPIO button.
- * @dp_collection:	Collection of data points to store the button value.
- */
-typedef struct {
-	gpio_t *button;
-	ccapi_dp_collection_handle_t dp_collection;
-	gpio_value_t value;
-	uint32_t num_samples_upload;
-} button_cb_data_t;
-
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection);
-static gpio_t *get_user_button(void);
-static int button_interrupt_cb(void *arg);
-static void add_button_sample(button_cb_data_t *data);
-
-/*------------------------------------------------------------------------------
-                                  M A C R O S
-------------------------------------------------------------------------------*/
 /**
  * log_mon_debug() - Log the given message as debug
  *
  * @format:		Debug message to log.
  * @args:		Additional arguments.
  */
-#define log_mon_debug(format, ...)									\
+#define log_mon_debug(format, ...)					\
 	log_debug("%s " format, MONITOR_TAG, __VA_ARGS__)
 
 /**
@@ -79,7 +46,7 @@ static void add_button_sample(button_cb_data_t *data);
  * @format:		Info message to log.
  * @args:		Additional arguments.
  */
-#define log_mon_info(format, ...)									\
+#define log_mon_info(format, ...)					\
 	log_info("%s " format, MONITOR_TAG, __VA_ARGS__)
 
 /**
@@ -88,25 +55,132 @@ static void add_button_sample(button_cb_data_t *data);
  * @format:		Error message to log.
  * @args:		Additional arguments.
  */
-#define log_mon_error(format, ...)									\
+#define log_mon_error(format, ...)					\
 	log_error("%s " format, MONITOR_TAG, __VA_ARGS__)
 
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
+/**
+ * button_cb_data_t - Data for button interrupt
+ *
+ * @button:		GPIO button.
+ * @dp_collection:	Collection of data points to store the button value.
+ * @value:		Last status of the GPIO.
+ * @num_samples_upload:	Number of samples to store before uploading.
+ */
+typedef struct {
+	gpio_t *button;
+	ccapi_dp_collection_handle_t dp_collection;
+	gpio_value_t value;
+	uint32_t num_samples_upload;
+} button_cb_data_t;
+
 static bool is_running = false;
 static button_cb_data_t cb_data;
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 /*
- * start_monitoring() - Start monitoring
+ * get_user_button() - Retrieves the user button GPIO
  *
- * The variables being monitored are: USER_BUTTON.
- *
- * Return: 0 on success, 1 otherwise.
+ * Return: The user button GPIO, NULL on error.
  */
+static gpio_t *get_user_button(void)
+{
+	if (cb_data.button != NULL)
+		return cb_data.button;
+	cb_data.button = ldx_gpio_request_by_alias(USER_BUTTON_ALIAS, GPIO_IRQ_EDGE_BOTH, REQUEST_SHARED);
+	if (cb_data.button == NULL)
+		return NULL;
+	ldx_gpio_set_active_mode(cb_data.button, GPIO_ACTIVE_HIGH);
+
+	return cb_data.button;
+}
+
+/*
+ * init_monitor() - Create and initialize the monitor data point collection
+ *
+ * @dp_collection:	Data point collection.
+ *
+ * Return: Error code after the initialization of the monitor collection.
+ *
+ * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
+ * problem creating the collection.
+ */
+static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection)
+{
+	ccapi_dp_error_t dp_error = ccapi_dp_create_collection(dp_collection);
+
+	if (dp_error != CCAPI_DP_ERROR_NONE) {
+		log_mon_error("Error initializing app monitor, %d", dp_error);
+		return dp_error;
+	}
+
+	dp_error = ccapi_dp_add_data_stream_to_collection_extra(*dp_collection,
+			DATA_STREAM_USER_BUTTON, CCAPI_DP_KEY_DATA_INT32 " " CCAPI_DP_KEY_TS_EPOCH, DATA_STREAM_BUTTON_UNITS, NULL);
+	if (dp_error != CCAPI_DP_ERROR_NONE) {
+		log_mon_error("Cannot add '%s' stream to data point collection, error %d",
+					DATA_STREAM_USER_BUTTON, dp_error);
+		return dp_error;
+	}
+
+	return CCAPI_DP_ERROR_NONE;
+}
+
+/*
+ * add_button_sample() - Add USER_BUTTON value to the data point collection
+ *
+ * @data:	Button interrupt data (button_cb_data_t).
+ */
+static void add_button_sample(button_cb_data_t *data)
+{
+	ccapi_dp_error_t dp_error;
+	uint32_t count = 0;
+	ccapi_timestamp_t *timestamp = get_timestamp();
+
+	if (!timestamp) {
+		log_mon_error("%s", "Cannot get user_button sample timestamp");
+		return;
+	}
+
+	data->value = data->value ? GPIO_LOW : GPIO_HIGH;
+
+	dp_error = ccapi_dp_add(data->dp_collection, DATA_STREAM_USER_BUTTON,
+			data->value, timestamp);
+	free_timestamp(timestamp);
+	if (dp_error != CCAPI_DP_ERROR_NONE) {
+		log_mon_error("Cannot add user_button value, %d", dp_error);
+		return;
+	} else {
+		log_mon_debug("user_button = %d %s", data->value, DATA_STREAM_BUTTON_UNITS);
+	}
+
+	ccapi_dp_get_collection_points_count(data->dp_collection, &count);
+	if (count >= data->num_samples_upload) {
+		log_mon_debug("Sending %s samples", USER_BUTTON_ALIAS);
+		dp_error = ccapi_dp_send_collection(CCAPI_TRANSPORT_TCP, data->dp_collection);
+		if (dp_error != CCAPI_DP_ERROR_NONE)
+			log_mon_error("Error sending monitor samples, %d", dp_error);
+	}
+}
+
+/*
+ * button_interrupt_cb() - Callback for button interrupts
+ *
+ * @arg:	Button interrupt data (button_cb_data_t).
+ */
+static int button_interrupt_cb(void *arg)
+{
+	button_cb_data_t *data = arg;
+
+	if (data->button == NULL) {
+		log_mon_error("Cannot get %s value: Failed to initialize user button", USER_BUTTON_ALIAS);
+		return GPIO_VALUE_ERROR;
+	}
+
+	log_mon_debug("%s interrupt detected", USER_BUTTON_ALIAS);
+
+	add_button_sample(data);
+
+	return 0;
+}
+
 int start_monitoring(void)
 {
 	if (is_monitoring())
@@ -139,18 +213,10 @@ error:
 	return 1;
 }
 
-/*
- * is_monitoring() - Check monitor status
- *
- * Return: True if demo monitor is running, false otherwise.
- */
 bool is_monitoring(void) {
 	return is_running;
 }
 
-/*
- * stop_monitoring() - Stop monitoring
- */
 void stop_monitoring(void)
 {
 	if (!is_monitoring())
@@ -165,108 +231,4 @@ void stop_monitoring(void)
 	is_running = false;
 
 	log_mon_info("%s", "Stop monitoring");
-}
-
-/*
- * init_monitor() - Create and initialize the monitor data point collection
- *
- * @dp_collection:	Data point collection.
- *
- * Return: Error code after the initialization of the monitor collection.
- *
- * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
- * problem creating the collection.
- */
-static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection)
-{
-	ccapi_dp_error_t dp_error = ccapi_dp_create_collection(dp_collection);
-	if (dp_error != CCAPI_DP_ERROR_NONE) {
-		log_mon_error("Error initializing app monitor, %d", dp_error);
-		return dp_error;
-	}
-
-	dp_error = ccapi_dp_add_data_stream_to_collection_extra(*dp_collection,
-			DATA_STREAM_USER_BUTTON, CCAPI_DP_KEY_DATA_INT32 " " CCAPI_DP_KEY_TS_EPOCH, DATA_STREAM_BUTTON_UNITS, NULL);
-	if (dp_error != CCAPI_DP_ERROR_NONE) {
-		log_mon_error("Cannot add '%s' stream to data point collection, error %d",
-					DATA_STREAM_USER_BUTTON, dp_error);
-		return dp_error;
-	}
-
-	return CCAPI_DP_ERROR_NONE;
-}
-
-/*
- * get_user_button() - Retrieves the user button GPIO
- *
- * Return: The user button GPIO, NULL on error.
- */
-static gpio_t *get_user_button(void)
-{
-	if (cb_data.button != NULL)
-		return cb_data.button;
-	cb_data.button = ldx_gpio_request_by_alias(USER_BUTTON_ALIAS, GPIO_IRQ_EDGE_BOTH, REQUEST_SHARED);
-	if (cb_data.button == NULL)
-		return NULL;
-	ldx_gpio_set_active_mode(cb_data.button, GPIO_ACTIVE_HIGH);
-
-	return cb_data.button;
-}
-
-/*
- * button_interrupt_cb() - Callback for button interrupts
- *
- * @arg:	Button interrupt data (button_cb_data_t).
- */
-static int button_interrupt_cb(void *arg)
-{
-	button_cb_data_t *data = arg;
-
-	if (data->button == NULL) {
-		log_mon_error("Cannot get %s value: Failed to initialize user button", USER_BUTTON_ALIAS);
-		return GPIO_VALUE_ERROR;
-	}
-
-	log_mon_debug("%s interrupt detected", USER_BUTTON_ALIAS);
-
-	add_button_sample(data);
-
-	return 0;
-}
-
-/*
- * add_button_sample() - Add USER_BUTTON value to the data point collection
- *
- * @arg:	Button interrupt data (button_cb_data_t).
- */
-static void add_button_sample(button_cb_data_t *data)
-{
-	ccapi_dp_error_t dp_error;
-	uint32_t count = 0;
-	ccapi_timestamp_t *timestamp = get_timestamp();
-
-	if (!timestamp) {
-		log_mon_error("%s", "Cannot get user_button sample timestamp");
-		return;
-	}
-
-	data->value = data->value ? GPIO_LOW : GPIO_HIGH;
-
-	dp_error = ccapi_dp_add(data->dp_collection, DATA_STREAM_USER_BUTTON,
-			data->value, timestamp);
-	free_timestamp(timestamp);
-	if (dp_error != CCAPI_DP_ERROR_NONE) {
-		log_mon_error("Cannot add user_button value, %d", dp_error);
-		return;
-	} else {
-		log_mon_debug("user_button = %d %s", data->value, DATA_STREAM_BUTTON_UNITS);
-	}
-
-	ccapi_dp_get_collection_points_count(data->dp_collection, &count);
-	if (count >= data->num_samples_upload) {
-		log_mon_debug("Sending %s samples", USER_BUTTON_ALIAS);
-		dp_error = ccapi_dp_send_collection(CCAPI_TRANSPORT_TCP, data->dp_collection);
-		if (dp_error != CCAPI_DP_ERROR_NONE)
-			log_mon_error("Error sending monitor samples, %d", dp_error);
-	}
 }

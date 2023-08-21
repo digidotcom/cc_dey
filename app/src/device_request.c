@@ -45,51 +45,51 @@
 #define TARGET_USER_LED			"user_led"
 
 #define RESPONSE_ERROR			"ERROR"
-#define RESPONSE_OK				"OK"
-#define STRING_NA				"N/A"
+#define RESPONSE_OK			"OK"
+#define STRING_NA			"N/A"
 
 #define USER_LED_ALIAS			"USER_LED"
 
-#define DEVREQ_TAG				"APP-DEVREQ:"
+#define DEVREQ_TAG			"APP-DEVREQ:"
 
-#define MAX_RESPONSE_SIZE			512
-#define PARAM_LENGTH				25
+#define MAX_RESPONSE_SIZE		512
+#define PARAM_LENGTH			25
 
-#define BUILD_FILE					"/etc/build"
-#define EMMC_SIZE_FILE				"/sys/class/mmc_host/mmc0/mmc0:0001/block/mmcblk0/size"
-#define NAND_SIZE_FILE				"/proc/mtd"
-#define RESOLUTION_FILE				"/sys/class/graphics/fb0/modes"
+#define BUILD_FILE			"/etc/build"
+#define EMMC_SIZE_FILE			"/sys/class/mmc_host/mmc0/mmc0:0001/block/mmcblk0/size"
+#define NAND_SIZE_FILE			"/proc/mtd"
+#define RESOLUTION_FILE			"/sys/class/graphics/fb0/modes"
 #define RESOLUTION_FILE_CCMP		"/sys/class/drm/card0/card0-DPI-1/modes"
 #define RESOLUTION_FILE_CCMP_HDMI	"/sys/class/drm/card0/card0-HDMI-A-1/modes"
 
-#define CMD_PLAY_MUSIC		"setsid mpg123 %s"
-#define CMD_STOP_MUSIC		"pkill -KILL -f mpg123"
-#define CMD_SET_VOLUME		"amixer set 'Speaker' %d%% && amixer set 'Headphone' %d%%"
+#define CMD_PLAY_MUSIC			"setsid mpg123 %s"
+#define CMD_STOP_MUSIC			"pkill -KILL -f mpg123"
+#define CMD_SET_VOLUME			"amixer set 'Speaker' %d%% && amixer set 'Headphone' %d%%"
 
 #define CFG_ELEMENT_ETHERNET		"ethernet"
-#define CFG_ELEMENT_WIFI			"wifi"
+#define CFG_ELEMENT_WIFI		"wifi"
 #define CFG_ELEMENT_BLUETOOTH		"bluetooth"
 #define CFG_ELEMENT_CONNECTOR		"connector"
 #define CFG_ELEMENT_SYS_MONITOR		"sys-monitor"
 
-#define CFG_FIELD_DESC				"desc"
-#define CFG_FIELD_DNS1				"dns1"
-#define CFG_FIELD_DNS2				"dns2"
-#define CFG_FIELD_ENABLE			"enable"
-#define CFG_FIELD_GATEWAY			"gateway"
-#define CFG_FIELD_IP				"ip"
-#define CFG_FIELD_MAC				"mac"
-#define CFG_FIELD_MUSIC_FILE	"music_file"
-#define CFG_FIELD_NAME				"name"
-#define CFG_FIELD_NETMASK			"netmask"
+#define CFG_FIELD_DESC			"desc"
+#define CFG_FIELD_DNS1			"dns1"
+#define CFG_FIELD_DNS2			"dns2"
+#define CFG_FIELD_ENABLE		"enable"
+#define CFG_FIELD_GATEWAY		"gateway"
+#define CFG_FIELD_IP			"ip"
+#define CFG_FIELD_MAC			"mac"
+#define CFG_FIELD_MUSIC_FILE		"music_file"
+#define CFG_FIELD_NAME			"name"
+#define CFG_FIELD_NETMASK		"netmask"
 #define CFG_FIELD_N_SAMPLE_UPLOAD	"n_dp_upload"
 #define CFG_FIELD_PLAY			"play"
-#define CFG_FIELD_PSK				"psk"
+#define CFG_FIELD_PSK			"psk"
 #define CFG_FIELD_SAMPLE_RATE		"sample_rate"
-#define CFG_FIELD_SEC_MODE			"sec_mode"
-#define CFG_FIELD_SSID				"ssid"
-#define CFG_FIELD_STATUS			"status"
-#define CFG_FIELD_TYPE				"type"
+#define CFG_FIELD_SEC_MODE		"sec_mode"
+#define CFG_FIELD_SSID			"ssid"
+#define CFG_FIELD_STATUS		"status"
+#define CFG_FIELD_TYPE			"type"
 
 #if !(defined UNUSED_ARGUMENT)
 #define UNUSED_ARGUMENT(a)	(void)(a)
@@ -101,7 +101,7 @@
  * @format:		Debug message to log.
  * @args:		Additional arguments.
  */
-#define log_dr_debug(format, ...)									\
+#define log_dr_debug(format, ...)				\
 	log_debug("%s " format, DEVREQ_TAG, __VA_ARGS__)
 
 /**
@@ -110,7 +110,7 @@
  * @format:		Warning message to log.
  * @args:		Additional arguments.
  */
-#define log_dr_warning(format, ...)									\
+#define log_dr_warning(format, ...)				\
 	log_warning("%s " format, DEVREQ_TAG, __VA_ARGS__)
 
 /*
@@ -119,7 +119,7 @@
  * @format:		Error message to log.
  * @args:		Additional arguments.
  */
-#define log_dr_error(format, ...)									\
+#define log_dr_error(format, ...)				\
 	log_error("%s " format, DEVREQ_TAG, __VA_ARGS__)
 
 typedef struct {
@@ -252,9 +252,9 @@ static json_object *add_json_element(const char *name, json_object **root)
 }
 
 /*
- * add_bt_json() - Adds Bluetooth details to the provided json
+ * add_bt_json() - Adds Bluetooth details to the provided JSON
  *
- * @root:		Json object to add Bluetooth details.
+ * @root:	JSON object to add Bluetooth details.
  * @complete:	True to include enable and name.
  *
  * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
@@ -284,10 +284,10 @@ static ccapi_receive_error_t add_bt_json(json_object **root, bool complete)
 }
 
 /*
- * add_net_state_json() - Adds network details to the provided json
+ * add_net_state_json() - Adds network details to the provided JSON
  *
  * @i_state:	Network interface state to add.
- * @iface_item:	Json object to add network details.
+ * @iface_item:	JSON object to add network details.
  * @complete:	True to include enable and name.
  *
  * Return: 0 if success, 1 otherwise.
@@ -339,12 +339,12 @@ static int add_net_state_json(net_state_t i_state, json_object **iface_item, boo
 }
 
 /*
- * get_net_iface_json() - Returns a json object with the info of the network interface.
+ * get_net_iface_json() - Returns a JSON object with the info of the network interface.
  *
- * @name:		Network interface name.
+ * @name:	Network interface name.
  * @complete:	True to include status, type, gateway, netmask, dns1, and dns2.
  *
- * Return: The json object.
+ * Return: The JSON object.
  */
 static json_object *get_net_iface_json(const char *iface_name, bool complete)
 {
@@ -367,9 +367,9 @@ static json_object *get_net_iface_json(const char *iface_name, bool complete)
 }
 
 /*
- * add_net_ifaces_json() - Adds network interfaces details to the provided json
+ * add_net_ifaces_json() - Adds network interfaces details to the provided JSON
  *
- * @root:		Json object to add network interfaces details.
+ * @root:	JSON object to add network interfaces details.
  * @complete:	True to include status, type, gateway, netmask, dns1, and dns2.
  *
  * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
@@ -410,12 +410,12 @@ static ccapi_receive_error_t add_net_ifaces_json(json_object **root, bool comple
 }
 
 /*
- * get_wifi_iface_json() - Returns a json object with the info of the WiFi interface.
+ * get_wifi_iface_json() - Returns a JSON object with the info of the WiFi interface.
  *
- * @name:		Network interface name.
+ * @name:	Network interface name.
  * @complete:	True to include status, type, ssid, security mode, gateway, netmask, dns1, and dns2.
  *
- * Return: The json object.
+ * Return: The JSON object.
  */
 static json_object *get_wifi_iface_json(const char *iface_name, bool complete)
 {
@@ -449,9 +449,9 @@ error:
 }
 
 /*
- * add_wifi_ifaces_json() - Adds WiFi interfaces details to the provided json
+ * add_wifi_ifaces_json() - Adds WiFi interfaces details to the provided JSON
  *
- * @root:		Json object to add WiFi interfaces details.
+ * @root:	JSON object to add WiFi interfaces details.
  * @complete:	True to include status, type, ssid, security mode, gateway, netmask, dns1, and dns2.
  *
  * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
@@ -491,8 +491,8 @@ static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool compl
 /*
  * device_info_cb() - Data callback for 'device_info' device requests
  *
- * @target:					Target ID of the device request (device_info).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (device_info).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -805,8 +805,8 @@ done:
 /*
  * get_config_cb() - Data callback for 'get_config' device requests
  *
- * @target:					Target ID of the device request (get_config).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (get_config).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -1022,11 +1022,11 @@ done:
 }
 
 /*
- * get_ip_from_json() - Retrieves the IP value from the given json object field
+ * get_ip_from_json() - Retrieves the IP value from the given JSON object field
  *
- * @json_item:	JSon object.
- * @key:		Field name.
- * @ip:			A pointer to store the IP value.
+ * @json_item:	JSON object.
+ * @key:	Field name.
+ * @ip:		A pointer to store the IP value.
  *
  * Return: 0 if the field is not found, 1 if success, -1 if bad format.
  */
@@ -1056,10 +1056,10 @@ static int get_ip_from_json(json_object *json_item, const char *key,  uint8_t (*
 }
 
 /*
- * get_net_cfg_from_json() - Retrieves the network configuration from the JSon object
+ * get_net_cfg_from_json() - Retrieves the network configuration from the JSON object
  *
- * @json_item:	JSon object.
- * @iface_name: Interface name.
+ * @json_item:	JSON object.
+ * @iface_name:	Interface name.
  * @net_cfg:	A pointer to store the network configuration.
  *
  * Return: Number of valid fields if success, -1 if fails.
@@ -1129,10 +1129,10 @@ static int get_net_cfg_from_json(json_object *json_item, const char *iface_name,
 }
 
 /*
- * get_wifi_cfg_from_json() - Retrieves the WiFi configuration from the JSon object
+ * get_wifi_cfg_from_json() - Retrieves the WiFi configuration from the JSON object
  *
- * @json_item:	JSon object.
- * @iface_name: Interface name.
+ * @json_item:	JSON object.
+ * @iface_name:	Interface name.
  * @wifi_cfg:	A pointer to store the WiFi configuration.
  *
  * Return: 0 if success, 1 otherwise.
@@ -1188,11 +1188,11 @@ static int get_wifi_cfg_from_json(json_object *json_item, const char *iface_name
 }
 
 /*
- * get_wifi_config() - Retrieves the WiFi configurations from the JSon object
+ * get_wifi_config() - Retrieves the WiFi configurations from the JSON object
  *
- * @req:		Request JSon object.
+ * @req:	Request JSON object.
  * @wifi_cfgs:	Pointer to store configurations.
- * @resp:		Response JSon object.
+ * @resp:	Response JSON object.
  *
  * Return: The number of interfaces to configure, -1 for bad format, -2 for out of memory.
  */
@@ -1267,11 +1267,11 @@ error:
 }
 
 /*
- * get_eth_config() - Retrieves the Ethernet configurations from the JSon object
+ * get_eth_config() - Retrieves the Ethernet configurations from the JSON object
  *
- * @req:		Request JSon object.
+ * @req:	Request JSON object.
  * @wifi_cfgs:	Pointer to store configurations.
- * @resp:		Response JSon object.
+ * @resp:	Response JSON object.
  *
  * Return: The number of interfaces to configure, -1 for bad format, -2 for out of memory.
  */
@@ -1344,11 +1344,11 @@ error:
 }
 
 /*
- * get_bt_config() - Retrieves the Bluetooth from the JSon object
+ * get_bt_config() - Retrieves the Bluetooth from the JSON object
  *
- * @req:			Request JSon object.
+ * @req:		Request JSON object.
  * @bt_config_t:	Pointer to store the configuration.
- * @resp:			Response JSon object.
+ * @resp:		Response JSON object.
  *
  * Return: 0 if success, -1 for bad format, -2 for out of memory.
  */
@@ -1381,11 +1381,11 @@ static int get_bt_config(json_object *bt_req, bt_config_t *bt_cfg, json_object *
 }
 
 /*
- * get_system_monitor_config() - Retrieves the system monitor from the JSon object
+ * get_system_monitor_config() - Retrieves the system monitor from the JSON object
  *
- * @req:		Request JSon object.
- * @sm_cfg:		Pointer to store the configuration.
- * @resp:		Response JSon object.
+ * @req:	Request JSON object.
+ * @sm_cfg:	Pointer to store the configuration.
+ * @resp:	Response JSON object.
  *
  * Return: 0 if success, -1 for bad format, -2 for out of memory.
  */
@@ -1427,7 +1427,7 @@ static int get_system_monitor_config(json_object *sm_req, sys_mon_cfg_t *sm_cfg,
 /**
  * set_system_monitor_config() - Sets the system monitor configuration
  *
- * @sm_cfg:		The new configuration
+ * @sm_cfg:	The new configuration
  *
  * Return: 0 if success, 1 unable to start system monitor, -1 unable to save config.
  */
@@ -1470,8 +1470,8 @@ static int set_system_monitor_config(sys_mon_cfg_t sm_cfg)
 /*
  * set_config_cb() - Data callback for 'set_config' device requests
  *
- * @target:					Target ID of the device request (set_config).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (set_config).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -1758,8 +1758,8 @@ done:
 /*
  * get_time_cb() - Data callback for 'get_time' device requests
  *
- * @target:					Target ID of the device request (get_time).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (get_time).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -1791,8 +1791,8 @@ static ccapi_receive_error_t get_time_cb(char const *const target,
 /*
  * stop_cb() - Data callback for 'stop_cc' device requests
  *
- * @target:					Target ID of the device request (stop_cc).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (stop_cc).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -1824,8 +1824,8 @@ static ccapi_receive_error_t stop_cb(char const *const target, ccapi_transport_t
 /*
  * update_user_led_cb() - Data callback for 'user_led' device requests
  *
- * @target:					Target ID of the device request (user_led).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (user_led).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -1909,8 +1909,8 @@ exit:
 /*
  * play_music_cb() - Data callback for 'play_music' device requests
  *
- * @target:					Target ID of the device request (play_music).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (play_music).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -2025,8 +2025,8 @@ exit:
 /*
  * set_volume_cb() - Data callback for 'set_audio_volume' device requests
  *
- * @target:					Target ID of the device request (set_audio_volume).
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID of the device request (set_audio_volume).
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -2113,10 +2113,10 @@ exit:
 /*
  * request_status_cb() - Status callback for application device requests
  *
- * @target:                 Target ID of the device request.
- * @transport:              Communication transport used by the device request.
- * @response_buffer_info:   Buffer containing the response data.
- * @receive_error:          The error status of the receive process.
+ * @target:			Target ID of the device request.
+ * @transport:			Communication transport used by the device request.
+ * @response_buffer_info:	Buffer containing the response data.
+ * @receive_error:		The error status of the receive process.
  *
  * This callback is executed when the receive process has finished. It doesn't
  * matter if everything worked or there was an error during the process.
@@ -2144,11 +2144,6 @@ static void request_status_cb(char const *const target,
 		kill(getpid(), SIGINT);
 }
 
-/*
- * register_custom_device_requests() - Register custom device requests
- *
- * Return: Error code after registering the custom device requests.
- */
 ccapi_receive_error_t register_custom_device_requests(void)
 {
 	char *target = TARGET_DEVICE_INFO;

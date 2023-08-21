@@ -32,49 +32,97 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static void daemonize(char const *const daemon_name);
-static void signal_handler(int signum);
-static int get_lock(char const *const file_name);
-static void release_lock(int const fd);
-
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
 static volatile sig_atomic_t signal_from_child = 0;
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 /**
- * start_daemon() - Start a new daemon.
+ * release_lock() - Release the lock obtained with 'get_lock(file_name)'
  *
- * @name:	Daemon name.
- *
- * Return: 0 on success, 1 otherwise.
+ * @fd:	File descriptor of lock file.
  */
-int start_daemon(const char *name)
+static void release_lock(int const fd)
 {
-	int result = EXIT_SUCCESS;
-	int lock_fd = -1;
+	if (fd < 0)
+		return;
 
-	/* Daemonize if requested. */
-	lock_fd = get_lock(name);
-	if (lock_fd < 0) {
-		syslog(LOG_ERR, "Unable to start %s. It may be currently running", name);
-		result = EXIT_FAILURE;
-		goto done;
+	if (ftruncate(fd, 0) == -1)
+		syslog(LOG_ERR, "%s", "Could not truncate PID file");
+
+	if (lockf(fd, F_ULOCK, 0) == -1)
+		syslog(LOG_ERR, "%s", "Unable to unlock");
+
+	close(fd);
+}
+
+/**
+ * get_lock() - Try to get lock
+ *
+ * @file_name:	Name of the file used as lock inside '/var/lock'.
+ *
+ * Return: File descriptor of lock file, or -1 on error.
+ */
+static int get_lock(char const *const file_name)
+{
+	static char const path[] = "/var/lock/";
+	char full_path[sizeof(path) + strlen(file_name)];
+	int fd;
+
+	snprintf(full_path, sizeof(full_path), "%s%s", path, file_name);
+
+	fd = open(full_path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	if (fd == -1) {
+		syslog(LOG_ERR, "Could not open lock file '%s'", full_path);
+		goto error;
 	}
-	daemonize(name);
+
+	if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+		syslog(LOG_ERR, "Could not open lock file '%s'", full_path);
+		goto error;
+	}
+
+	if (ftruncate(fd, 0) != 0) {
+		syslog(LOG_ERR, "Could not truncate lock file '%s'", full_path);
+		goto error;
+	}
+
+	{
+		char buf[50];
+		int len = snprintf(buf, sizeof(buf), "%ld", (long) getpid());
+
+		if (write(fd, buf, len) != len) {
+			syslog(LOG_ERR, "Error writing to lock file '%s'", full_path);
+			goto error;
+		}
+	}
+	goto done;
+
+error:
+	release_lock(fd);
+	fd = -1;
 
 done:
-	/* Clean up. */
-	syslog(LOG_INFO, "%s", "Daemon terminated");
-	release_lock(lock_fd);
+	return fd;
+}
 
-	return result;
+/**
+ * signal_handler() - Manage signal received.
+ *
+ * @signum: Received signal.
+ */
+static void signal_handler(int signum)
+{
+	switch (signum) {
+	case SIGALRM:
+		/* Ignore this signal.*/
+		break;
+	case SIGUSR1:
+		signal_from_child = 1;
+		break;
+	case SIGCHLD:
+		exit(EXIT_FAILURE);
+		break;
+	default:
+		break;
+	}
 }
 
 /**
@@ -189,93 +237,24 @@ static void daemonize(char const *const name)
 	kill(parent, SIGUSR1);
 }
 
-/**
- * signal_handler() - Manage signal received.
- *
- * @signum: Received signal.
- */
-static void signal_handler(int signum)
+int start_daemon(const char *name)
 {
-	switch (signum) {
-	case SIGALRM:
-		/* Ignore this signal.*/
-		break;
-	case SIGUSR1:
-		signal_from_child = 1;
-		break;
-	case SIGCHLD:
-		exit(EXIT_FAILURE);
-		break;
-	default:
-		break;
+	int result = EXIT_SUCCESS;
+	int lock_fd = -1;
+
+	/* Daemonize if requested. */
+	lock_fd = get_lock(name);
+	if (lock_fd < 0) {
+		syslog(LOG_ERR, "Unable to start %s. It may be currently running", name);
+		result = EXIT_FAILURE;
+		goto done;
 	}
-}
-
-/**
- * get_lock() - Try to get lock
- *
- * @file_name:	Name of the file used as lock inside '/var/lock'.
- *
- * Return: File descriptor of lock file, or -1 on error.
- */
-static int get_lock(char const *const file_name)
-{
-	static char const path[] = "/var/lock/";
-	char full_path[sizeof(path) + strlen(file_name)];
-	int fd;
-
-	snprintf(full_path, sizeof(full_path), "%s%s", path, file_name);
-
-	fd = open(full_path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-	if (fd == -1) {
-		syslog(LOG_ERR, "Could not open lock file '%s'", full_path);
-		goto error;
-	}
-
-	if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
-		syslog(LOG_ERR, "Could not open lock file '%s'", full_path);
-		goto error;
-	}
-
-	if (ftruncate(fd, 0) != 0) {
-		syslog(LOG_ERR, "Could not truncate lock file '%s'", full_path);
-		goto error;
-	}
-
-	{
-		char buf[50];
-		int len = snprintf(buf, sizeof(buf), "%ld", (long) getpid());
-
-		if (write(fd, buf, len) != len) {
-			syslog(LOG_ERR, "Error writing to lock file '%s'", full_path);
-			goto error;
-		}
-	}
-	goto done;
-
-error:
-	release_lock(fd);
-	fd = -1;
+	daemonize(name);
 
 done:
-	return fd;
-}
+	/* Clean up. */
+	syslog(LOG_INFO, "%s", "Daemon terminated");
+	release_lock(lock_fd);
 
-/**
- * release_lock() - Release the lock obtained with 'get_lock(file_name)'
- *
- * @fd:	File descriptor of lock file.
- */
-static void release_lock(int const fd)
-{
-	if (fd < 0)
-		return;
-
-	if (ftruncate(fd, 0) == -1)
-		syslog(LOG_ERR, "%s", "Could not truncate PID file");
-
-	if (lockf(fd, F_ULOCK, 0) == -1)
-		syslog(LOG_ERR, "%s", "Unable to unlock");
-
-	close(fd);
+	return result;
 }

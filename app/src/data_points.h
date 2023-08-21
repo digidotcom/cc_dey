@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -22,11 +22,25 @@
 
 #include <stdbool.h>
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
+/*
+ * start_monitoring() - Start monitoring
+ *
+ * The variables being monitored are: USER_BUTTON.
+ *
+ * Return: 0 on success, 1 otherwise.
+ */
 int start_monitoring(void);
+
+/*
+ * is_monitoring() - Check monitor status
+ *
+ * Return: True if demo monitor is running, false otherwise.
+ */
 bool is_monitoring(void);
+
+/*
+ * stop_monitoring() - Stop monitoring
+ */
 void stop_monitoring(void);
 
 #endif /* DATA_POINTS_H_ */

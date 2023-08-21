@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -22,6 +22,11 @@
 
 #include <cloudconnector.h>
 
+/*
+ * register_custom_device_requests() - Register custom device requests
+ *
+ * Return: Error code after registering the custom device requests.
+ */
 ccapi_receive_error_t register_custom_device_requests(void);
 
 #endif /* DEVICE_REQUEST_H_ */

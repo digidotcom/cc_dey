@@ -28,7 +28,7 @@
 #include "ccimp/ccimp_logging.h"
 
 #if (defined UNIT_TEST)
-#define ccimp_hal_logging_vprintf		ccimp_hal_logging_vprintf_real
+#define ccimp_hal_logging_vprintf	ccimp_hal_logging_vprintf_real
 #endif
 
 #if (defined CCIMP_DEBUG_ENABLED)
@@ -89,9 +89,8 @@ static void unlock(void)
 {
 	int const result = pthread_mutex_unlock(&buffer.mutex);
 
-	if (result != 0) {
+	if (result != 0)
 		log_error(CCAPI_DEBUG_PREFIX "pthread_mutex_unlock() failure: %d", result);
-	}
 }
 
 static void buffer_printf(char const * const format, va_list args)
@@ -129,12 +128,11 @@ static void buffer_printf(char const * const format, va_list args)
 
 static void buffer_flush(void)
 {
-	char * state;
-	char * line;
+	char *state;
+	char *line;
 
-	for (char * s = buffer.data; (line = strtok_r(s, "\n", &state)); s = NULL) {
+	for (char *s = buffer.data; (line = strtok_r(s, "\n", &state)); s = NULL)
 		syslog(LOG_DEBUG, "%s", line);
-	}
 
 	buffer.offset = 0;
 	buffer.remaining = buffer.length;
@@ -210,8 +208,7 @@ void ccimp_hal_logging_vprintf(debug_t const debug, char const * const format, v
 	if (!buffer.init)
 		return;
 
-	switch (debug)
-	{
+	switch (debug) {
 		case debug_beg:
 		case debug_all:
 		{
@@ -231,8 +228,7 @@ void ccimp_hal_logging_vprintf(debug_t const debug, char const * const format, v
 
 	buffer_printf(format, args);
 
-	switch (debug)
-	{
+	switch (debug) {
 		case debug_end:
 		case debug_all:
 		{

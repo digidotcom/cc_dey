@@ -35,30 +35,27 @@
 #include "cc_utils.h"
 #include "utils.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define LOOP_MS						100
+#define LOOP_MS				100
 
-#define MAX_LENGTH					256
+#define MAX_LENGTH			256
 
 #define MAX_DP_IN_COLLECTION		250
 
-#define SYSTEM_MONITOR_TAG			"SYSMON:"
+#define SYSTEM_MONITOR_TAG		"SYSMON:"
 
 #ifdef ENABLE_BT
-#define BLUETOOTH_INTERFACE			"hci0"
+#define BLUETOOTH_INTERFACE		"hci0"
 #endif /* ENABLE_BT */
 
-#define METRIC_FREE_MEMORY			"free_memory"
-#define METRIC_USED_MEMORY			"used_memory"
-#define METRIC_CPU_LOAD				"cpu_load"
-#define METRIC_CPU_TEMP				"cpu_temperature"
-#define METRIC_FREQ					"frequency"
-#define METRIC_UPTIME				"uptime"
-#define METRIC_STATE				"state"
-#define METRIC_RX_BYTES				"rx_bytes"
-#define METRIC_TX_BYTES				"tx_bytes"
+#define METRIC_FREE_MEMORY		"free_memory"
+#define METRIC_USED_MEMORY		"used_memory"
+#define METRIC_CPU_LOAD			"cpu_load"
+#define METRIC_CPU_TEMP			"cpu_temperature"
+#define METRIC_FREQ			"frequency"
+#define METRIC_UPTIME			"uptime"
+#define METRIC_STATE			"state"
+#define METRIC_RX_BYTES			"rx_bytes"
+#define METRIC_TX_BYTES			"tx_bytes"
 
 #define SYS_MON_DATA_STREAM_PREFIX	"system_monitor/"
 
@@ -66,8 +63,8 @@
 #define DATA_STREAM_USED_MEMORY		SYS_MON_DATA_STREAM_PREFIX METRIC_USED_MEMORY
 #define DATA_STREAM_CPU_LOAD		SYS_MON_DATA_STREAM_PREFIX METRIC_CPU_LOAD
 #define DATA_STREAM_CPU_TEMP		SYS_MON_DATA_STREAM_PREFIX METRIC_CPU_TEMP
-#define DATA_STREAM_FREQ			SYS_MON_DATA_STREAM_PREFIX METRIC_FREQ
-#define DATA_STREAM_UPTIME			SYS_MON_DATA_STREAM_PREFIX METRIC_UPTIME
+#define DATA_STREAM_FREQ		SYS_MON_DATA_STREAM_PREFIX METRIC_FREQ
+#define DATA_STREAM_UPTIME		SYS_MON_DATA_STREAM_PREFIX METRIC_UPTIME
 
 #define DATA_STREAM_NET_STATE		SYS_MON_DATA_STREAM_PREFIX "%s/" METRIC_STATE
 #define DATA_STREAM_NET_TRAFFIC_RX	SYS_MON_DATA_STREAM_PREFIX "%s/" METRIC_RX_BYTES
@@ -81,13 +78,37 @@
 #define DATA_STREAM_STATE_UNITS		"state"
 #define DATA_STREAM_BYTES_UNITS		"bytes"
 
-#define FILE_CPU_LOAD				"/proc/stat"
-#define FILE_CPU_TEMP				"/sys/class/thermal/thermal_zone0/temp"
-#define FILE_CPU_FREQ				"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq"
+#define FILE_CPU_LOAD			"/proc/stat"
+#define FILE_CPU_TEMP			"/sys/class/thermal/thermal_zone0/temp"
+#define FILE_CPU_FREQ			"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq"
 
-/*------------------------------------------------------------------------------
-                 D A T A    T Y P E S    D E F I N I T I O N S
-------------------------------------------------------------------------------*/
+/**
+ * log_sm_debug() - Log the given message as debug
+ *
+ * @format:		Debug message to log.
+ * @args:		Additional arguments.
+ */
+#define log_sm_debug(format, ...)					\
+	log_debug("%s " format, SYSTEM_MONITOR_TAG, __VA_ARGS__)
+
+/**
+ * log_sm_info() - Log the given message as info
+ *
+ * @format:		Info message to log.
+ * @args:		Additional arguments.
+ */
+#define log_sm_info(format, ...)					\
+	log_info("%s " format, SYSTEM_MONITOR_TAG, __VA_ARGS__)
+
+/**
+ * log_sm_error() - Log the given message as error
+ *
+ * @format:		Error message to log.
+ * @args:		Additional arguments.
+ */
+#define log_sm_error(format, ...)					\
+	log_error("%s " format, SYSTEM_MONITOR_TAG, __VA_ARGS__)
+
 typedef enum {
 	STREAM_FREE_MEM,
 	STREAM_USED_MEM,
@@ -113,66 +134,6 @@ typedef struct {
 	int n_streams;
 } stream_list_t;
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static void *system_monitor_threaded(void *cc_cfg);
-static void system_monitor_loop(const cc_cfg_t *const cc_cfg);
-static ccapi_dp_error_t init_system_monitor(const cc_cfg_t *const cc_cfg);
-static ccapi_dp_error_t init_iface_streams(const char *const iface_name, stream_list_t *stream_list, const cc_cfg_t *const cc_cfg);
-static ccapi_dp_error_t init_sys_streams(const cc_cfg_t *const cc_cfg);
-static ccapi_dp_error_t init_net_streams(const cc_cfg_t *const cc_cfg);
-static void add_samples(void);
-static void add_sys_samples(ccapi_timestamp_t timestamp);
-static void add_net_samples(ccapi_timestamp_t timestamp);
-#ifdef ENABLE_BT
-static ccapi_dp_error_t init_bt_streams(const cc_cfg_t *const cc_cfg);
-static void add_bt_samples(ccapi_timestamp_t timestamp);
-#endif /* ENABLE_BT */
-static double get_free_memory(void);
-static double get_used_memory(void);
-static double get_cpu_load(void);
-static double get_cpu_temp(void);
-static unsigned long get_cpu_freq(void);
-static unsigned long get_uptime(void);
-static void free_stream_list(stream_list_t *stream_list);
-static ccapi_bool_t should_read_metric(char *metric_name, const cc_cfg_t *const cc_cfg);
-static ccapi_bool_t should_read_interface(char *iface_name, const cc_cfg_t *const cc_cfg);
-static ccapi_bool_t value_matches_wildcard_pattern(char* value, char* pattern);
-
-/*------------------------------------------------------------------------------
-                                  M A C R O S
-------------------------------------------------------------------------------*/
-/**
- * log_sm_debug() - Log the given message as debug
- *
- * @format:		Debug message to log.
- * @args:		Additional arguments.
- */
-#define log_sm_debug(format, ...)									\
-	log_debug("%s " format, SYSTEM_MONITOR_TAG, __VA_ARGS__)
-
-/**
- * log_sm_info() - Log the given message as info
- *
- * @format:		Info message to log.
- * @args:		Additional arguments.
- */
-#define log_sm_info(format, ...)									\
-	log_info("%s " format, SYSTEM_MONITOR_TAG, __VA_ARGS__)
-
-/**
- * log_sm_error() - Log the given message as error
- *
- * @format:		Error message to log.
- * @args:		Additional arguments.
- */
-#define log_sm_error(format, ...)									\
-	log_error("%s " format, SYSTEM_MONITOR_TAG, __VA_ARGS__)
-
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
 static volatile bool stop_requested = false;
 static volatile bool dp_thread_valid = false;
 static pthread_t dp_thread;
@@ -251,176 +212,434 @@ static stream_t sys_streams_formats[] = {
 	}
 };
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 /*
- * start_system_monitor() - Start the monitoring of system variables
+ * free_stream_list() - Free the stream list
  *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
- *
- * The variables being monitored are: CPU temperature, CPU load, and free
- * memory.
- *
- * Return: Error code after starting the monitoring.
+ * @stream_list:	The list to free.
  */
-cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
+static void free_stream_list(stream_list_t *stream_list)
 {
-	pthread_attr_t attr;
-	int error;
+	int i;
 
-	if (!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
-		return CC_SYS_MON_ERROR_NONE;
-
-	if (dp_thread_valid)
-		return CC_SYS_MON_ERROR_NONE;
-
-	error = pthread_attr_init(&attr);
-	if (error != 0) {
-		/* On Linux this function always succeeds. */
-		log_sm_error("pthread_attr_init() error %d", error);
-	}
-	stop_requested = false;
-	dp_thread_valid = (pthread_create(&dp_thread, &attr, system_monitor_threaded, (void *) cc_cfg) == 0);
-	pthread_attr_destroy(&attr);
-	if (!dp_thread_valid) {
-		log_sm_error("Error while starting the system monitor, %d", error);
-		return CC_SYS_MON_ERROR_THREAD;
+	for (i = 0; i < stream_list->n_streams; i++) {
+		free(stream_list->streams[i].name);
+		free(stream_list->streams[i].path);
 	}
 
-	return CC_SYS_MON_ERROR_NONE;
+	free(stream_list->streams);
+
+	stream_list->n_streams = 0;
 }
 
 /*
- * is_system_monitor_running() - Check system monitor status
+ * value_matches_wildcard_pattern() - Determines whether the given value matches
+ *                                    the given wildcard pattern.
  *
- * Return: True if system monitor is running, false if it is not.
+ * @value:	The string to check.
+ * @pattern:	The pattern string.
+ *
+ * Return: 'true' if the value matches the wildcard pattern, 'false' otherwise.
  */
-ccapi_bool_t is_system_monitor_running(void) {
-	return dp_thread_valid ? CCAPI_TRUE : CCAPI_FALSE;
-}
-
-/*
- * stop_system_monitor() - Stop the monitoring of system variables
- */
-void stop_system_monitor(void)
+static bool value_matches_wildcard_pattern(char *value, char *pattern)
 {
-	stop_requested = true;
+	int wildcard = 0;
+	char *last_pattern_start = 0;
+	char *last_value_start = 0;
 
-	if (dp_thread_valid) {
-		dp_thread_valid = false;
-		pthread_cancel(dp_thread);
-		pthread_join(dp_thread, NULL);
-	}
+	do {
+		if (*pattern == *value) {
+			if (wildcard == 1)
+				last_value_start = value + 1;
 
-	free_stream_list(&sys_stream_list);
-	free_stream_list(&net_stream_list);
-#ifdef ENABLE_BT
-	free_stream_list(&bt_stream_list);
-#endif /* ENABLE_BT */
-	ccapi_dp_destroy_collection(dp_collection);
+			value++;
+			pattern++;
+			wildcard = 0;
+		} else if (*pattern == '?') {
+			if (*value == '\0') /* the value has ended but a char was expected */
+				return false;
 
-	log_sm_info("%s", "Stop monitoring the system");
-}
+			if (wildcard == 1)
+				last_value_start = value + 1;
 
-/*
- * system_monitor_threaded() - Execute the system monitoring in a new thread
- *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
- */
-static void *system_monitor_threaded(void *cc_cfg)
-{
-	ccapi_dp_error_t dp_error = init_system_monitor(cc_cfg);
-	if (dp_error != CCAPI_DP_ERROR_NONE)
-		/* The data point collection could not be created. */
-		return NULL;
+			value++;
+			pattern++;
+			wildcard = 0;
+		} else if (*pattern == '*') {
+			if (*(pattern + 1) == '\0')
+				return true;
 
-	system_monitor_loop(cc_cfg);
+			last_pattern_start = pattern;
+			wildcard = 1;
 
-	pthread_exit(NULL);
-
-	return NULL;
-}
-
-/*
- * system_monitor_loop() - Start the system monitoring loop
- *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
- *
- * This loop reads the values of the parameters to monitor every
- * 'cc_cfg->sys_mon_sample_rate' seconds and send them to Remote Manager when
- * the number of samples per parameter is at least
- * 'cc_cfg->sys_mon_num_samples_upload'.
- *
- * The monitored values are defined in 'cc_cfg->sys_mon_metrics'.
- */
-static void system_monitor_loop(const cc_cfg_t *const cc_cfg)
-{
-	log_sm_info("%s", "Start monitoring the system");
-
-	while (!stop_requested) {
-		uint32_t n_samples_to_send = (sys_stream_list.n_streams + net_stream_list.n_streams) * cc_cfg->sys_mon_num_samples_upload;
-#ifdef ENABLE_BT
-		n_samples_to_send += bt_stream_list.n_streams * cc_cfg->sys_mon_num_samples_upload;
-#endif /* ENABLE_BT */
-		long n_loops = cc_cfg->sys_mon_sample_rate * 1000 / LOOP_MS;
-		uint32_t count = 0;
-		long loop;
-
-		add_samples();
-
-		ccapi_dp_get_collection_points_count(dp_collection, &count);
-		while (count > MAX_DP_IN_COLLECTION) {
-			log_sm_debug("%s", "Removing old data points...");
-			ccapi_dp_remove_older_data_point_from_streams(dp_collection);
-			ccapi_dp_get_collection_points_count(dp_collection, &count);
-		}
-
-		if (count >= n_samples_to_send && !stop_requested) {
-			ccapi_dp_error_t dp_error;
-
-			/*
-			 * TODO: If the connection is lost, this thread blocks at this point
-			 * and does not continue collecting data points.
-			 *
-			 * The expected behavior is an error after a timeout to keep the
-			 * sampling process, so all the collected data is sent when the
-			 * connection is restored.
-			 * We tried to get this by using 'ccapi_dp_send_collection_with_reply'
-			 * but it seems it does not work:
-			 *
-			 * unsigned long timeout = 2; // seconds
-			 * dp_error = ccapi_dp_send_collection_with_reply(CCAPI_TRANSPORT_TCP, dp_collection, timeout, NULL);
-			 */
-			if (get_cloud_connection_status() == CC_STATUS_CONNECTED) {
-				log_sm_debug("%s", "Sending system monitor samples");
-				dp_error = ccapi_dp_send_collection(CCAPI_TRANSPORT_TCP, dp_collection);
-				if (dp_error != CCAPI_DP_ERROR_NONE)
-					log_sm_error("Error sending system monitor samples, %d", dp_error);
+			pattern++;
+		} else if (wildcard) {
+			if (*value == *pattern) {
+				wildcard = 0;
+				value++;
+				pattern++;
+				last_value_start = value + 1 ;
+			} else {
+				value++;
+			}
+		} else {
+			if (*pattern == '\0' && *value == '\0') {  /* end of mask */
+				return true; /* if the value also ends here then the pattern match */
+			} else {
+				if (last_pattern_start != 0) { /* try to restart the mask on the rest */
+					pattern = last_pattern_start;
+					value = last_value_start;
+					last_value_start = 0;
+				} else {
+					return false;
+				}
 			}
 		}
 
-		for (loop = 0; loop < n_loops; loop++) {
-			struct timespec sleepValue = {0};
+	} while (*value);
 
-			if (stop_requested)
-				break;
+	return *pattern == '\0';
+}
 
-			sleepValue.tv_nsec = LOOP_MS * 1000 * 1000;
-			nanosleep(&sleepValue, NULL);
+/*
+ * should_read_metric() - Determines whether the given metric must be read or not
+ *                        based on the given configuration.
+ *
+ * @metric_name:	The metric name.
+ * @cc_cfg:		The Cloud Connector configuration.
+ *
+ * Return: 'true' if metric should be read, 'false' otherwise.
+ */
+static bool should_read_metric(char *metric_name, const cc_cfg_t *const cc_cfg)
+{
+	unsigned int i;
+
+	if (cc_cfg->sys_mon_all_metrics)
+		return true;
+
+	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++) {
+		char *metric = cc_cfg->sys_mon_metrics[i];
+
+		/* Sanity check. */
+		if (metric == NULL)
+			continue;
+
+		/* Check if the metric name matches the metric wildcard. */
+		if (value_matches_wildcard_pattern(metric_name, metric))
+			return true;
+
+		/* Check if the metric name is composed. */
+		if (strchr(metric_name, '/') != NULL) {
+			char *interface = NULL;
+			ccapi_bool_t matches = false;
+			char *metric_name_copy = strdup(metric_name);
+
+			if (metric_name_copy == NULL) {
+				log_sm_error("%s", "Not enough memory to check metrics criteria");
+				continue;
+			}
+			/* Extract interface from the metric name. */
+			interface = (char *)strtok(metric_name_copy, "/");
+			if (interface == NULL) {
+				free(metric_name_copy);
+				continue;
+			}
+			/* Check if the interface matches the metric. */
+			matches = strcmp(interface, metric) == 0;
+			free(metric_name_copy);
+			if (matches)
+				return true;
 		}
 	}
+
+	return false;
 }
+
+/*
+ * should_read_interface() - Determines whether the given interface must be read or not
+ *                           based on the given configuration.
+ *
+ * @iface_name:	The interface name.
+ * @cc_cfg:	The Cloud Connector configuration.
+ *
+ * Return: 'true' if interface should be read, 'false' otherwise.
+ */
+static bool should_read_interface(char *iface_name, const cc_cfg_t *const cc_cfg)
+{
+	unsigned int i;
+
+	if (cc_cfg->sys_mon_all_metrics)
+		return true;
+
+	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++) {
+		char *metric = cc_cfg->sys_mon_metrics[i];
+
+		/* Sanity check. */
+		if (metric == NULL)
+			continue;
+
+		/* Check if the interface matches the metric wildcard. */
+		if (value_matches_wildcard_pattern(iface_name, metric))
+			return true;
+
+		/* Check if the metric is composed. */
+		if (strchr(metric, '/') != NULL) {
+			char *iface_wildcard = NULL;
+			ccapi_bool_t matches = false;
+			char *metric_copy = strdup(metric);
+
+			if (metric_copy == NULL) {
+				log_sm_error("%s", "Not enough memory to check metrics criteria");
+				continue;
+			}
+			/* Extract interface wildcard from the metric. */
+			iface_wildcard = (char *)strtok(metric_copy, "/");
+			if (iface_wildcard == NULL) {
+				free(metric_copy);
+				continue;
+			}
+			/* Check if the interface name matches the interface wildcard. */
+			matches = value_matches_wildcard_pattern(iface_name, iface_wildcard);
+			free(metric_copy);
+			if (matches)
+				return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * init_sys_streams() - Add the system data point streams to collection
+ *
+ * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
+ * 		settings from the configuration file are stored.
+ *
+ * Return: Error code after the addition to the collection.
+ *
+ * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
+ * problem creating the collection.
+ */
+static ccapi_dp_error_t init_sys_streams(const cc_cfg_t *const cc_cfg)
+{
+	unsigned int i;
+	int n_metrics_to_monitor = 0;
+	ccapi_dp_error_t dp_error = CCAPI_DP_ERROR_NONE;
+
+	/* Calculate the number of metrics to monitor. */
+	for (i = 0; i < ARRAY_SIZE(sys_streams_formats); i++) {
+		if (should_read_metric(sys_streams_formats[i].name, cc_cfg))
+			n_metrics_to_monitor += 1;
+	}
+
+	/* Allocate memory for the metric streams. */
+	sys_stream_list.streams = calloc(n_metrics_to_monitor, sizeof(stream_t));
+	if (sys_stream_list.streams == NULL) {
+		log_sm_error("Cannot initialize system metrics: %s", "Out of memory");
+		dp_error = CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
+		goto error;
+	}
+
+	/* Initialize streams. */
+	for (i = 0; i < ARRAY_SIZE(sys_streams_formats); i++) {
+		stream_t stream_format = sys_streams_formats[i];
+		stream_t *stream = &sys_stream_list.streams[sys_stream_list.n_streams];
+
+		/* Check if the metric should be skipped. */
+		if (!should_read_metric(stream_format.name, cc_cfg)) {
+			log_sm_debug("Skipping metric '%s'...", stream_format.name);
+			continue;
+		}
+
+		sys_stream_list.n_streams++;
+
+		stream->name = strdup(stream_format.name);
+		stream->path = strdup(stream_format.path);
+		stream->format = stream_format.format;
+		stream->units = stream_format.units;
+		stream->type = stream_format.type;
+		if (stream->name == NULL || stream->path == NULL) {
+			log_sm_error("Cannot initialize '%s' metric stream: Out of memory", stream_format.name);
+			dp_error = CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
+			goto error;
+		}
+
+		dp_error = ccapi_dp_add_data_stream_to_collection_extra(
+					dp_collection, stream->path, stream->format, stream->units, NULL);
+		if (dp_error != CCAPI_DP_ERROR_NONE) {
+			log_sm_error("Cannot add '%s' stream to data point collection, error %d",
+				stream->path, dp_error);
+			goto error;
+		}
+	}
+
+error:
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		free_stream_list(&sys_stream_list);
+
+	return dp_error;
+}
+
+/*
+ * init_iface_streams() - Add to collection the given interface data point streams
+ *
+ * @iface_name:		Name of the interface to init.
+ * @stream_list:	Structure to initialize.
+ * @cc_cfg:		Connector configuration struct (cc_cfg_t) where the
+ * 			parsed settings from the configuration file are stored.
+ *
+ * Return: Error code after the addition to the collection.
+ *
+ * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
+ * problem creating the collection.
+ */
+static ccapi_dp_error_t init_iface_streams(const char *const iface_name, stream_list_t *stream_list, const cc_cfg_t *const cc_cfg)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(net_stream_formats); i++) {
+		char *metric_name;
+		void *tmp;
+		stream_t *stream = NULL;
+		size_t path_len = 0;
+		stream_t stream_format = net_stream_formats[i];
+		ccapi_dp_error_t dp_error;
+
+		/* Build metric name. */
+		metric_name = calloc(snprintf(NULL, 0, "%s/%s", iface_name, stream_format.name) + 1, sizeof(*metric_name));
+		if (metric_name == NULL) {
+			log_sm_error("Cannot initialize interface '%s' metric name '%s': Out of memory", iface_name, net_stream_formats[i].name);
+			return CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
+		}
+		sprintf(metric_name, "%s/%s", iface_name, stream_format.name);
+
+		/* Check if metric should be measured. */
+		if (!should_read_metric(metric_name, cc_cfg)) {
+			log_sm_debug("Skipping %s...", metric_name);
+			free(metric_name);
+			continue;
+		}
+		free(metric_name);
+
+		/* Allocate memory for the metric stream. */
+		if (stream_list->streams == NULL)
+			tmp = calloc(1, sizeof(stream_t));
+		else
+			tmp = realloc(stream_list->streams, (stream_list->n_streams + 1) * sizeof(stream_t));
+
+		if (tmp == NULL) {
+			log_sm_error("Cannot initialize interface '%s' metric '%s': Out of memory", iface_name, net_stream_formats[i].name);
+			return CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
+		}
+		stream_list->streams = tmp;
+
+		stream = &stream_list->streams[stream_list->n_streams];
+		path_len = snprintf(NULL, 0, stream_format.path, iface_name);
+
+		stream_list->n_streams++;
+
+		stream->name = strdup(iface_name);
+		stream->path = calloc(path_len + 1, sizeof(char));
+		if (stream->name == NULL || stream->path == NULL) {
+			log_sm_error("Cannot initialize interface '%s' metric '%s': Out of memory", iface_name, net_stream_formats[i].name);
+			return CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
+		}
+
+		sprintf(stream->path, stream_format.path, iface_name);
+
+		stream->format = stream_format.format;
+		stream->units = stream_format.units;
+		stream->type = stream_format.type;
+
+		dp_error = ccapi_dp_add_data_stream_to_collection_extra(
+					dp_collection, stream->path, stream->format, stream->units, NULL);
+		if (dp_error != CCAPI_DP_ERROR_NONE) {
+			log_sm_error("Cannot add '%s' stream to data point collection, error %d",
+				stream->path, dp_error);
+			return dp_error;
+		}
+	}
+
+	return CCAPI_DP_ERROR_NONE;
+}
+
+/*
+ * init_net_streams() - Add the network interfaces data point streams to
+ *                      collection
+ *
+ * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
+ * 		settings from the configuration file are stored.
+ *
+ * Return: Error code after the addition to the collection.
+ *
+ * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
+ * problem creating the collection.
+ */
+static ccapi_dp_error_t init_net_streams(const cc_cfg_t *const cc_cfg)
+{
+	ccapi_dp_error_t dp_error;
+	net_names_list_t list_ifaces;
+	int i;
+
+	if (ldx_net_list_available_ifaces(&list_ifaces) <= 0)
+		return CCAPI_DP_ERROR_NONE;
+
+	for (i = 0; i < list_ifaces.n_ifaces; i++) {
+		/* Check if the interface should be skipped. */
+		if (!should_read_interface(list_ifaces.names[i], cc_cfg)) {
+			log_sm_debug("Skipping interface '%s'...", list_ifaces.names[i]);
+			continue;
+		}
+		dp_error = init_iface_streams(list_ifaces.names[i], &net_stream_list, cc_cfg);
+		if (dp_error != CCAPI_DP_ERROR_NONE)
+			goto error;
+	}
+
+	dp_error = CCAPI_DP_ERROR_NONE;
+
+error:
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		free_stream_list(&net_stream_list);
+
+	return dp_error;
+}
+
+#ifdef ENABLE_BT
+/*
+ * init_bt_streams() - Add Bluetooth interface data point streams to collection
+ *
+ * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
+ * 		settings from the configuration file are stored.
+ *
+ * Return: Error code after the addition to the collection.
+ *
+ * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
+ * problem creating the collection.
+ */
+static ccapi_dp_error_t init_bt_streams(const cc_cfg_t *const cc_cfg)
+{
+	ccapi_dp_error_t dp_error;
+
+	/* Check if the interface should be skipped. */
+	if (!should_read_interface(BLUETOOTH_INTERFACE, cc_cfg)) {
+		log_sm_debug("Skipping interface '%s'...", BLUETOOTH_INTERFACE);
+		return CCAPI_DP_ERROR_NONE;
+	}
+
+	/* Initialize streams. */
+	dp_error = init_iface_streams(BLUETOOTH_INTERFACE, &bt_stream_list, cc_cfg);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		free_stream_list(&bt_stream_list);
+
+	return dp_error;
+}
+#endif /* ENABLE_BT */
 
 /*
  * init_system_monitor() - Create and initialize the system monitor data point
  *                         collection
  *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
+ * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
+ * 		settings from the configuration file are stored.
  *
  * Return: Error code after the initialization of the system monitor collection.
  *
@@ -462,251 +681,157 @@ static ccapi_dp_error_t init_system_monitor(const cc_cfg_t *const cc_cfg)
 }
 
 /*
- * init_sys_streams() - Add the system data point streams to collection
+ * get_free_memory() - Get the free memory of the system
  *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
- *
- * Return: Error code after the addition to the collection.
- *
- * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
- * problem creating the collection.
+ * Return: The free memory of the system in kB, -1 if error.
  */
-static ccapi_dp_error_t init_sys_streams(const cc_cfg_t *const cc_cfg)
+static double get_free_memory(void)
 {
-	unsigned int i;
-	int n_metrics_to_monitor = 0;
-	ccapi_dp_error_t dp_error = CCAPI_DP_ERROR_NONE;
+	struct sysinfo info;
 
-	/* Calculate the number of metrics to monitor. */
-	for (i = 0; i < ARRAY_SIZE(sys_streams_formats); i++) {
-		if (should_read_metric(sys_streams_formats[i].name, cc_cfg)) {
-			n_metrics_to_monitor += 1;
-		}
+	if (sysinfo(&info) != 0) {
+		log_sm_error("%s", "Error getting free memory");
+		return -1;
 	}
 
-	/* Allocate memory for the metric streams. */
-	sys_stream_list.streams = calloc(n_metrics_to_monitor, sizeof(stream_t));
-	if (sys_stream_list.streams == NULL) {
-		log_sm_error("Cannot initialize system metrics: %s", "Out of memory");
-		dp_error = CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
-		goto error;
-	}
-
-	/* Initialize streams. */
-	for (i = 0; i < ARRAY_SIZE(sys_streams_formats); i++) {
-		/* Check if the metric should be skipped. */
-		if (!should_read_metric(sys_streams_formats[i].name, cc_cfg)) {
-			log_sm_debug("Skipping metric '%s'...", sys_streams_formats[i].name);
-			continue;
-		}
-
-		stream_t stream_format = sys_streams_formats[i];
-		stream_t *stream = &sys_stream_list.streams[sys_stream_list.n_streams];
-
-		sys_stream_list.n_streams++;
-
-		stream->name = strdup(sys_streams_formats[i].name);
-		stream->path = strdup(sys_streams_formats[i].path);
-		stream->format = stream_format.format;
-		stream->units = stream_format.units;
-		stream->type = stream_format.type;
-		if (stream->name == NULL || stream->path == NULL) {
-			log_sm_error("Cannot initialize '%s' metric stream: Out of memory", sys_streams_formats[i].name);
-			dp_error = CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
-			goto error;
-		}
-
-		dp_error = ccapi_dp_add_data_stream_to_collection_extra(
-					dp_collection, stream->path, stream->format, stream->units, NULL);
-		if (dp_error != CCAPI_DP_ERROR_NONE) {
-			log_sm_error("Cannot add '%s' stream to data point collection, error %d",
-				stream->path, dp_error);
-			goto error;
-		}
-	}
-
-error:
-	if (dp_error != CCAPI_DP_ERROR_NONE)
-		free_stream_list(&sys_stream_list);
-
-	return dp_error;
+	return info.freeram / 1024;
 }
 
 /*
- * init_net_streams() - Add the network interfaces data point streams to
- *                      collection
+ * get_used_memory() - Get the used memory of the system
  *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
- *
- * Return: Error code after the addition to the collection.
- *
- * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
- * problem creating the collection.
+ * Return: The used memory of the system in kB, -1 if error.
  */
-static ccapi_dp_error_t init_net_streams(const cc_cfg_t *const cc_cfg)
+static double get_used_memory(void)
 {
-	ccapi_dp_error_t dp_error;
-	net_names_list_t list_ifaces;
-	int i;
+	struct sysinfo info;
 
-	if (ldx_net_list_available_ifaces(&list_ifaces) <= 0)
-		return CCAPI_DP_ERROR_NONE;
-
-	for (i = 0; i < list_ifaces.n_ifaces; i++) {
-		/* Check if the interface should be skipped. */
-		if (!should_read_interface(list_ifaces.names[i], cc_cfg)) {
-			log_sm_debug("Skipping interface '%s'...", list_ifaces.names[i]);
-			continue;
-		}
-		dp_error = init_iface_streams(list_ifaces.names[i], &net_stream_list, cc_cfg);
-		if (dp_error != CCAPI_DP_ERROR_NONE)
-			goto error;
+	if (sysinfo(&info) != 0) {
+		log_sm_error("%s", "Error getting used memory");
+		return -1;
 	}
 
-	dp_error = CCAPI_DP_ERROR_NONE;
-
-error:
-	if (dp_error != CCAPI_DP_ERROR_NONE)
-		free_stream_list(&net_stream_list);
-
-	return dp_error;
-}
-
-#ifdef ENABLE_BT
-/*
- * init_bt_streams() - Add Bluetooth interface data point streams to collection
- *
- * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
- * 			settings parsed from the configuration file are stored.
- *
- * Return: Error code after the addition to the collection.
- *
- * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
- * problem creating the collection.
- */
-static ccapi_dp_error_t init_bt_streams(const cc_cfg_t *const cc_cfg)
-{
-	ccapi_dp_error_t dp_error;
-
-	/* Check if the interface should be skipped. */
-	if (!should_read_interface(BLUETOOTH_INTERFACE, cc_cfg)) {
-		log_sm_debug("Skipping interface '%s'...", BLUETOOTH_INTERFACE);
-		return CCAPI_DP_ERROR_NONE;
-	}
-
-	/* Initialize streams. */
-	dp_error = init_iface_streams(BLUETOOTH_INTERFACE, &bt_stream_list, cc_cfg);
-	if (dp_error != CCAPI_DP_ERROR_NONE)
-		free_stream_list(&bt_stream_list);
-
-	return dp_error;
-}
-#endif /* ENABLE_BT */
-
-/*
- * init_iface_streams() - Add to collection the given interface data point streams
- *
- * @iface_name:		Name of the interface to init.
- * @stream_list:	Structure to initialize.
- * @cc_cfg:			Connector configuration struct (cc_cfg_t) where the
- * 					settings parsed from the configuration file are stored.
- *
- * Return: Error code after the addition to the collection.
- *
- * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
- * problem creating the collection.
- */
-static ccapi_dp_error_t init_iface_streams(const char *const iface_name, stream_list_t *stream_list, const cc_cfg_t *const cc_cfg)
-{
-	unsigned int i;
-
-	for (i = 0; i < ARRAY_SIZE(net_stream_formats); i++) {
-		char *metric_name;
-		void *tmp;
-		stream_t stream_format = net_stream_formats[i];
-
-		/* Build metric name. */
-		metric_name = calloc(snprintf(NULL, 0, "%s/%s", iface_name, stream_format.name) + 1, sizeof(char));
-		if (metric_name == NULL) {
-			log_sm_error("Cannot initialize interface '%s' metric name '%s': Out of memory", iface_name, net_stream_formats[i].name);
-			return CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
-		}
-		sprintf(metric_name, "%s/%s", iface_name, stream_format.name);
-
-		/* Check if metric should be measured. */
-		if (!should_read_metric(metric_name, cc_cfg)) {
-			log_sm_debug("Skipping %s...", metric_name);
-			free(metric_name);
-			continue;
-		}
-		free(metric_name);
-
-		/* Allocate memory for the metric stream. */
-		if (stream_list->streams == NULL) {
-			tmp = calloc(1, sizeof(stream_t));
-		} else {
-			tmp = realloc(stream_list->streams, (stream_list->n_streams + 1) * sizeof(stream_t));
-		}
-		if (tmp == NULL) {
-			log_sm_error("Cannot initialize interface '%s' metric '%s': Out of memory", iface_name, net_stream_formats[i].name);
-			return CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
-		}
-		stream_list->streams = tmp;
-
-		stream_t *stream = &stream_list->streams[stream_list->n_streams];
-		size_t path_len = snprintf(NULL, 0, stream_format.path, iface_name);
-		ccapi_dp_error_t dp_error;
-
-		stream_list->n_streams++;
-
-		stream->name = strdup(iface_name);
-		stream->path = calloc(path_len + 1, sizeof(char));
-		if (stream->name == NULL || stream->path == NULL) {
-			log_sm_error("Cannot initialize interface '%s' metric '%s': Out of memory", iface_name, net_stream_formats[i].name);
-			return CCAPI_DP_ERROR_INSUFFICIENT_MEMORY;
-		}
-
-		sprintf(stream->path, stream_format.path, iface_name);
-
-		stream->format = stream_format.format;
-		stream->units = stream_format.units;
-		stream->type = stream_format.type;
-
-		dp_error = ccapi_dp_add_data_stream_to_collection_extra(
-					dp_collection, stream->path, stream->format, stream->units, NULL);
-		if (dp_error != CCAPI_DP_ERROR_NONE) {
-			log_sm_error("Cannot add '%s' stream to data point collection, error %d",
-				stream->path, dp_error);
-			return dp_error;
-		}
-	}
-
-	return CCAPI_DP_ERROR_NONE;
+	return (info.totalram - info.freeram) / 1024;
 }
 
 /*
- * add_samples() - Add samples to the data point collection
+ * get_cpu_load() - Get the CPU load of the system
+ *
+ * Return: The CPU load in %, -1 if the value is not available.
  */
-static void add_samples(void)
-{
-	ccapi_timestamp_t *timestamp = get_timestamp();
+static double get_cpu_load(void) {
+	char file_data[MAX_LENGTH] = {0};
+	long file_size;
+	unsigned long long int fields[10];
+	unsigned long long work = 0, total = 0;
+	double usage = -1;
+	int i, result;
 
-	if (!timestamp) {
-		log_sm_error("%s", "Cannot get samples timestamp");
-		return;
+	file_size = read_file(FILE_CPU_LOAD, file_data, MAX_LENGTH);
+	if (file_size <= 0) {
+		log_sm_error("%s", "Error getting CPU load");
+		return -1;
 	}
 
-	add_sys_samples(*timestamp);
+	result = sscanf(file_data, "cpu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
+			&fields[0], &fields[1], &fields[2], &fields[3], &fields[4],
+			&fields[5], &fields[6], &fields[7], &fields[8], &fields[9]);
 
-	add_net_samples(*timestamp);
+	if (result < 4) {
+		log_sm_error("%s", "Error getting CPU load");
+		return -1;
+	}
 
-#ifdef ENABLE_BT
-	add_bt_samples(*timestamp);
-#endif /* ENABLE_BT */
+	for (i = 0; i < 3; i++)
+		work += fields[i];
+	for (i = 0; i < result; i++)
+		total += fields[i];
 
-	free_timestamp(timestamp);
+	if (last_work == 0 && last_total == 0) {
+		/* The first time report 0%. */
+		usage = 0;
+	} else {
+		unsigned long long diff_work = work - last_work;
+		unsigned long long diff_total = total - last_total;
+
+		usage = diff_work * 100.0 / diff_total;
+	}
+
+	last_total = total;
+	last_work = work;
+
+	return usage;
+}
+
+/*
+ * get_cpu_temp() - Get the CPU temperature of the system
+ *
+ * Return: The CPU temperature in C.
+ */
+static double get_cpu_temp(void)
+{
+	char file_data[MAX_LENGTH] = {0};
+	long file_size;
+	double temperature;
+	int result;
+
+	file_size = read_file(FILE_CPU_TEMP, file_data, MAX_LENGTH);
+	if (file_size <= 0) {
+		log_sm_error("%s", "Error getting CPU temperature");
+		return -1;
+	}
+
+	result = sscanf(file_data, "%lf", &temperature);
+	if (result < 1) {
+		log_sm_error("%s", "Error getting CPU temperature");
+		return -1;
+	}
+
+	return temperature / 1000;
+}
+
+/*
+ * get_cpu_freq() - Get the CPU frequency
+ *
+ * Return: The CPU frequency in kHz, -1 if error.
+ */
+static unsigned long get_cpu_freq(void)
+{
+	char data[MAX_LENGTH] = {0};
+	long file_size;
+	long freq;
+
+	freq = -1;
+
+	file_size = read_file(FILE_CPU_FREQ, data, MAX_LENGTH);
+	if (file_size <= 0) {
+		log_sm_error("%s", "Error getting CPU frequency");
+		return -1;
+	}
+
+	if (sscanf(data, "%ld", &freq) < 1) {
+		log_sm_error("%s", "Error getting CPU frequency");
+		return -1;
+	}
+
+	return freq;
+}
+
+/*
+ * get_uptime() - Get number of seconds since boot
+ *
+ * Return: Number of seconds since boot.
+ */
+static unsigned long get_uptime(void)
+{
+	struct sysinfo info;
+
+	if (sysinfo(&info) != 0) {
+		log_sm_error("%s", "Error getting uptime");
+		return -1;
+	}
+
+	return info.uptime;
 }
 
 /*
@@ -877,355 +1002,166 @@ static void add_bt_samples(ccapi_timestamp_t timestamp)
 #endif /* ENABLE_BT */
 
 /*
- * get_free_memory() - Get the free memory of the system
- *
- * Return: The free memory of the system in kB, -1 if error.
+ * add_samples() - Add samples to the data point collection
  */
-static double get_free_memory(void)
+static void add_samples(void)
 {
-	struct sysinfo info;
+	ccapi_timestamp_t *timestamp = get_timestamp();
 
-	if (sysinfo(&info) != 0) {
-		log_sm_error("%s", "Error getting free memory");
-		return -1;
+	if (!timestamp) {
+		log_sm_error("%s", "Cannot get samples timestamp");
+		return;
 	}
 
-	return info.freeram / 1024;
+	add_sys_samples(*timestamp);
+
+	add_net_samples(*timestamp);
+
+#ifdef ENABLE_BT
+	add_bt_samples(*timestamp);
+#endif /* ENABLE_BT */
+
+	free_timestamp(timestamp);
 }
 
 /*
- * get_used_memory() - Get the usded memory of the system
+ * system_monitor_loop() - Start the system monitoring loop
  *
- * Return: The used memory of the system in kB, -1 if error.
+ * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
+ * 		settings from the configuration file are stored.
+ *
+ * This loop reads the values of the parameters to monitor every
+ * 'cc_cfg->sys_mon_sample_rate' seconds and send them to Remote Manager when
+ * the number of samples per parameter is at least
+ * 'cc_cfg->sys_mon_num_samples_upload'.
+ *
+ * The monitored values are defined in 'cc_cfg->sys_mon_metrics'.
  */
-static double get_used_memory(void)
+static void system_monitor_loop(const cc_cfg_t *const cc_cfg)
 {
-	struct sysinfo info;
+	log_sm_info("%s", "Start monitoring the system");
 
-	if (sysinfo(&info) != 0) {
-		log_sm_error("%s", "Error getting used memory");
-		return -1;
-	}
+	while (!stop_requested) {
+		uint32_t n_samples_to_send = (sys_stream_list.n_streams + net_stream_list.n_streams) * cc_cfg->sys_mon_num_samples_upload;
+#ifdef ENABLE_BT
+		n_samples_to_send += bt_stream_list.n_streams * cc_cfg->sys_mon_num_samples_upload;
+#endif /* ENABLE_BT */
+		long n_loops = cc_cfg->sys_mon_sample_rate * 1000 / LOOP_MS;
+		uint32_t count = 0;
+		long loop;
 
-	return (info.totalram - info.freeram) / 1024;
-}
+		add_samples();
 
-/*
- * get_cpu_load() - Get the CPU load of the system
- *
- * Return: The CPU load in %, -1 if the value is not available.
- */
-static double get_cpu_load(void) {
-	char file_data[MAX_LENGTH] = {0};
-	long file_size;
-	unsigned long long int fields[10];
-	unsigned long long work = 0, total = 0;
-	double usage = -1;
-	int i, result;
-
-	file_size = read_file(FILE_CPU_LOAD, file_data, MAX_LENGTH);
-	if (file_size <= 0) {
-		log_sm_error("%s", "Error getting CPU load");
-		return -1;
-	}
-
-	result = sscanf(file_data, "cpu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-			&fields[0], &fields[1], &fields[2], &fields[3], &fields[4],
-			&fields[5], &fields[6], &fields[7], &fields[8], &fields[9]);
-
-	if (result < 4) {
-		log_sm_error("%s", "Error getting CPU load");
-		return -1;
-	}
-
-	for (i = 0; i < 3; i++)
-		work += fields[i];
-	for (i = 0; i < result; i++)
-		total += fields[i];
-
-	if (last_work == 0 && last_total == 0) {
-		/* The first time report 0%. */
-		usage = 0;
-	} else {
-		unsigned long long diff_work = work - last_work;
-		unsigned long long diff_total = total - last_total;
-
-		usage = diff_work * 100.0 / diff_total;
-	}
-
-	last_total = total;
-	last_work = work;
-
-	return usage;
-}
-
-/*
- * get_cpu_temp() - Get the CPU temperature of the system
- *
- * Return: The CPU temperature in C.
- */
-static double get_cpu_temp(void)
-{
-	char file_data[MAX_LENGTH] = {0};
-	long file_size;
-	double temperature;
-	int result;
-
-	file_size = read_file(FILE_CPU_TEMP, file_data, MAX_LENGTH);
-	if (file_size <= 0) {
-		log_sm_error("%s", "Error getting CPU temperature");
-		return -1;
-	}
-
-	result = sscanf(file_data, "%lf", &temperature);
-	if (result < 1) {
-		log_sm_error("%s", "Error getting CPU temperature");
-		return -1;
-	}
-
-	return temperature / 1000;
-}
-
-/*
- * get_cpu_freq() - Get the CPU frequency
- *
- * Return: The CPU frequency in kHz, -1 if error.
- */
-static unsigned long get_cpu_freq(void)
-{
-	char data[MAX_LENGTH] = {0};
-	long file_size;
-	long freq;
-
-	freq = -1;
-
-	file_size = read_file(FILE_CPU_FREQ, data, MAX_LENGTH);
-	if (file_size <= 0) {
-		log_sm_error("%s", "Error getting CPU frequency");
-		return -1;
-	}
-
-	if (sscanf(data, "%ld", &freq) < 1) {
-		log_sm_error("%s", "Error getting CPU frequency");
-		return -1;
-	}
-
-	return freq;
-}
-
-/*
- * get_uptime() - Get number of seconds since boot
- *
- * Return: Number of seconds since boot.
- */
-static unsigned long get_uptime(void)
-{
-	struct sysinfo info;
-
-	if (sysinfo(&info) != 0) {
-		log_sm_error("%s", "Error getting uptime");
-		return -1;
-	}
-
-	return info.uptime;
-}
-
-/*
- * free_stream_list() - Free the stream list
- *
- * @stream_list:	The list to free.
- */
-static void free_stream_list(stream_list_t *stream_list)
-{
-	int i;
-
-	for (i = 0; i < stream_list->n_streams; i++) {
-		free(stream_list->streams[i].name);
-		free(stream_list->streams[i].path);
-	}
-
-	free(stream_list->streams);
-
-	stream_list->n_streams = 0;
-}
-
-/*
- * should_read_metric() - Determines whether the given metric must be read or not
- *                        based on the given configuration.
- *
- * @metric_name: The metric name.
- * @cc_cfg:	The Cloud Connector configuration.
- *
- * Return: 'true' if metric should be read, 'false' otherwise.
- */
-static ccapi_bool_t should_read_metric(char *metric_name, const cc_cfg_t *const cc_cfg)
-{
-	unsigned int i;
-
-	if (cc_cfg->sys_mon_all_metrics) {
-		return true;
-	}
-
-	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++) {
-		char *metric = cc_cfg->sys_mon_metrics[i];
-
-		/* Sanity check. */
-		if (metric == NULL) {
-			continue;
+		ccapi_dp_get_collection_points_count(dp_collection, &count);
+		while (count > MAX_DP_IN_COLLECTION) {
+			log_sm_debug("%s", "Removing old data points...");
+			ccapi_dp_remove_older_data_point_from_streams(dp_collection);
+			ccapi_dp_get_collection_points_count(dp_collection, &count);
 		}
-		/* Check if the metric name matches the metric wildcard. */
-		if (value_matches_wildcard_pattern(metric_name, metric)) {
-			return true;
-		}
-		/* Check if the metric name is composed. */
-		if (strchr(metric_name, '/') != NULL) {
-			char *interface;
-			ccapi_bool_t matches = false;
-			char *metric_name_copy = strdup(metric_name);
-			if (metric_name_copy == NULL) {
-				log_sm_error("%s", "Not enough memory to check metrics criteria");
-				continue;
-			}
-			/* Extract interface from the metric name. */
-			interface = (char *)strtok(metric_name_copy, "/");
-			if (interface == NULL) {
-				free(metric_name_copy);
-				continue;
-			}
-			/* Check if the interface matches the metric. */
-			matches = strcmp(interface, metric) == 0;
-			free(metric_name_copy);
-			if (matches) {
-				return true;
+
+		if (count >= n_samples_to_send && !stop_requested) {
+			ccapi_dp_error_t dp_error;
+
+			/*
+			 * TODO: If the connection is lost, this thread blocks at this point
+			 * and does not continue collecting data points.
+			 *
+			 * The expected behavior is an error after a timeout to keep the
+			 * sampling process, so all the collected data is sent when the
+			 * connection is restored.
+			 * We tried to get this by using 'ccapi_dp_send_collection_with_reply'
+			 * but it seems it does not work:
+			 *
+			 * unsigned long timeout = 2; // seconds
+			 * dp_error = ccapi_dp_send_collection_with_reply(CCAPI_TRANSPORT_TCP, dp_collection, timeout, NULL);
+			 */
+			if (get_cloud_connection_status() == CC_STATUS_CONNECTED) {
+				log_sm_debug("%s", "Sending system monitor samples");
+				dp_error = ccapi_dp_send_collection(CCAPI_TRANSPORT_TCP, dp_collection);
+				if (dp_error != CCAPI_DP_ERROR_NONE)
+					log_sm_error("Error sending system monitor samples, %d", dp_error);
 			}
 		}
-	}
 
-	return false;
+		for (loop = 0; loop < n_loops; loop++) {
+			struct timespec sleepValue = {0};
+
+			if (stop_requested)
+				break;
+
+			sleepValue.tv_nsec = LOOP_MS * 1000 * 1000;
+			nanosleep(&sleepValue, NULL);
+		}
+	}
 }
 
 /*
- * should_read_interface() - Determines whether the given interface must be read or not
- *                           based on the given configuration.
+ * system_monitor_threaded() - Execute the system monitoring in a new thread
  *
- * @iface_name:	The interface name.
- * @cc_cfg:	The Cloud Connector configuration.
- *
- * Return: 'true' if interface should be read, 'false' otherwise.
+ * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
+ * 		settings from the configuration file are stored.
  */
-static ccapi_bool_t should_read_interface(char *iface_name, const cc_cfg_t *const cc_cfg)
+static void *system_monitor_threaded(void *cc_cfg)
 {
-	unsigned int i;
+	ccapi_dp_error_t dp_error = init_system_monitor(cc_cfg);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		/* The data point collection could not be created. */
+		return NULL;
 
-	if (cc_cfg->sys_mon_all_metrics) {
-		return true;
-	}
+	system_monitor_loop(cc_cfg);
 
-	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++) {
-		char *metric = cc_cfg->sys_mon_metrics[i];
+	pthread_exit(NULL);
 
-		/* Sanity check. */
-		if (metric == NULL) {
-			continue;
-		}
-		/* Check if the interface matches the metric wildcard. */
-		if (value_matches_wildcard_pattern(iface_name, metric)) {
-			return true;
-		}
-		/* Check if the metric is composed. */
-		if (strchr(metric, '/') != NULL) {
-			char *iface_wildcard;
-			ccapi_bool_t matches = false;
-			char *metric_copy = strdup(metric);
-			if (metric_copy == NULL) {
-				log_sm_error("%s", "Not enough memory to check metrics criteria");
-				continue;
-			}
-			/* Extract interface wildcard from the metric. */
-			iface_wildcard = (char *)strtok(metric_copy, "/");
-			if (iface_wildcard == NULL) {
-				free(metric_copy);
-				continue;
-			}
-			/* Check if the interface name matches the interface wildcard. */
-			matches = value_matches_wildcard_pattern(iface_name, iface_wildcard);
-			free(metric_copy);
-			if (matches) {
-				return true;
-			}
-		}
-	}
-
-	return false;
+	return NULL;
 }
 
-/*
- * value_matches_wildcard_pattern() - Determines whether the given value matches
- *                                    the given wildcard pattern.
- *
- * @value:		The string to check.
- * @pattern:	The pattern string.
- *
- * Return: 'true' if the value matches the wildcard pattern, 'false' otherwise.
- */
-static ccapi_bool_t value_matches_wildcard_pattern(char* value, char* pattern)
+cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
 {
-    int wildcard = 0;
-    char* last_pattern_start = 0;
-    char* last_value_start = 0;
+	pthread_attr_t attr;
+	int error;
 
-    do {
-        if (*pattern == *value) {
-            if (wildcard == 1) {
-                last_value_start = value + 1;
-            }
+	if (!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
+		return CC_SYS_MON_ERROR_NONE;
 
-            value++;
-            pattern++;
-            wildcard = 0;
-        } else if (*pattern == '?') {
-            if (*(value) == '\0') { /* the value has ended but a char was expected */
-                return false;
-            }
-            if (wildcard == 1) {
-                last_value_start = value + 1;
-            }
-            value++;
-            pattern++;
-            wildcard = 0;
-        } else if (*pattern == '*') {
-            if (*(pattern+1) == '\0') {
-                return true;
-            }
+	if (dp_thread_valid)
+		return CC_SYS_MON_ERROR_NONE;
 
-            last_pattern_start = pattern;
-            wildcard = 1;
+	error = pthread_attr_init(&attr);
+	if (error != 0) {
+		/* On Linux this function always succeeds. */
+		log_sm_error("pthread_attr_init() error %d", error);
+	}
+	stop_requested = false;
+	dp_thread_valid = (pthread_create(&dp_thread, &attr, system_monitor_threaded, (void *) cc_cfg) == 0);
+	pthread_attr_destroy(&attr);
+	if (!dp_thread_valid) {
+		log_sm_error("Error while starting the system monitor, %d", error);
+		return CC_SYS_MON_ERROR_THREAD;
+	}
 
-            pattern++;
-        } else if (wildcard) {
-            if (*value == *pattern) {
-                wildcard = 0;
-                value++;
-                pattern++;
-                last_value_start = value + 1 ;
-            } else {
-                value++;
-            }
-        } else {
-            if ((*pattern) == '\0' && (*value) == '\0') {  /* end of mask */
-                return true; /* if the value also ends here then the pattern match */
-            } else {
-                if (last_pattern_start != 0) { /* try to restart the mask on the rest */
-                    pattern = last_pattern_start;
-                    value = last_value_start;
-                    last_value_start = 0;
-                } else {
-                    return false;
-                }
-            }
-        }
+	return CC_SYS_MON_ERROR_NONE;
+}
 
-    } while (*value);
+bool is_system_monitor_running(void) {
+	return dp_thread_valid;
+}
 
-    return *pattern == '\0';
+void stop_system_monitor(void)
+{
+	stop_requested = true;
+
+	if (dp_thread_valid) {
+		dp_thread_valid = false;
+		pthread_cancel(dp_thread);
+		pthread_join(dp_thread, NULL);
+	}
+
+	free_stream_list(&sys_stream_list);
+	free_stream_list(&net_stream_list);
+#ifdef ENABLE_BT
+	free_stream_list(&bt_stream_list);
+#endif /* ENABLE_BT */
+	ccapi_dp_destroy_collection(dp_collection);
+
+	log_sm_info("%s", "Stop monitoring the system");
 }

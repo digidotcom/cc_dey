@@ -23,7 +23,34 @@
 #include <libdigiapix/network.h>
 #include <stdint.h>
 
+/*
+ * get_main_iface_info() - Retrieve information about the network
+ *                         interface used to connect to url.
+ *
+ * @url:	URL to connect to to determine main network interface.
+ * @net_state:	Struct to fill with the network interface information.
+ *
+ * Return: 0 on success, -1 otherwise.
+ */
 int get_main_iface_info(const char *url, net_state_t *net_state);
+
+/**
+ * get_primary_mac_address() - Get the primary MAC address of the device.
+ *
+ * This is not guaranteed to be the MAC of the active network interface, and
+ * should be only used for device identification purposes, where the same MAC
+ * is desired no matter which network interface is active.
+ *
+ * The interfaces priority order is the following:
+ *   - Ethernet (eth0, eth1, ...)
+ *   - Wi-Fi (wlan0, wlan1, ...)
+ *   - No interface (empty string)
+ *   - Other interface (any other string)
+ *
+ * @mac_addr:	Pointer to store the MAC address.
+ *
+ * Return: The MAC address of primary interface.
+ */
 uint8_t *get_primary_mac_address(uint8_t * const mac_addr);
 
 #endif

@@ -39,7 +39,7 @@
  * @format:		Debug message to log.
  * @args:		Additional arguments.
  */
-#define log_dr_debug(format, ...)									\
+#define log_dr_debug(format, ...)				\
 	log_debug("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
 
 /**
@@ -48,7 +48,7 @@
  * @format:		Warning message to log.
  * @args:		Additional arguments.
  */
-#define log_dr_warning(format, ...)									\
+#define log_dr_warning(format, ...)				\
 	log_warning("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
 
 /**
@@ -57,7 +57,7 @@
  * @format:		Error message to log.
  * @args:		Additional arguments.
  */
-#define log_dr_error(format, ...)									\
+#define log_dr_error(format, ...)				\
 	log_error("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
 
 typedef struct {
@@ -72,7 +72,6 @@ typedef struct {
 	size_t size;
 	size_t max_size;
 } request_data_darray_t;
-
 
 static request_data_darray_t active_requests = { 0 };
 
@@ -204,8 +203,8 @@ static ccapi_receive_error_t device_request(const char *target,
 	}
 
 	/* Send: request_type, request_target_name, request_payload */
-	if (write_string(sock_fd, REQ_TYPE_REQUEST_CB)  ||											/* The request type */
-		write_string(sock_fd, target) ||												/* The registered target device name */
+	if (write_string(sock_fd, REQ_TYPE_REQUEST_CB)  ||					/* The request type */
+		write_string(sock_fd, target) ||						/* The registered target device name */
 		write_blob(sock_fd, request_buffer_info->buffer, request_buffer_info->length)) {/* The payload data passed to the device callback */
 		log_dr_error("Could not write device request to socket: %s", strerror(errno));
 		error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
@@ -251,9 +250,9 @@ static void device_request_done(const char *target,
 
 	/* Send the status callback to the target device */
 	if (write_string(sock_fd, REQ_TYPE_STATUS_CB)	/* The Status callback type */
-		|| write_string(sock_fd, target)		/* The registered target name */
+		|| write_string(sock_fd, target)	/* The registered target name */
 		|| write_uint32(sock_fd, error_code)	/* The DRM call return status code */
-		|| write_string(sock_fd, err_msg)) {		/* And a text description of the status code */
+		|| write_string(sock_fd, err_msg)) {	/* And a text description of the status code */
 		log_dr_error("Could not write device request to socket: %s", strerror(errno));
 		goto out;
 	}
@@ -623,11 +622,6 @@ static void builtin_request_status_cb(const char *const target,
 		free(response_buffer_info->buffer);
 }
 
-/*
- * register_builtin_requests() - Register built-in device requests
- *
- * Return: Error code after registering the built-in device requests.
- */
 ccapi_receive_error_t register_builtin_requests(void)
 {
 	ccapi_receive_error_t receive_error = CCAPI_RECEIVE_ERROR_NONE;
@@ -651,7 +645,7 @@ ccapi_receive_error_t register_builtin_requests(void)
  * receive_default_accept_cb() - Default accept callback for non registered
  *                               device requests
  *
- * @target:		Target ID associated to the device request.
+ * @target:	Target ID associated to the device request.
  * @transport:	Communication transport used by the device request.
  *
  * Return: CCAPI_FALSE if the device request is not accepted,
@@ -683,8 +677,8 @@ static ccapi_bool_t receive_default_accept_cb(char const *const target,
  * receive_default_data_cb() - Default data callback for non registered
  *                             device requests
  *
- * @target:					Target ID associated to the device request.
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID associated to the device request.
+ * @transport:			Communication transport used by the device request.
  * @request_buffer_info:	Buffer containing the device request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
@@ -740,10 +734,10 @@ static ccapi_receive_error_t receive_default_data_cb(char const *const target,
  * receive_default_status_cb() - Default status callback for non registered
  *                               device requests
  *
- * @target:					Target ID associated to the device request.
- * @transport:				Communication transport used by the device request.
+ * @target:			Target ID associated to the device request.
+ * @transport:			Communication transport used by the device request.
  * @response_buffer_info:	Buffer containing the response data.
- * @receive_error:			The error status of the receive process.
+ * @receive_error:		The error status of the receive process.
  *
  * This callback is executed when the receive process has finished. It doesn't
  * matter if everything worked or there was an error during the process.

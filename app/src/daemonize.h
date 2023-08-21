@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -20,9 +20,13 @@
 #ifndef DAEMONIZE_H_
 #define DAEMONIZE_H_
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
+/**
+ * start_daemon() - Start a new daemon.
+ *
+ * @name:	Daemon name.
+ *
+ * Return: 0 on success, 1 otherwise.
+ */
 int start_daemon(const char *name);
 
 #endif /* DAEMONIZE_H_ */

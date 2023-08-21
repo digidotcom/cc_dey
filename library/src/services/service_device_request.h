@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Digi International Inc.
+ * Copyright (c) 2022, 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -22,7 +22,7 @@
 
 #define REQ_TAG_REGISTER_DR		"register_devicerequest"
 #define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
-#define REQ_TAG_REGISTER_DR_IPV4		"register_devicerequest_ipv4"
+#define REQ_TAG_REGISTER_DR_IPV4	"register_devicerequest_ipv4"
 #define REQ_TAG_UNREGISTER_DR_IPV4	"unregister_devicerequest_ipv4"
 
 #define REQ_TYPE_REQUEST_CB	"request"
@@ -33,6 +33,11 @@ int handle_unregister_device_request(int fd);
 int handle_register_device_request_ipv4(int fd);
 int handle_unregister_device_request_ipv4(int fd);
 
+/*
+ * register_builtin_requests() - Register built-in device requests
+ *
+ * Return: Error code after registering the built-in device requests.
+ */
 ccapi_receive_error_t register_builtin_requests(void);
 
 #endif

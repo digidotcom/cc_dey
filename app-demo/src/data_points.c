@@ -34,21 +34,6 @@
 #define MONITOR_TAG			"MON:"
 
 /**
- * button_cb_data_t - Data for button interrupt
- *
- * @button:		GPIO button.
- * @dp_collection:	Collection of data points to store the button value.
- * @value:		Last status of the GPIO.
- * @num_samples_upload:	Number of samples to store before uploading.
- */
-typedef struct {
-	gpio_t *button;
-	ccapi_dp_collection_handle_t dp_collection;
-	gpio_value_t value;
-	uint32_t num_samples_upload;
-} button_cb_data_t;
-
-/**
  * log_mon_debug() - Log the given message as debug
  *
  * @format:		Debug message to log.
@@ -74,6 +59,21 @@ typedef struct {
  */
 #define log_mon_error(format, ...)					\
 	log_error("%s " format, MONITOR_TAG, __VA_ARGS__)
+
+/**
+ * button_cb_data_t - Data for button interrupt
+ *
+ * @button:		GPIO button.
+ * @dp_collection:	Collection of data points to store the button value.
+ * @value:		Last status of the GPIO.
+ * @num_samples_upload:	Number of samples to store before uploading.
+ */
+typedef struct {
+	gpio_t *button;
+	ccapi_dp_collection_handle_t dp_collection;
+	gpio_value_t value;
+	uint32_t num_samples_upload;
+} button_cb_data_t;
 
 static bool is_running = false;
 static button_cb_data_t cb_data;

@@ -43,28 +43,52 @@
 #include <swupdate_status.h>
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define FW_UPDATE_TAG				"FW UPDATE:"
+#define FW_UPDATE_TAG			"FW UPDATE:"
 
-#define REBOOT_TIMEOUT				1
+#define REBOOT_TIMEOUT			1
 
-#define UPDATE_PACKAGE_EXT			".swu"
-#define FRAGMENT_EXT				".zip"
+#define UPDATE_PACKAGE_EXT		".swu"
+#define FRAGMENT_EXT			".zip"
 
-#define MANIFEST_PROP_SIZE			"size"
+#define MANIFEST_PROP_SIZE		"size"
 #define MANIFEST_PROP_FRAGMENTS		"fragments"
-#define MANIFEST_PROP_NAME			"name"
+#define MANIFEST_PROP_NAME		"name"
 #define MANIFEST_PROP_CHECKSUM		"checksum"
 #define MANIFEST_PROP_SRC_DIR		"src_dir"
 #define MANIFEST_PROP_UNKNOWN		"__unknown"
 
-#define WRITE_BUFFER_SIZE			128 * 1024 /* 128KB */
-#define FW_SWU_CHUNK_SIZE			128 * 1024 /* 128KB, CC6UL flash sector size */
+#define WRITE_BUFFER_SIZE		128 * 1024 /* 128KB */
+#define FW_SWU_CHUNK_SIZE		128 * 1024 /* 128KB, CC6UL flash sector size */
 
-#define LINE_BUFSIZE				255
-#define CMD_BUFSIZE				255
+#define LINE_BUFSIZE			255
+#define CMD_BUFSIZE			255
+
+/**
+ * log_fw_debug() - Log the given message as debug
+ *
+ * @format:		Debug message to log.
+ * @args:		Additional arguments.
+ */
+#define log_fw_debug(format, ...)				\
+	log_debug("%s " format, FW_UPDATE_TAG, __VA_ARGS__)
+
+/**
+ * log_fw_info() - Log the given message as info
+ *
+ * @format:		Info message to log.
+ * @args:		Additional arguments.
+ */
+#define log_fw_info(format, ...)				\
+	log_info("%s " format, FW_UPDATE_TAG, __VA_ARGS__)
+
+/**
+ * log_fw_error() - Log the given message as error
+ *
+ * @format:		Error message to log.
+ * @args:		Additional arguments.
+ */
+#define log_fw_error(format, ...)				\
+	log_error("%s " format, FW_UPDATE_TAG, __VA_ARGS__)
 
 typedef enum {
 	CC_FW_TARGET_SWU,
@@ -122,16 +146,16 @@ typedef struct {
 /*
  * struct otf_info_t - On-the-fly information type
  *
- * @buffer:				Buffer to store received data from server to used in
- * 						the read on-the-fly callback to get a package chunk
- * @chunk_ready:		Flag to indicate a new chunk of data is received from
- * 						the server
- * @chunk_size:			Size of received data chunk from the server
+ * @buffer:		Buffer to store received data from server to used in
+ * 			the read on-the-fly callback to get a package chunk
+ * @chunk_ready:	Flag to indicate a new chunk of data is received from
+ * 			the server
+ * @chunk_size:		Size of received data chunk from the server
  * @last_chunk_size:	Size of last received data chunk from the server
- * @end_status:			End status of the on-the-fly update
+ * @end_status:		End status of the on-the-fly update
  * @update_successful:	Flag to indicate if the update process ends successfully
- * @mutex:				On-the-fly update mutex
- * @cv_end:				On-thy-fly update end condition
+ * @mutex:		On-the-fly update mutex
+ * @cv_end:		On-thy-fly update end condition
  */
 typedef struct {
 	char buffer[FW_SWU_CHUNK_SIZE];
@@ -144,34 +168,6 @@ typedef struct {
 	pthread_mutex_t mutex;
 	pthread_cond_t cv_end;
 } otf_info_t;
-
-
-/**
- * log_fw_debug() - Log the given message as debug
- *
- * @format:		Debug message to log.
- * @args:		Additional arguments.
- */
-#define log_fw_debug(format, ...)									\
-	log_debug("%s " format, FW_UPDATE_TAG, __VA_ARGS__)
-
-/**
- * log_fw_info() - Log the given message as info
- *
- * @format:		Info message to log.
- * @args:		Additional arguments.
- */
-#define log_fw_info(format, ...)									\
-	log_info("%s " format, FW_UPDATE_TAG, __VA_ARGS__)
-
-/**
- * log_fw_error() - Log the given message as error
- *
- * @format:		Error message to log.
- * @args:		Additional arguments.
- */
-#define log_fw_error(format, ...)									\
-	log_error("%s " format, FW_UPDATE_TAG, __VA_ARGS__)
 
 extern cc_cfg_t *cc_cfg;
 static FILE *fw_fp = NULL;
@@ -242,7 +238,7 @@ static size_t get_available_space(const char* path)
  * concatenate_path() - Concatenate directory path and file name
  *
  * @directory:	Parent directory absolute path.
- * @file:		File name.
+ * @file:	File name.
  *
  * Concatenate the given directory path and file name, and returns a pointer to
  * a new string with the result. If the given directory path does not finish
@@ -271,7 +267,7 @@ static char* concatenate_path(const char *directory, const char *file)
 	len = strlen(directory) + strlen(file)
 			+ (directory[strlen(directory) - 1] != '/' ? 1 : 0) + 1;
 
-	full_path = calloc(1, sizeof (char) * len);
+	full_path = calloc(len, sizeof(*full_path));
 	if (full_path == NULL)
 		return NULL;
 
@@ -288,7 +284,7 @@ static char* concatenate_path(const char *directory, const char *file)
 /*
  * mf_free_fragments() - Release the provided list of fragments
  *
- * @fragments:	List of fragments (mf_fragment_t) to release.
+ * @fragments:		List of fragments (mf_fragment_t) to release.
  * @n_fragments:	Number of fragments in the list.
  */
 static void mf_free_fragments(mf_fragment_t *fragments, int n_fragments)
@@ -332,7 +328,7 @@ static void mf_free_fw_info(mf_fw_info_t *fw_info)
 
 /*
  * mf_get_fragment_file_name() - Retrieve a fragment complete name including index
- * 								and extension
+ *                               and extension
  *
  * @name:	Fragment base name without index and without extension.
  * @index:	Fragment index.
@@ -358,7 +354,7 @@ static char* mf_get_fragment_file_name(const char *name, int index)
  * check_mf_size() - Validate size property of the manifest
  *
  * @mf_cfg:	The section were the size is defined.
- * @opt:			The size option.
+ * @opt:	The size option.
  *
  * @Return: 0 on success, -1 otherwise.
  */
@@ -379,7 +375,7 @@ static int check_mf_size(cfg_t *mf_cfg, cfg_opt_t *opt)
  * check_mf_fragments() - Validate fragments property of the manifest
  *
  * @mf_cfg:	The section were the fragments is defined.
- * @opt:			The fragments option.
+ * @opt:	The fragments option.
  *
  * @Return: 0 on success, -1 otherwise.
  */
@@ -400,7 +396,7 @@ static int check_mf_fragments(cfg_t *mf_cfg, cfg_opt_t *opt)
  * check_mf_name() - Validate name property of the manifest
  *
  * @mf_cfg:	The section were the name is defined.
- * @opt:			The name option.
+ * @opt:	The name option.
  *
  * @Return: 0 on success, -1 otherwise.
  */
@@ -420,7 +416,7 @@ static int check_mf_name(cfg_t *mf_cfg, cfg_opt_t *opt)
  * check_mf_checksum() - Validate checksum property of the manifest
  *
  * @mf_cfg:	The section were the checksum is defined.
- * @opt:			The checksum option.
+ * @opt:	The checksum option.
  *
  * @Return: 0 on success, -1 otherwise.
  */
@@ -440,7 +436,7 @@ static int check_mf_checksum(cfg_t *mf_cfg, cfg_opt_t *opt)
  * check_mf_src_dir() - Validate src_dir property of the manifest
  *
  * @mf_cfg:	The section were the src_dir is defined.
- * @opt:			The src_dir option.
+ * @opt:	The src_dir option.
  *
  * @Return: 0 on success, -1 otherwise.
  */
@@ -468,7 +464,7 @@ static int check_mf_src_dir(cfg_t *mf_cfg, cfg_opt_t *opt)
  *
  * @manifest_path:	Absolute path of the 'manifest.txt' file.
  * @fw_info:		Firmware information struct (mf_fw_info_t) where the
- * 					settings are saved.
+ * 			settings are saved.
  *
  * Read the provided 'manifest.txt' file and save the settings in the given
  * mf_fw_info_t struct. If the file does not exist or cannot be read, the
@@ -549,7 +545,7 @@ done:
  * mf_get_fw_path() - Retrieve the absolute path of the firmware update package
  *
  * @fw_info:		Firmware information struct (mf_fw_info_t) where the
- * 					path is stored.
+ * 			path is stored.
  *
  * Memory for the path is obtained with 'malloc' and can be freed with 'free'.
  *
@@ -560,7 +556,7 @@ static int mf_get_fw_path(mf_fw_info_t *fw_info)
 	mf_fw_t manifest = fw_info->manifest;
 	int len = strlen(manifest.fragment_name) + strlen(UPDATE_PACKAGE_EXT) + 1;
 
-	fw_info->file_name = calloc(1, sizeof (char) * len);
+	fw_info->file_name = calloc(len, sizeof(char));
 	if (fw_info->file_name == NULL) {
 		log_fw_error("Cannot allocate memory for update package '%s%s",
 				manifest.fragment_name, UPDATE_PACKAGE_EXT);
@@ -583,11 +579,11 @@ static int mf_get_fw_path(mf_fw_info_t *fw_info)
 /*
  * mf_get_fragments() - Retrieve all fragments information
  *
- * @fw_info:		Firmware information struct (mf_fw_info_t) where the
- * 					fragments information is stored.
+ * @fw_info:	Firmware information struct (mf_fw_info_t) where the fragments
+ * 		information is stored.
  *
  * Return: Number of total fragments, 0 if no fragment is found or if any error
- * 			occurs.
+ * 	   occurs.
  */
 static int mf_get_fragments(mf_fw_info_t *fw_info)
 {
@@ -595,7 +591,7 @@ static int mf_get_fragments(mf_fw_info_t *fw_info)
 	int n_fragments = 0;
 	int i;
 
-	fw_info->fragments = calloc(manifest.n_fragments, sizeof (mf_fragment_t));
+	fw_info->fragments = calloc(manifest.n_fragments, sizeof(mf_fragment_t));
 	if (fw_info->fragments == NULL) {
 		log_fw_error("%s", "Cannot allocate memory for firmware fragments");
 		return 0;
@@ -644,7 +640,7 @@ done:
  *
  * @fragment:		Fragment file to be assembled.
  * @file_name:		Name of the file compressed in the fragment.
- * @swu_fp:			File pointer to the destination file.
+ * @swu_fp:		File pointer to the destination file.
  *
  * Return: 0 if the file was successfully assembled, -1 otherwise.
  */
@@ -821,7 +817,7 @@ done:
  * mf_generate_fw() - Generate firmware package via manifest
  *
  * @manifest_path:	Absolute path to the downloaded manifest file.
- * @target:			Target number.
+ * @target:		Target number.
  *
  * Steps of the firmware update via manifest:
  * 		1. Load the downloaded 'manifest.txt'.
@@ -894,7 +890,7 @@ static int mf_generate_fw(const char *manifest_path, int target)
 	/* Save firmware package path */
 
 	log_fw_debug("Image was assembly in '%s'", fw_info.file_path);
-	tmp = calloc(1, sizeof(char) * (strlen(fw_info.file_path) + 1));
+	tmp = calloc(strlen(fw_info.file_path) + 1, sizeof(*tmp));
 	if (tmp == NULL) {
 		log_fw_error("Unable to install software package %s: Out of memory", fw_info.file_path);
 		error = -1;
@@ -1130,8 +1126,8 @@ static void *reboot_threaded(void *unused)
  * firmware_request_cb() - Incoming firmware update request callback
  *
  * @target:		Target number of the firmware update request.
- * @filename:	Name of the firmware file to download.
- * @total_size:	Total size required for the downloaded firmware.
+ * @filename:		Name of the firmware file to download.
+ * @total_size:		Total size required for the downloaded firmware.
  *
  * This callback ask for acceptance of an incoming firmware update request.
  * The decision can be taken based on the request target number, the file name,
@@ -1269,7 +1265,7 @@ done:
  * @offset:		Offset in the received data.
  * @data:		Firmware data chunk.
  * @size:		Size of the data chunk.
- * @last_chunk:	CCAPI_TRUE if it is the last data chunk.
+ * @last_chunk:		CCAPI_TRUE if it is the last data chunk.
  *
  * Data to program is received including the offset where it should be
  * programmed. The size of the data will be the one configured by the user in
@@ -1374,7 +1370,7 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 /*
  * firmware_cancel_cb() - Firmware update process abort callback
  *
- * @target:			Target number.
+ * @target:		Target number.
  * @cancel_reason:	Abort reason or status.
  *
  * Called when a firmware update abort message is received.
@@ -1413,7 +1409,7 @@ static void firmware_cancel_cb(unsigned int const target, ccapi_fw_cancel_error_
 /*
  * firmware_reset_cb() - Reset device callback
  *
- * @target:			Target number.
+ * @target:		Target number.
  * @system_reset:	CCAPI_TRUE to reboot the device, CCAPI_FALSE otherwise.
  * @version:		Version for the updated target.
  *
@@ -1459,14 +1455,6 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 	}
 }
 
-/*
- * init_fw_service() - Initialization of firmware service
- *
- * @fw_version:	The current firmware version.
- * @fw_service:	Struct to store the firmware service initialization.
- *
- * Returns: 0 on success, 1 otherwise.
- */
 int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_service)
 {
 #if !defined(ENABLE_RECOVERY_UPDATE) || !defined(ENABLE_ONTHEFLY_UPDATE)

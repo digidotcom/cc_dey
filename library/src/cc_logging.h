@@ -22,9 +22,6 @@
 
 #include <syslog.h>
 
-/*------------------------------------------------------------------------------
-                                  M A C R O S
-------------------------------------------------------------------------------*/
 #ifndef UNUSED_ARGUMENT
 #define UNUSED_ARGUMENT(a)		(void)(a)
 #endif
@@ -48,7 +45,7 @@ void deinit_logger(void);
  *
  * @level:	New log level.
  */
-#define set_log_level(level)									\
+#define set_log_level(level)					\
 	setlogmask(LOG_UPTO(level))
 
 /**
@@ -57,7 +54,7 @@ void deinit_logger(void);
  * @format:	Error message to log.
  * @args:	Additional arguments.
  */
-#define log_error(format, ...)										\
+#define log_error(format, ...)					\
 	syslog(LOG_ERR, "[ERROR] " format, __VA_ARGS__)
 
 /**
@@ -66,7 +63,7 @@ void deinit_logger(void);
  * @format:	Info message to log.
  * @args:	Additional arguments.
  */
-#define log_warning(format, ...)									\
+#define log_warning(format, ...)				\
 	syslog(LOG_WARNING, "[WARN] " format, __VA_ARGS__)
 
 
@@ -76,7 +73,7 @@ void deinit_logger(void);
  * @format:	Info message to log.
  * @args:	Additional arguments.
  */
-#define log_info(format, ...)										\
+#define log_info(format, ...)					\
 	syslog(LOG_INFO, "[INFO] " format, __VA_ARGS__)
 
 /**
@@ -85,7 +82,7 @@ void deinit_logger(void);
  * @format:	Debug message to log.
  * @args:	Additional arguments.
  */
-#define log_debug(format, ...)										\
+#define log_debug(format, ...)					\
 	syslog(LOG_DEBUG, "[DEBUG] " format, __VA_ARGS__)
 
 #endif /* CC_LOGGING_H_ */

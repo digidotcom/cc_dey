@@ -200,11 +200,11 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 			}
 			if ((end = memchr(buf, TERMINATOR, bytes_read)) != 0) {/* Found terminator */
 				bytes_read = end - buf + 1;
-				recv(socket, buf, bytes_read, 0);					/* Consume the segment up to and including the terminator */
-				*end = '\0';										/* terminate line */
-				return total_read + bytes_read;						/* & return length of received line, excluding the terminator */
+				recv(socket, buf, bytes_read, 0);		/* Consume the segment up to and including the terminator */
+				*end = '\0';					/* terminate line */
+				return total_read + bytes_read;			/* & return length of received line, excluding the terminator */
 			}
-			recv(socket, buf, bytes_read, 0);						/* Consume the last chunk */
+			recv(socket, buf, bytes_read, 0);			/* Consume the last chunk */
 			total_read += bytes_read;
 			remaining -= bytes_read;
 			buf += bytes_read;
@@ -223,7 +223,7 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 			}
 			if (ch == TERMINATOR) {
 				buf[-1] = '\0';			/* Terminate what was read */
-				return total_read-1;	/* Return line length excluding terminator */
+				return total_read-1;		/* Return line length excluding terminator */
 			}
 		}
 	}
@@ -285,11 +285,11 @@ int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue)
 int read_uint32(int fd, uint32_t * const result, struct timeval *timeout)
 {
 	char text[50], *end;
-	int length = read_line(fd, text, sizeof(text) -1, timeout);		/* Read up to '\n' */
+	int length = read_line(fd, text, sizeof(text) -1, timeout);	/* Read up to '\n' */
 
 	if (length > 2							/* Minimum req'd type, separator, terminator */
-		&& text[0] == DT_INTEGER			/* Verify correct type */
-		&& text[1] == SEPARATOR) {			/* A valid integer... so far */
+		&& text[0] == DT_INTEGER				/* Verify correct type */
+		&& text[1] == SEPARATOR) {				/* A valid integer... so far */
 		*result = (uint32_t)strtoul(text+2, &end, 10);
 		if (*end == '\0')					/* All chars valid for an int */
 			return 0;
@@ -314,9 +314,9 @@ static int send_blob(int fd, const char *type, const void *data, size_t data_len
 {
 	char terminator = TERMINATOR;
 
-	if (send_amt(fd, type, strlen(type)) > -1			/* Send the blob type */
-		&& write_uint32(fd, data_length) > -1			/* & length */
-		&& send_amt(fd, data, data_length) > -1) {		/* then the data */
+	if (send_amt(fd, type, strlen(type)) > -1		/* Send the blob type */
+		&& write_uint32(fd, data_length) > -1		/* & length */
+		&& send_amt(fd, data, data_length) > -1) {	/* then the data */
 		return write(fd, &terminator, 1) == 1 ? 0 : -1;	/* and terminator */
 	}
 
@@ -334,15 +334,15 @@ static int recv_blob(int fd, char type, void **data, size_t *data_length, struct
 
 	*data = NULL;	/* Ensure that in caller's space it is safe to free(data) even if recv_blob() fails */
 	rxtype[2] = '\0';
-	if (read_amt(fd, rxtype, 2, timeout) == 0					/* Read the type */
-		&& rxtype[0] == type									/* & confirm against expected */
+	if (read_amt(fd, rxtype, 2, timeout) == 0				/* Read the type */
+		&& rxtype[0] == type						/* & confirm against expected */
 		&& rxtype[1] == ':'
 		&& read_uint32(fd, &length, timeout) == 0) {			/* Read the payload length */
 		buffer = malloc(length + 1);
 		if (buffer) {
 			if (read_amt(fd, buffer, length+1, timeout) == 0	/* Read the payload + terminator */
-				&& (char)buffer[length] == TERMINATOR) {		/* Verify terminator where expected */
-				buffer[length] = 0;								/* Replace terminator... for type 's:'tring */
+				&& (char)buffer[length] == TERMINATOR) {	/* Verify terminator where expected */
+				buffer[length] = 0;				/* Replace terminator... for type 's:'tring */
 				if (data_length)
 					*data_length = length;			/* & report the length to the caller if needed */
 				*data = buffer;

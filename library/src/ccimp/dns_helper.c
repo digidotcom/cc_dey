@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -32,17 +32,11 @@
 #include "cc_logging.h"
 #include "dns_helper.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define APP_DNS_CACHE_TIMEOUT	(24 * 3600)
+#define APP_DNS_CACHE_TIMEOUT		(24 * 3600)
 #define APP_MAX_HOST_NAME		64
 
 #define cast_for_alignment(cast, ptr)	((cast) ((void *) (ptr)))
 
-/*------------------------------------------------------------------------------
-                 D A T A    T Y P E S    D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 typedef struct
 {
 	char name[APP_MAX_HOST_NAME];
@@ -51,21 +45,8 @@ typedef struct
 	int is_redirected;
 } dns_cache_t;
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static int dns_cache_is_valid(char const *const device_cloud_url, in_addr_t *const ip_addr);
-static int dns_resolve_name(char const *const domain_name, in_addr_t *const ip_addr);
-static void dns_cache_update(char const *const device_cloud_url, in_addr_t const ip_addr);
-
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
 static dns_cache_t dns_cache = {"", INADDR_NONE, 0, 0};
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 void dns_set_redirected(int const state)
 {
 	dns_cache.is_redirected = state;
@@ -76,45 +57,21 @@ void dns_cache_invalidate(void)
 	dns_cache.ip_addr = INADDR_NONE;
 }
 
-int dns_resolve(char const *const device_cloud_url, in_addr_t *const ip_addr)
-{
-	int status = -1;
-
-	if (device_cloud_url == NULL || ip_addr == NULL)
-		goto done;
-
-	*ip_addr = inet_addr(device_cloud_url);
-
-	if (*ip_addr == INADDR_NONE) {
-		if (!dns_cache_is_valid(device_cloud_url, ip_addr)) {
-			if (dns_resolve_name(device_cloud_url, ip_addr) == 0) {
-				dns_cache_update(device_cloud_url, *ip_addr);
-			} else {
-				log_error("%s: Can't resolve DNS for %s", __func__, device_cloud_url);
-				goto done;
-			}
-		}
-	}
-	status = 0;
-
-done:
-	return status;
-}
-
 static int dns_cache_is_valid(char const *const device_cloud_url, in_addr_t *const ip_addr)
 {
 	int valid = 0;
 
-	if (!dns_cache.is_redirected) {
-		if ((dns_cache.ip_addr != INADDR_NONE)
-				&& (strncmp(dns_cache.name, device_cloud_url, APP_MAX_HOST_NAME) == 0)) {
-			ccimp_os_system_up_time_t elapsed_time;
+	if (dns_cache.is_redirected)
+		return 0;
 
-			ccimp_os_get_system_time(&elapsed_time);
-			if ((elapsed_time.sys_uptime - dns_cache.sys_time) < APP_DNS_CACHE_TIMEOUT) {
-				*ip_addr = dns_cache.ip_addr;
-				valid = 1;
-			}
+	if ((dns_cache.ip_addr != INADDR_NONE)
+			&& (strncmp(dns_cache.name, device_cloud_url, APP_MAX_HOST_NAME) == 0)) {
+		ccimp_os_system_up_time_t elapsed_time;
+
+		ccimp_os_get_system_time(&elapsed_time);
+		if ((elapsed_time.sys_uptime - dns_cache.sys_time) < APP_DNS_CACHE_TIMEOUT) {
+			*ip_addr = dns_cache.ip_addr;
+			valid = 1;
 		}
 	}
 
@@ -160,16 +117,41 @@ done:
 
 static void dns_cache_update(char const *const device_cloud_url, in_addr_t const ip_addr)
 {
-	if (!dns_cache.is_redirected) {
-		strncpy(dns_cache.name, device_cloud_url, APP_MAX_HOST_NAME - 1);
-		dns_cache.name[APP_MAX_HOST_NAME - 1] = '\0';
-		dns_cache.ip_addr = ip_addr;
-		{
-			ccimp_os_system_up_time_t system_up_time;
+	if (dns_cache.is_redirected)
+		return;
 
-			ccimp_os_get_system_time(&system_up_time);
-			dns_cache.sys_time = system_up_time.sys_uptime;
-		}
+	strncpy(dns_cache.name, device_cloud_url, APP_MAX_HOST_NAME - 1);
+	dns_cache.name[APP_MAX_HOST_NAME - 1] = '\0';
+	dns_cache.ip_addr = ip_addr;
+	{
+		ccimp_os_system_up_time_t system_up_time;
+
+		ccimp_os_get_system_time(&system_up_time);
+		dns_cache.sys_time = system_up_time.sys_uptime;
 	}
 }
 
+int dns_resolve(char const *const device_cloud_url, in_addr_t *const ip_addr)
+{
+	int status = -1;
+
+	if (device_cloud_url == NULL || ip_addr == NULL)
+		goto done;
+
+	*ip_addr = inet_addr(device_cloud_url);
+
+	if (*ip_addr == INADDR_NONE) {
+		if (!dns_cache_is_valid(device_cloud_url, ip_addr)) {
+			if (dns_resolve_name(device_cloud_url, ip_addr) == 0) {
+				dns_cache_update(device_cloud_url, *ip_addr);
+			} else {
+				log_error("%s: Can't resolve DNS for %s", __func__, device_cloud_url);
+				goto done;
+			}
+		}
+	}
+	status = 0;
+
+done:
+	return status;
+}

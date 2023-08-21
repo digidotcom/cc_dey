@@ -21,6 +21,7 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <unistd.h>
 
