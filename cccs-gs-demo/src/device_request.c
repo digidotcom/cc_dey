@@ -17,7 +17,7 @@
  * ===========================================================================
  */
 
-#include <cc_srv_services.h>
+#include <cccs_services.h>
 #include <errno.h>
 #include <json_object_iterator.h>
 #include <json_object.h>
@@ -51,7 +51,7 @@
 
 #define USER_LED_ALIAS			"USER_LED"
 
-#define DEVREQ_TAG			"APP-DEVREQ:"
+#define DEVREQ_TAG			"DEMO-REQ:"
 
 #define MAX_RESPONSE_SIZE		512
 #define PARAM_LENGTH			25
@@ -317,9 +317,9 @@ static long get_emmc_size(void)
 	long total_size = 0;
 
 	if (read_file(EMMC_SIZE_FILE, data, MAX_RESPONSE_SIZE) <= 0)
-		log_dr_error("%s", "Error getting storage size: Could not read file");
+		log_dr_error("Error getting storage size: %s", "Could not read file");
 	if (sscanf(data, "%ld", &total_size) < 1)
-		log_dr_error("%s", "Error getting storage size: Invalid file contents");
+		log_dr_error("Error getting storage size: %s", "Invalid file contents");
 
 	return total_size * 512 / 1024; /* kB */
 }
@@ -337,12 +337,12 @@ static long get_nand_size(void)
 
 	fd = fopen(NAND_SIZE_FILE, "r");
 	if (!fd) {
-		log_dr_error("%s", "Error getting storage size: Could not open file");
+		log_dr_error("Error getting storage size: %s", "Could not open file");
 		return total_size;
 	}
 	/* Ignore first line */
 	if (fgets(buffer, sizeof(buffer), fd) == NULL) {
-		log_dr_error("%s", "Error getting storage size: Could not read file");
+		log_dr_error("Error getting storage size: %s", "Could not read file");
 		fclose(fd);
 		return total_size;
 	}
@@ -365,7 +365,7 @@ static long get_nand_size(void)
 		total_size = total_size + size;
 	}
 	if (ferror(fd))
-		log_dr_error("%s", "Error getting storage size: File read error");
+		log_dr_error("Error getting storage size: %s", "File read error");
 	fclose(fd);
 
 	return total_size / 1024; /* kB */
@@ -858,7 +858,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		else if (access(NAND_SIZE_FILE, R_OK) == 0)
 			total_st = get_nand_size();
 		else
-			log_dr_error("%s", "Error getting storage size: File not readable");
+			log_dr_error("Error getting storage size: %s", "File not readable");
 
 		if (json_object_object_add(root, "total_st", json_object_new_int64(total_st)) < 0) {
 			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -894,7 +894,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			resolution_file = RESOLUTION_FILE_CCMP_HDMI;
 
 		if (access(resolution_file, R_OK) != 0)
-			log_dr_error("%s", "Error getting video resolution: File not readable");
+			log_dr_error("Error getting video resolution: %s", "File not readable");
 		else if (read_file(resolution_file, data, MAX_RESPONSE_SIZE) <= 0)
 			log_dr_error("%s", "Error getting video resolution");
 		else if (sscanf(data, "U:%s", resolution) < 1) {
@@ -2041,7 +2041,7 @@ exit:
  * @target:		Target ID of the device request.
  * @resp_buffer:	Buffer containing the response data.
  * @rcv_error:		The error status of the receive process.
- * @rcv_error_hint:	The error hint from the connector service.
+ * @rcv_error_hint:	The error hint from the connector daemon.
  *
  * This callback is executed when the receive process has finished. It doesn't
  * matter if everything worked or there was an error during the process.
@@ -2074,14 +2074,14 @@ int register_custom_device_requests(void)
 			handler->data_cb, handler->status_cb, &resp);
 
 		if (ret != CC_SRV_SEND_ERROR_NONE) {
-			log_dr_error("Cannot register target '%s': Service error %d",
+			log_dr_error("Cannot register target '%s': CCCSD error %d",
 				handler->target, ret);
 		} else if (resp.code != 0) {
 			if (resp.hint)
-				log_dr_error("Cannot register target '%s': Server error, %s (%d)",
+				log_dr_error("Cannot register target '%s': CCCSD error, %s (%d)",
 					handler->target, resp.hint, resp.code);
 			else
-				log_dr_error("Cannot register target '%s': Server error, %d",
+				log_dr_error("Cannot register target '%s': CCCSD error, %d",
 					handler->target, resp.code);
 		}
 
@@ -2101,14 +2101,14 @@ void unregister_custom_device_requests(void)
 		cc_srv_comm_error_t ret = cc_srv_remove_request_target(handler->target, &resp);
 
 		if (ret != CC_SRV_SEND_ERROR_NONE) {
-			log_dr_error("Cannot unregister target '%s': Service error %d",
+			log_dr_error("Cannot unregister target '%s': CCCSD error %d",
 				handler->target, ret);
 		} else if (resp.code != 0) {
 			if (resp.hint)
-				log_dr_error("Cannot unregister target '%s': Server error, %s (%d)",
+				log_dr_error("Cannot unregister target '%s': CCCSD error, %s (%d)",
 					handler->target, resp.hint, resp.code);
 			else
-				log_dr_error("Cannot unregister target '%s': Server error, %d",
+				log_dr_error("Cannot unregister target '%s': CCCSD error, %d",
 					handler->target, resp.code);
 		}
 

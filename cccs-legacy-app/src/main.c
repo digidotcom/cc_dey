@@ -26,12 +26,15 @@
 #include <unistd.h>
 
 #include "daemonize.h"
+#include "data_points.h"
 #include "device_request.h"
 
-#define VERSION		"0.1" GIT_REVISION
+#define VERSION				"0.1" GIT_REVISION
+
+#define CCCS_LEGACY_CONFIG_FILE		"/etc/cc.conf"
 
 #define USAGE \
-	"Cloud Connector client.\n" \
+	"ConnectCore Cloud Services legacy client.\n" \
 	"Copyright(c) Digi International Inc.\n" \
 	"\n" \
 	"Version: %s\n" \
@@ -39,13 +42,10 @@
 	"Usage: %s [options]\n\n" \
 	"  -d  --daemon              Daemonize the process\n" \
 	"  -c  --config-file=<PATH>  Use a custom configuration file instead of\n" \
-	"                            the default one located in /etc/cc.conf\n" \
+	"                            the default one located in " CCCS_LEGACY_CONFIG_FILE "\n" \
 	"  -h  --help                Print help and exit\n" \
 	"\n"
 
-#define REQUEST_TARGETS_DUMP_PATH	"/tmp/cc_request_targets.bin"
-
-volatile bool restart = false;
 static volatile bool stop = false;
 
 /**
@@ -109,36 +109,30 @@ static int start_connector(const char *config_file)
 	if (setup_signal_handler())
 		return EXIT_FAILURE;
 
+	init_error = init_cloud_connection(config_file);
+	if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
+		log_error("Cannot initialize cloud connection, error %d", init_error);
+		return EXIT_FAILURE;
+	}
+
+	register_custom_device_requests();
+
+	start_error = start_cloud_connection();
+	if (start_error != CC_START_ERROR_NONE) {
+		log_error("Cannot start cloud connection, error %d", start_error);
+		return EXIT_FAILURE;
+	}
+
+	if (start_monitoring() != 0)
+		log_error("%s", "Cannot start monitoring");
+
 	do {
-		restart = false;
+		sleep(2);
+	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && stop == CCAPI_FALSE);
 
-		init_error = init_cloud_connection(config_file);
-		if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
-			log_error("Cannot initialize cloud connection, error %d", init_error);
-			return EXIT_FAILURE;
-		}
+	stop_monitoring();
 
-		register_cc_device_requests();
-
-		import_devicerequests(REQUEST_TARGETS_DUMP_PATH);
-
-		start_error = start_cloud_connection();
-		if (start_error != CC_START_ERROR_NONE) {
-			log_error("Cannot start cloud connection, error %d", start_error);
-			return EXIT_FAILURE;
-		}
-
-		do {
-			sleep(2);
-		} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && !stop && !restart);
-
-		if (restart)
-			dump_devicerequests(REQUEST_TARGETS_DUMP_PATH);
-
-		unregister_cc_device_requests();
-
-		stop_cloud_connection();
-	} while (restart);
+	stop_cloud_connection();
 
 	return EXIT_SUCCESS;
 }
@@ -160,7 +154,7 @@ int main(int argc, char *argv[])
 	static int opt, opt_index;
 	int create_daemon = 0;
 	int log_options = LOG_CONS | LOG_NDELAY | LOG_PID | LOG_PERROR;
-	char *config_file = NULL;
+	char *config_file = CCCS_LEGACY_CONFIG_FILE;
 	static const char *short_options = "dc:h";
 	static const struct option long_options[] = {
 			{"daemon", no_argument, NULL, 'd'},
@@ -170,7 +164,7 @@ int main(int argc, char *argv[])
 	};
 
 	/* Initialize the logging interface. */
-	init_logger(LOG_DEBUG, log_options, NULL);
+	init_logger(LOG_DEBUG, log_options, name);
 
 	while (1) {
 		opt = getopt_long(argc, argv, short_options, long_options,

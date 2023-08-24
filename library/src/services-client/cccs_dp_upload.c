@@ -26,16 +26,16 @@
 #include <unistd.h>
 
 #include "cc_logging.h"
-/* Keep 'dp_csv_generator.h' before 'cc_srv_services.h' and '_srv_client_utils.h' because:
+/* Keep 'dp_csv_generator.h' before 'cccs_services.h' and '_cccs_utils.h' because:
   1. 'dp_csv_generator.h' includes 'ccimp/ccimp_types.h' where
-    'ccapi_buffer_info_t' is defined.
-  2. 'cc_srv_services.h' includes 'ccapi_receive.h' that redefines
-    'ccapi_buffer_info_t' only if 'ccimp/ccimp_types.h' is not included.
-  3. '_srv_client_utils.h' includes 'cc_srv_services.h' (see point 2) */
+     'ccapi_buffer_info_t' is defined.
+  2. 'cccs_services.h' includes 'cccs_receive.h' that redefines
+     'ccapi_buffer_info_t' only if 'ccimp/ccimp_types.h' is not included.
+  3. '_cccs_utils.h' includes 'cccs_services.h' (see point 2) */
 #include "dp_csv_generator.h"
-#include "_srv_client_utils.h"
-#include "cc_srv_services.h"
-#include "ccapi_datapoints.h"
+#include "_cccs_utils.h"
+#include "cccs_datapoints.h"
+#include "cccs_services.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
 
@@ -209,7 +209,7 @@ static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigne
 		return ret;
 	}
 
-	log_dp_info("%s", "Sending data points to Cloud Connector server");
+	log_dp_info("%s", "Sending data points to CCCSD");
 
 	fd = connect_cc_server();
 	if (fd < 0) {
@@ -223,7 +223,7 @@ static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigne
 		|| write_uint32(fd, upload_datapoint_file_metrics)	/* CSV data */
 		|| write_blob(fd, data, length)
 		|| write_uint32(fd, upload_datapoint_file_terminate)) { /* End of message */
-		log_dp_error("Could not send data points request to Cloud Connector server: %s (%d)",
+		log_dp_error("Could not send data points request to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		ret = CC_SRV_SEND_ERROR_BAD_RESPONSE;
 		resp->code = ret;
@@ -287,7 +287,7 @@ static size_t dp_generate_csv(ccapi_dp_collection_t * const dp_collection, buffe
 
 	buf_info->buffer = calloc(BUFSIZ, sizeof(*buf_info->buffer));
 	if (!buf_info->buffer) {
-		log_dp_error("Unable to generate data to send to Cloud Connector server: %s", "Out of memory");
+		log_dp_error("Unable to generate data to send to CCCSD: %s", "Out of memory");
 		return -1;
 	}
 	buf_info->bytes_available = BUFSIZ;

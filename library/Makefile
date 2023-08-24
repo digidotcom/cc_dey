@@ -20,8 +20,8 @@
 CC ?= gcc
 
 # Generated Library name.
-NAME := cloudconnector
-SRV_NAME := cloudconnector-srv
+NAME := cccs
+NAME_LEGACY := cloudconnector
 MAJOR := 1
 MINOR := 0
 REVISION := 0
@@ -45,8 +45,8 @@ CCFSM_PUBLIC_HEADER_DIR = $(CCFSM_DIR)/public/include
 CCAPI_PUBLIC_HEADER_DIR = $(CCAPI_DIR)/include
 CUSTOM_PUBLIC_HEADER_DIR = $(SRC)/custom
 CUSTOM_CCFSM_PUBLIC_HEADER_DIR = $(CCAPI_DIR)/source/cc_ansic_custom_include
-INSTALL_HEADERS_DIR = /usr/include/$(NAME)
-INSTALL_HEADERS_DIR_SRV = /usr/include/$(SRV_NAME)
+INSTALL_HEADERS_DIR = /usr/include/$(NAME_LEGACY)
+INSTALL_HEADERS_DIR_SRV = /usr/include/$(NAME)
 
 # Location of Platform Source Code.
 PLATFORM_DIR = $(SRC)/ccimp
@@ -116,8 +116,8 @@ OBJS = $(SRCS:.c=.o)
 LDFLAGS += -shared -Wl,-soname,lib$(NAME).so.$(MAJOR),--sort-common
 
 
-.PHONY: all static dynamic
-all: static dynamic
+.PHONY: all dynamic legacy-static
+all: dynamic legacy-static
 
 define PC_CONTENTS
 prefix=/usr
@@ -126,7 +126,7 @@ libdir=$${exec_prefix}/lib
 includedir=$${prefix}/include
 
 Name: $(NAME)
-Description: Cloud Connector library
+Description: ConnectCore Cloud Services library
 Version: $(MAJOR).$(MINOR)
 
 Requires.private: libconfuse openssl zlib libdigiapix $(PC_REQUIRES_PRIVATE)
@@ -137,32 +137,26 @@ endef
 
 export PC_CONTENTS
 
-define PC_SRV_CONTENTS
+define PC_CONTENTS_DAEMON
 prefix=/usr
 exec_prefix=$${prefix}
 libdir=$${exec_prefix}/lib
 includedir=$${prefix}/include
 
-Name: $(SRV_NAME)
-Description: Cloud Connector client service library
+Name: $(NAME_LEGACY)
+Description: Cloud Connector library
 Version: $(MAJOR).$(MINOR)
 
 Requires.private: libconfuse openssl zlib libdigiapix $(PC_REQUIRES_PRIVATE)
-Libs: -L$${libdir} -l$(NAME)
+Libs: -L$${libdir} -l$(NAME_LEGACY)
 Libs.private: -lpthread -lutil $(PC_LIBS_PRIVATE)
-Cflags: -I$${includedir}/$(SRV_NAME) -I$${includedir}
+Cflags: -I$${includedir}/$(NAME_LEGACY) -I$${includedir}
 endef
 
-export PC_SRV_CONTENTS
+export PC_CONTENTS_DAEMON
 
 $(NAME).pc:
 	echo "$$PC_CONTENTS" >$(NAME).pc
-
-lib$(NAME).a: $(OBJS)
-	$(AR) -rcs $@ $(OBJS)
-
-$(SRV_NAME).pc:
-	echo "$$PC_SRV_CONTENTS" >$(SRV_NAME).pc
 
 lib$(NAME).so: lib$(NAME).so.$(VERSION)
 	ln -sf lib$(NAME).so.$(VERSION) lib$(NAME).so.$(MAJOR)
@@ -171,19 +165,37 @@ lib$(NAME).so: lib$(NAME).so.$(VERSION)
 lib$(NAME).so.$(VERSION): $(OBJS)
 	$(CC) $(LDFLAGS) $(OBJS) $(LIBS) -o $@
 
-static: $(NAME).pc lib$(NAME).a
+$(NAME_LEGACY).pc:
+	echo "$$PC_CONTENTS_DAEMON" >$(NAME_LEGACY).pc
 
-dynamic: $(NAME).pc $(SRV_NAME).pc lib$(NAME).so
+lib$(NAME_LEGACY).a: $(OBJS)
+	$(AR) -rcs $@ $(OBJS)
+
+dynamic: $(NAME).pc $(NAME_LEGACY).pc lib$(NAME).so
+
+legacy-static: $(NAME_LEGACY).pc lib$(NAME_LEGACY).a
 
 
-.PHONY: install install-static install-dynamic install-srv
-install: install-static install-dynamic install-srv
+.PHONY: install install-cccs install-legacy
+install: install-cccs install-legacy
 
-install-pkgconfig:
+install-cccs-pkgconfig:
 	install -d $(DESTDIR)/usr/lib/pkgconfig
 	install -m 0644 $(NAME).pc $(DESTDIR)/usr/lib/pkgconfig/
 
-install-headers:
+install-cccs-headers:
+	install -d $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)
+	install -m 0644 src/cc_logging.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/services-client/cccs_services.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/services-client/cccs_datapoints.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/services-client/cccs_receive.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/cc_utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+
+install-daemon-pkgconfig:
+	install -d $(DESTDIR)/usr/lib/pkgconfig
+	install -m 0644 $(NAME_LEGACY).pc $(DESTDIR)/usr/lib/pkgconfig/
+
+install-daemon-headers:
 	install -d $(DESTDIR)/$(INSTALL_HEADERS_DIR)/ccapi/ \
 		  $(DESTDIR)/$(INSTALL_HEADERS_DIR)/custom/ \
 		  $(DESTDIR)/$(INSTALL_HEADERS_DIR)/ccimp/
@@ -197,35 +209,27 @@ install-certs:
 	install -d $(DESTDIR)/etc/ssl/certs
 	install -m 0644 src/cc_api/source/cc_ansic/public/certificates/*.crt $(DESTDIR)/etc/ssl/certs/
 
-install-static-lib:
-	install -d $(DESTDIR)/usr/lib
-	install -m 0644 lib$(NAME).a $(DESTDIR)/usr/lib/
-
 install-dynamic-lib:
 	install -d $(DESTDIR)/usr/lib
 	install -m 0644 lib$(NAME).so.$(VERSION) $(DESTDIR)/usr/lib/
 	ln -sf lib$(NAME).so.$(VERSION) $(DESTDIR)/usr/lib/lib$(NAME).so.$(MAJOR)
 	ln -sf lib$(NAME).so.$(VERSION) $(DESTDIR)/usr/lib/lib$(NAME).so
 
-install-static: install-static-lib install-pkgconfig install-headers install-certs
+install-legacy-static-lib:
+	install -d $(DESTDIR)/usr/lib
+	install -m 0644 lib$(NAME_LEGACY).a $(DESTDIR)/usr/lib/
 
-install-dynamic: install-dynamic-lib install-pkgconfig install-headers install-certs
+install-daemon-resources: install-daemon-pkgconfig install-daemon-headers
 
-install-srv-pkgconfig:
-	install -d $(DESTDIR)/usr/lib/pkgconfig
-	install -m 0644 $(SRV_NAME).pc $(DESTDIR)/usr/lib/pkgconfig/
+install-dynamic: install-dynamic-lib install-daemon-resources install-certs
 
-install-srv-client-headers:
-	install -d $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)
-	install -m 0644 src/cc_logging.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
-	install -m 0644 src/services-client/cc_srv_services.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
-	install -m 0644 src/services-client/ccapi_datapoints.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
-	install -m 0644 src/services-client/ccapi_receive.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
-	install -m 0644 src/cc_utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+install-legacy-static: install-legacy-static-lib install-certs
 
-install-srv: install-dynamic-lib install-srv-pkgconfig install-srv-client-headers install-certs
+install-cccs: install-dynamic install-cccs-pkgconfig install-cccs-headers
+
+install-legacy: install-legacy-static install-daemon-resources
 
 
 .PHONY: clean
 clean:
-	-rm -f *.so* lib$(NAME).a $(NAME).pc $(SRV_NAME).pc $(OBJS)
+	-rm -f *.so* lib$(NAME_LEGACY).a $(NAME_LEGACY).pc $(NAME).pc $(OBJS)

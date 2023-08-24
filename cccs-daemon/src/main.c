@@ -26,13 +26,12 @@
 #include <unistd.h>
 
 #include "daemonize.h"
-#include "data_points.h"
 #include "device_request.h"
 
 #define VERSION		"0.1" GIT_REVISION
 
 #define USAGE \
-	"Cloud Connector client.\n" \
+	"ConnectCore Cloud Services daemon.\n" \
 	"Copyright(c) Digi International Inc.\n" \
 	"\n" \
 	"Version: %s\n" \
@@ -40,10 +39,13 @@
 	"Usage: %s [options]\n\n" \
 	"  -d  --daemon              Daemonize the process\n" \
 	"  -c  --config-file=<PATH>  Use a custom configuration file instead of\n" \
-	"                            the default one located in /etc/cc.conf\n" \
+	"                            the default one located in /etc/cccs.conf\n" \
 	"  -h  --help                Print help and exit\n" \
 	"\n"
 
+#define REQUEST_TARGETS_DUMP_PATH	"/tmp/cccsd_request_targets.bin"
+
+volatile bool restart = false;
 static volatile bool stop = false;
 
 /**
@@ -95,7 +97,7 @@ static int setup_signal_handler(void)
  * start_connector() - Start Cloud Connector
  *
  * @config_file:	Absolute path of the configuration file to use. NULL to
- * 			use the default one (/etc/cc.conf).
+ * 			use the default one (/etc/cccs.conf).
  *
  * Return: 0 on success, 1 otherwise.
  */
@@ -107,30 +109,36 @@ static int start_connector(const char *config_file)
 	if (setup_signal_handler())
 		return EXIT_FAILURE;
 
-	init_error = init_cloud_connection(config_file);
-	if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
-		log_error("Cannot initialize cloud connection, error %d", init_error);
-		return EXIT_FAILURE;
-	}
-
-	register_custom_device_requests();
-
-	start_error = start_cloud_connection();
-	if (start_error != CC_START_ERROR_NONE) {
-		log_error("Cannot start cloud connection, error %d", start_error);
-		return EXIT_FAILURE;
-	}
-
-	if (start_monitoring() != 0)
-		log_error("%s", "Cannot start monitoring");
-
 	do {
-		sleep(2);
-	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && stop == CCAPI_FALSE);
+		restart = false;
 
-	stop_monitoring();
+		init_error = init_cloud_connection(config_file);
+		if (init_error != CC_INIT_ERROR_NONE && init_error != CC_INIT_ERROR_ADD_VIRTUAL_DIRECTORY) {
+			log_error("Cannot initialize Cloud connection, error %d", init_error);
+			return EXIT_FAILURE;
+		}
 
-	stop_cloud_connection();
+		register_cccsd_device_requests();
+
+		import_devicerequests(REQUEST_TARGETS_DUMP_PATH);
+
+		start_error = start_cloud_connection();
+		if (start_error != CC_START_ERROR_NONE) {
+			log_error("Cannot start Cloud connection, error %d", start_error);
+			return EXIT_FAILURE;
+		}
+
+		do {
+			sleep(2);
+		} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && !stop && !restart);
+
+		if (restart)
+			dump_devicerequests(REQUEST_TARGETS_DUMP_PATH);
+
+		unregister_cccsd_device_requests();
+
+		stop_cloud_connection();
+	} while (restart);
 
 	return EXIT_SUCCESS;
 }
@@ -162,7 +170,7 @@ int main(int argc, char *argv[])
 	};
 
 	/* Initialize the logging interface. */
-	init_logger(LOG_DEBUG, log_options, name);
+	init_logger(LOG_DEBUG, log_options, NULL);
 
 	while (1) {
 		opt = getopt_long(argc, argv, short_options, long_options,

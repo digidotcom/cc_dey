@@ -17,10 +17,10 @@
  * ===========================================================================
  */
 
-#ifndef _CC_SRV_CLIENT_UTILS_H_
-#define _CC_SRV_CLIENT_UTILS_H_
+#ifndef _CCCS_CLIENT_UTILS_H_
+#define _CCCS_CLIENT_UTILS_H_
 
-#include "cc_srv_services.h"
+#include "cccs_services.h"
 
 /**
  * get_lock() - Create a lock
@@ -80,4 +80,4 @@ int connect_cc_server(void);
  */
 cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsigned long timeout);
 
-#endif /* _CC_SRV_CLIENT_UTILS_H_ */
+#endif /* _CCCS_CLIENT_UTILS_H_ */

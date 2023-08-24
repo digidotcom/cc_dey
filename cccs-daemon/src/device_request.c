@@ -25,8 +25,8 @@
 
 #include "device_request.h"
 
-#define TARGET_CC_GET_CONFIG		"cc_get_config"
-#define TARGET_CC_SET_CONFIG		"cc_set_config"
+#define TARGET_CCCSD_GET_CONFIG		"cccsd_get_config"
+#define TARGET_CCCSD_SET_CONFIG		"cccsd_set_config"
 
 #define IS_FLAG_SET(flag, flags_set)	(((flag) & (flags_set)) == (flags_set))
 
@@ -225,9 +225,9 @@ static json_object *convert_settings_to_json(cfg_t *cfg, json_object *json_setti
 }
 
 /*
- * get_cc_config_cb() - Data callback for 'cc_get_config' device requests
+ * get_cccsd_config_cb() - Data callback for 'cccs_get_config' device requests
  *
- * @target:		Target ID of the device request (cc_get_config).
+ * @target:		Target ID of the device request (cccs_get_config).
  * @transport:		Communication transport used by the device request.
  * @req_buffer:		Buffer containing the device request.
  * @resp_buffer:	Buffer to store the answer of the request.
@@ -237,7 +237,7 @@ static json_object *convert_settings_to_json(cfg_t *cfg, json_object *json_setti
  *
  * Return: 'CCAPI_RECEIVE_ERROR_NONE' if success, any other error on failure.
  */
-static ccapi_receive_error_t get_cc_config_cb(char const *const target,
+static ccapi_receive_error_t get_cccsd_config_cb(char const *const target,
 		ccapi_transport_t const transport,
 		ccapi_buffer_info_t const *const req_buffer,
 		ccapi_buffer_info_t *const resp_buffer)
@@ -251,7 +251,7 @@ static ccapi_receive_error_t get_cc_config_cb(char const *const target,
 	resp_buffer->buffer = NULL;
 
 	if (!cc_cfg || !cc_cfg->_data) {
-		char *error = "Unable to get Cloud Connector service configuration";
+		char *error = "Unable to get Cloud daemon configuration";
 
 		status = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 		log_error("%s", error);
@@ -558,9 +558,9 @@ static void convert_json_to_cfg(json_object *json, cfg_t *cfg)
 }
 
 /*
- * set_cc_config_cb() - Data callback for 'cc_set_config' device requests
+ * set_cccsd_config_cb() - Data callback for 'ccds_set_config' device requests
  *
- * @target:		Target ID of the device request (cc_set_config).
+ * @target:		Target ID of the device request (cccs_set_config).
  * @transport:		Communication transport used by the device request.
  * @req_buffer:		Buffer containing the device request.
  * @resp_buffer:	Buffer to store the answer of the request.
@@ -570,7 +570,7 @@ static void convert_json_to_cfg(json_object *json, cfg_t *cfg)
  *
  * Return: 'CCAPI_RECEIVE_ERROR_NONE' if success, any other error on failure.
  */
-static ccapi_receive_error_t set_cc_config_cb(char const *const target,
+static ccapi_receive_error_t set_cccsd_config_cb(char const *const target,
 		ccapi_transport_t const transport,
 		ccapi_buffer_info_t const *const req_buffer,
 		ccapi_buffer_info_t *const resp_buffer)
@@ -597,7 +597,7 @@ static ccapi_receive_error_t set_cc_config_cb(char const *const target,
 		int ret;
 
 		if (!cc_cfg || !cc_cfg->_data) {
-			char *error = "Unable to get Cloud Connector service configuration";
+			char *error = "Unable to get Cloud daemon configuration";
 
 			status = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 			log_error("%s", error);
@@ -705,14 +705,14 @@ static void request_status_cb(char const *const target,
 		free(resp_buffer->buffer);
 }
 
-ccapi_receive_error_t register_cc_device_requests(void)
+ccapi_receive_error_t register_cccsd_device_requests(void)
 {
-	char *target = TARGET_CC_GET_CONFIG;
+	char *target = TARGET_CCCSD_GET_CONFIG;
 	ccapi_receive_error_t error;
 
 	get_configuration(cc_cfg);
 
-	error = ccapi_receive_add_target(target, get_cc_config_cb,
+	error = ccapi_receive_add_target(target, get_cccsd_config_cb,
 		request_status_cb, CCAPI_RECEIVE_NO_LIMIT);
 
 	if (error == CCAPI_RECEIVE_ERROR_TARGET_ALREADY_ADDED)
@@ -720,8 +720,8 @@ ccapi_receive_error_t register_cc_device_requests(void)
 	else if (error != CCAPI_RECEIVE_ERROR_NONE)
 		goto done;
 
-	target = TARGET_CC_SET_CONFIG;
-	error = ccapi_receive_add_target(target, set_cc_config_cb,
+	target = TARGET_CCCSD_SET_CONFIG;
+	error = ccapi_receive_add_target(target, set_cccsd_config_cb,
 		request_status_cb, CCAPI_RECEIVE_NO_LIMIT);
 done:
 	if (error == CCAPI_RECEIVE_ERROR_TARGET_ALREADY_ADDED)
@@ -732,12 +732,12 @@ done:
 	return error;
 }
 
-void unregister_cc_device_requests(void)
+void unregister_cccsd_device_requests(void)
 {
 	unsigned int i;
 	char *targets[] = {
-		TARGET_CC_GET_CONFIG,
-		TARGET_CC_SET_CONFIG
+		TARGET_CCCSD_GET_CONFIG,
+		TARGET_CCCSD_SET_CONFIG
 	};
 
 	for (i = 0; i < ARRAY_SIZE(targets); i++) {

@@ -74,7 +74,7 @@ typedef enum {
  * init_cloud_connection() - Initialize Cloud connection
  *
  * @config_file: Absolute path of the configuration file to use. NULL to
- * 		 use the default one (/etc/cc.conf).
+ * 		 use the default one (/etc/cccs.conf).
  *
  * Return: 0 if Cloud connection is successfully initialized, error code
  *	   otherwise.

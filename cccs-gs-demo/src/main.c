@@ -27,7 +27,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "cc_srv_services.h"
+#include "cccs_services.h"
 #include "data_points.h"
 #include "device_request.h"
 

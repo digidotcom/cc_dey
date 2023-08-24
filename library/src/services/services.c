@@ -79,7 +79,7 @@ static void handle_requests(int fd)
 		/* Read request tag (to select handler for this request) */
 		if (read_string(request_sock, &request_tag, NULL, &timeout) < 0) {
 			send_error(request_sock, "Failed to read request code");
-			log_error("Error reading request tag, %s", strerror(errno));
+			log_error("Error reading request tag: %s (%d)", strerror(errno), errno);
 			close(request_sock);
 			continue;
 		}
@@ -98,12 +98,13 @@ static void handle_requests(int fd)
 			}
 		}
 
-		/* Error on requets that cannot be handled, and clean up */
+		/* Error on requests that cannot be handled, and clean up */
 		if (!handled)
 			send_error(request_sock, "Invalid request type");
 
 		if (close(request_sock) < 0)
-			log_warning("Could not close service socket after attending request: %s", strerror(errno));
+			log_warning("Could not close service socket after attending request: %s (%d)",
+				strerror(errno), errno);
 
 		free(request_tag);
 	}
@@ -122,7 +123,8 @@ static void *listen_threaded(void *unused)
 		return NULL;
 
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &n_options, sizeof(n_options)) < 0)
-		log_warning("Failed to set SO_REUSE* on request serversocket: %s", strerror(errno));
+		log_warning("Failed to set SO_REUSE* on request serversocket: %s (%d)",
+			strerror(errno), errno);
 
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(CONNECTOR_REQUEST_PORT);

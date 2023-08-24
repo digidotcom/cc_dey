@@ -29,7 +29,7 @@
 
 #include "ccimp/ccimp_types.h"
 
-#include "_srv_client_utils.h"
+#include "_cccs_utils.h"
 #include "cc_logging.h"
 #include "services.h"
 #include "services_util.h"
@@ -154,18 +154,18 @@ int connect_cc_server(void)
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (s == -1) {
-		log_srv_error("Failed to connect to Cloud Connector service: %s (%d)",
+		log_srv_error("Failed to connect to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		return -1;
 	}
 
 	if (connect(s, (const struct sockaddr *)&sa, sizeof sa) == -1) {
-		log_srv_error("Failed to connect to Cloud Connector service: %s (%d)",
+		log_srv_error("Failed to connect to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		return -1;
 	}
 
-	log_srv_debug("Connected to Cloud Connector service (s=%d)", s);
+	log_srv_debug("Connected to CCCSD (s=%d)", s);
 
 	return s;
 }
@@ -185,7 +185,7 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 	if (read_uint32(fd, &code, timeout > 0 ? &timeout_val : NULL) < 0) {
 		resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
 		log_srv_error("Bad response: %s",
-				"Failed to read data type from Cloud Connector service");
+				"Failed to read data type from CCCSD");
 
 		return resp->code;
 	}
@@ -193,7 +193,7 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 	switch(code) {
 		case RESP_END_OF_MESSAGE:
 			resp->code = 0;
-			log_srv_debug("%s", "Success from Cloud Connector server");
+			log_srv_debug("%s", "Success from CCCSD");
 
 			return CC_SRV_SEND_ERROR_NONE;
 		case RESP_ERRORCODE:
@@ -201,7 +201,7 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 			if (read_uint32(fd, (uint32_t *) &resp->code, timeout > 0 ? &timeout_val : NULL) < 0) {
 				resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
 				log_srv_error("Bad response: %s",
-						"Failed to read error code from Cloud Connector service");
+						"Failed to read error code from CCCSD");
 
 				return resp->code;
 			}
@@ -211,7 +211,7 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 			break;
 		default:
 			resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
-			log_srv_error("Bad response: Received unknown data type code %" PRIu32 "from Cloud Connector service", code);
+			log_srv_error("Bad response: Received unknown data type code %" PRIu32 "from CCCSD", code);
 
 			return resp->code;
 	}
@@ -227,9 +227,9 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 	resp->hint = (char *)msg;
 
 	if (resp->hint)
-		log_srv_debug("Error from Cloud Connector service: %s (%d)", resp->hint, resp->code);
+		log_srv_debug("Error from Cloud: %s (%d)", resp->hint, resp->code);
 	else
-		log_srv_debug("Error from Cloud Connector service (%d)", resp->code);
+		log_srv_debug("Error from Cloud (%d)", resp->code);
 
 	return CC_SRV_SEND_ERROR_FROM_CLOUD;
 }

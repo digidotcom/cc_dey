@@ -17,13 +17,13 @@
 #
 # ***************************************************************************
 
-SUBDIRS := library app app-server app-demo
+SUBDIRS := library cccs-daemon cccs-gs-demo cccs-legacy-app
 
 all: $(SUBDIRS)
 
-app: library
-app-server: library
-app-demo: app-server
+cccs-daemon: library
+cccs-gs-demo: cccs-daemon
+cccs-legacy-app: library
 
 .PHONY: $(SUBDIRS)
 $(SUBDIRS):

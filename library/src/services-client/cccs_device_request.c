@@ -28,10 +28,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "_srv_client_utils.h"
-#include "cc_srv_services.h"
 #include "cc_logging.h"
-#include "ccapi_receive.h"
+#include "_cccs_utils.h"
+#include "cccs_services.h"
+#include "cccs_receive.h"
 #include "service_device_request.h"
 #include "services_util.h"
 
@@ -192,7 +192,7 @@ static server_sock_t get_server_socket(void)
 		goto done;
 
 	if ((server_sock.fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		log_dr_error("Could not open socket to listen to device requests: %s (%d)",
+		log_dr_error("Could not open connection to CCCSD to listen to device requests: %s (%d)",
 			strerror(errno), errno);
 		goto error;
 	}
@@ -204,14 +204,14 @@ static server_sock_t get_server_socket(void)
 	}
 
 	if (bind(server_sock.fd, (struct sockaddr *) &serv_addr, sizeof(serv_addr))) {
-		log_dr_error("Failed to bind to local socket: %s (%d)",
+		log_dr_error("Failed to bind to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		goto close_pipes;
 	}
 
 	addr_len = sizeof(serv_addr);
 	if (getsockname(server_sock.fd, (struct sockaddr *)&serv_addr, &addr_len) == -1) {
-		log_dr_error("Failed to get server port: %s (%d)",
+		log_dr_error("Failed to get CCCSD port: %s (%d)",
 			strerror(errno), errno);
 		goto close_pipes;
 	}
@@ -316,7 +316,7 @@ static void *listen_threaded(void *server_sock)
 		ret = select(sock->fd > sock->stop_pipe[0] ? sock->fd + 1 : sock->stop_pipe[0] + 1,
 					&read_set, NULL, NULL, &timeout);
 		if (ret < 0) {
-			log_dr_error("Error reading request from Cloud Connector service: %s (%d)",
+			log_dr_error("Error reading request from CCCSD: %s (%d)",
 				strerror(errno), errno);
 			goto done;
 		}
@@ -329,7 +329,7 @@ static void *listen_threaded(void *server_sock)
 
 		request_sock = accept4(sock->fd, NULL, NULL, SOCK_CLOEXEC);
 		if (request_sock == -1) {
-			log_dr_error("Error reading request from Cloud Connector service: %s (%d)",
+			log_dr_error("Error reading request from CCCSD: %s (%d)",
 				strerror(errno), errno);
 			goto done;
 		}
@@ -339,7 +339,7 @@ static void *listen_threaded(void *server_sock)
 		/* Read request type and target */
 		if (read_string(request_sock, &cb_type, NULL, &timeout)			/* The request type */
 			|| read_string(request_sock, &target, NULL, &timeout)) {	/* Target */
-			log_dr_error("Error reading request from Cloud Connector service: %s (%d)",
+			log_dr_error("Error reading request from CCCSD: %s (%d)",
 				strerror(errno), errno);
 			send_error(request_sock, "Failed to read request code");
 			goto loop_done;
@@ -368,7 +368,7 @@ static void *listen_threaded(void *server_sock)
 			ccapi_receive_error_t error;
 
 			if (read_blob(request_sock, &req_buffer.buffer, &req_buffer.length, &timeout)) {
-				log_dr_error("Unable to get '%s' request data from Cloud Connector service", target);
+				log_dr_error("Unable to get '%s' request data from CCCSD", target);
 				resp_buffer.buffer = strdup("Error getting request data");
 				if (!resp_buffer.buffer) {
 					log_dr_error("Cannot generate error response for target '%s': Out of memory", target);
@@ -389,7 +389,7 @@ static void *listen_threaded(void *server_sock)
 
 			if (write_uint32(request_sock, error)
 				|| write_blob(request_sock, resp_buffer.buffer, resp_buffer.length)) {
-				log_dr_error("Unable to send '%s' request response to Cloud Connector service", target);
+				log_dr_error("Unable to send '%s' request response to CCCSD", target);
 				free(resp_buffer.buffer);
 				resp_buffer.buffer = NULL;
 				resp_buffer.length = 0;
@@ -403,9 +403,9 @@ static void *listen_threaded(void *server_sock)
 
 			if (read_uint32(request_sock, &error, &timeout)
 				|| read_string(request_sock, &error_str, NULL, &timeout)) {
-				log_dr_error("Unable to get '%s' request status from Cloud Connector service", target);
+				log_dr_error("Unable to get '%s' request status from CCCSD", target);
 				error = -1;
-				error_str = "Unable to get request status from Cloud Connector service";
+				error_str = "Unable to get request status from CCCSD";
 			}
 
 			registered_req->status_cb(target, &resp_buffer, error, error_str);
@@ -413,7 +413,7 @@ static void *listen_threaded(void *server_sock)
 			free(error_str);
 		/* Unknown callback type */
 		} else {
-			log_dr_error("Got strange callback type from Cloud Connector service '%s'",
+			log_dr_error("Got strange callback type from CCCSD '%s'",
 				cb_type);
 		}
 loop_done:
@@ -422,8 +422,8 @@ loop_done:
 					target);
 
 		if (close(request_sock) < 0)
-			log_warning("Could not close service socket after attending request: %s",
-				strerror(errno));
+			log_warning("Could not close connection to CCCSD after attending request: %s (%d)",
+				strerror(errno), errno);
 
 		free(cb_type);
 		free(target);

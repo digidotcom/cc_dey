@@ -34,7 +34,7 @@
 #include "_utils.h"
 #include "utils.h"
 
-#define DAEMON_NAME			"CONNECTOR"
+#define DAEMON_NAME			"CCCSD"
 
 int init_logger(int level, int options, char *name)
 {

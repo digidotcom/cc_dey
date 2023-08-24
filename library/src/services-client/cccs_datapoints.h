@@ -17,8 +17,8 @@
  * ===========================================================================
  */
 
-#ifndef _CCAPI_DATAPOINTS_H_
-#define _CCAPI_DATAPOINTS_H_
+#ifndef _CCCS_DATAPOINTS_H_
+#define _CCCS_DATAPOINTS_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -91,4 +91,4 @@ ccapi_dp_error_t ccapi_dp_get_collection_points_count(ccapi_dp_collection_handle
 ccapi_dp_error_t ccapi_dp_add(ccapi_dp_collection_handle_t const collection, char const * const stream_id, ...);
 ccapi_dp_error_t ccapi_dp_remove_older_data_point_from_streams(ccapi_dp_collection_handle_t const collection);
 
-#endif
+#endif /* _CCCS_DATAPOINTS_H_ */

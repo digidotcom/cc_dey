@@ -35,7 +35,7 @@
 
 #define DEVICE_ID_FORMAT	"%02hhX%02hhX%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX"
 
-#define CC_CONFIG_FILE		"/etc/cc.conf"
+#define CCCS_CONFIG_FILE	"/etc/cccs.conf"
 
 #define CONNECT_TIMEOUT		30
 
@@ -69,7 +69,7 @@ bool edp_cert_downloaded = false;
  */
 static int get_device_id_from_mac(uint8_t *const device_id, const uint8_t *const mac_addr)
 {
-	const char *const deviceid_file = "/etc/cc.did";
+	const char *const deviceid_file = "/etc/cccs.did";
 	unsigned int const device_id_length = 16;
 	FILE *fp = NULL;
 	unsigned int n_items;
@@ -309,7 +309,7 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 		return CC_INIT_ERROR_INSUFFICIENT_MEMORY;
 	}
 
-	if (parse_configuration(config_file ? config_file : CC_CONFIG_FILE, cc_cfg) != 0) {
+	if (parse_configuration(config_file ? config_file : CCCS_CONFIG_FILE, cc_cfg) != 0) {
 		ret = CC_INIT_ERROR_PARSE_CONFIGURATION;
 		goto error;
 	}

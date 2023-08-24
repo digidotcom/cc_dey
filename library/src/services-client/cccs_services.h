@@ -17,14 +17,18 @@
  * ===========================================================================
  */
 
-#ifndef _CC_SRV_SERVICES_H_
-#define _CC_SRV_SERVICES_H_
+#ifndef _CCCS_SERVICES_H_
+#define _CCCS_SERVICES_H_
 
 #include <stdbool.h>
 
 #include "cc_logging.h"
-#include "ccapi_receive.h"
-#include "ccapi_datapoints.h"
+/* Keep 'cccs_datapoints.h' before 'cc_utils.h' because:
+  'cc_utils.h' uses 'ccapi_timestamp_t' defined in 'cccs_datapoints.h' and in
+  'ccapi/ccapi_datapoints.h'
+*/
+#include "cccs_datapoints.h"
+#include "cccs_receive.h"
 #include "cc_utils.h"
 
 typedef enum {
@@ -199,4 +203,4 @@ cc_srv_comm_error_t cc_srv_remove_request_target(char const * const target, cc_s
 cc_srv_comm_error_t cc_srv_remove_request_target_with_timeout(char const * const target,
 	unsigned long timeout, cc_srv_resp_t *resp);
 
-#endif /* _CC_SRV_SERVICES_H_ */
+#endif /* _CCCS_SERVICES_H_ */

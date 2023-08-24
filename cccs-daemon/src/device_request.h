@@ -27,15 +27,15 @@
 #endif
 
 /*
- * register_cc_device_requests() - Register custom device requests
+ * register_cccsd_device_requests() - Register custom device requests
  *
  * Return: Error code after registering the custom device requests.
  */
-ccapi_receive_error_t register_cc_device_requests(void);
+ccapi_receive_error_t register_cccsd_device_requests(void);
 
 /*
- * unregister_cc_device_requests() - Unregister custom device requests
+ * unregister_cccsd_device_requests() - Unregister custom device requests
  */
-void unregister_cc_device_requests(void);
+void unregister_cccsd_device_requests(void);
 
 #endif /* DEVICE_REQUEST_H_ */

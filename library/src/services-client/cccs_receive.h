@@ -17,8 +17,8 @@
 * =======================================================================
 */
 
-#ifndef _CCAPI_RECEIVE_H_
-#define _CCAPI_RECEIVE_H_
+#ifndef _CCCS_RECEIVE_H_
+#define _CCCS_RECEIVE_H_
 
 #include <stddef.h>
 
@@ -49,4 +49,4 @@ typedef struct {
 } ccapi_buffer_info_t;
 #endif
 
-#endif
+#endif  /* _CCCS_RECEIVE_H_ */
