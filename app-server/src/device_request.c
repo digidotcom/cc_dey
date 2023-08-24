@@ -17,6 +17,7 @@
  * ===========================================================================
  */
 
+#include <confuse.h>
 #include <json_object_iterator.h>
 #include <json_object.h>
 #include <json_tokener.h>
@@ -243,15 +244,13 @@ static ccapi_receive_error_t get_cc_config_cb(char const *const target,
 {
 	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
 	char *request = req_buffer->buffer;
-	cfg_t *cfg = NULL;
 	json_object *req = NULL, *resp = NULL;
 
 	log_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
 	resp_buffer->buffer = NULL;
 
-	cfg = get_confuse_configuration();
-	if (!cfg) {
+	if (!cc_cfg || !cc_cfg->_data) {
 		char *error = "Unable to get Cloud Connector service configuration";
 
 		status = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
@@ -264,7 +263,7 @@ static ccapi_receive_error_t get_cc_config_cb(char const *const target,
 
 	if (req_buffer->length == 0) {
 		/* Return the whole configuration */
-		resp = convert_cfg_to_json(cfg);
+		resp = convert_cfg_to_json(cc_cfg->_data);
 	} else {
 		json_object *json_settings = NULL;
 
@@ -278,7 +277,7 @@ static ccapi_receive_error_t get_cc_config_cb(char const *const target,
 		    || !json_object_is_type(json_settings, json_type_array))
 			goto bad_format;
 
-		resp = convert_settings_to_json(cfg, json_settings);
+		resp = convert_settings_to_json(cc_cfg->_data, json_settings);
 	}
 
 	if (!resp)
@@ -596,9 +595,8 @@ static ccapi_receive_error_t set_cc_config_cb(char const *const target,
 
 	{
 		int ret;
-		cfg_t *cfg = get_confuse_configuration();
 
-		if (!cfg) {
+		if (!cc_cfg || !cc_cfg->_data) {
 			char *error = "Unable to get Cloud Connector service configuration";
 
 			status = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
@@ -609,7 +607,7 @@ static ccapi_receive_error_t set_cc_config_cb(char const *const target,
 			goto done;
 		}
 
-		convert_json_to_cfg(req, cfg);
+		convert_json_to_cfg(req, cc_cfg->_data);
 
 		ret = apply_configuration(cc_cfg);
 		resp = json_object_new_object();

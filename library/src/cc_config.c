@@ -100,9 +100,6 @@
 
 #define ALL_METRICS				"*"
 
-static cfg_t *cfg;
-static const char *cfg_path;
-
 static char *get_fw_version(const char *const value) {
 	char data[256] = {0};
 	const char *path = NULL;
@@ -621,9 +618,11 @@ static void conf_error_func(cfg_t *cfg, const char *format, va_list args)
 /*
  * check_cfg() - Checks whether the parsed configuration is valid
  *
+ * @cfg:	Configuration to check.
+ *
  * Return: 0 if the configuration is valid, -1 otherwise.
  */
-static int check_cfg(void)
+static int check_cfg(cfg_t *cfg)
 {
 	/* Check general settings. */
 	if (cfg_check_vendor_id(cfg, cfg_getopt(cfg, SETTING_VENDOR_ID)) != 0)
@@ -679,13 +678,17 @@ static int check_cfg(void)
 /*
  * get_virtual_directories() - Get the list of virtual directories
  *
- * @cfg:	Configuration struct from config file to read the virtual directories
  * @cc_cfg:	Cloud Connector configuration to store the virtual directories.
  */
-static void get_virtual_directories(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
+static void get_virtual_directories(cc_cfg_t *const cc_cfg)
 {
+	cfg_t *virtual_dir_cfg = NULL;
 	unsigned int i;
-	cfg_t *virtual_dir_cfg = cfg_getsec(cfg, GROUP_VIRTUAL_DIRS);
+
+	if (!cc_cfg->_data)
+		return;
+
+	virtual_dir_cfg = cfg_getsec(cc_cfg->_data, GROUP_VIRTUAL_DIRS);
 
 	free(cc_cfg->vdirs);
 
@@ -710,15 +713,16 @@ static void get_virtual_directories(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
 /*
  * get_sys_mon_metrics() - Get the list of system monitor metrics
  *
- * @cfg:	Configuration struct from config file to read the system monitor metrics
  * @cc_cfg:	Cloud Connector configuration to store the system monitor metrics.
  */
-static void get_sys_mon_metrics(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
+static void get_sys_mon_metrics(cc_cfg_t *const cc_cfg)
 {
+	cfg_t *cfg = cc_cfg->_data;
 	unsigned int i;
 
-	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++)
-		free(cc_cfg->sys_mon_metrics[i]);
+	if (!cfg)
+		return;
+
 	free(cc_cfg->sys_mon_metrics);
 
 	cc_cfg->n_sys_mon_metrics = cfg_size(cfg, SETTING_SYS_MON_METRICS);
@@ -731,7 +735,7 @@ static void get_sys_mon_metrics(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
 	}
 
 	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++) {
-		cc_cfg->sys_mon_metrics[i] = strdup(cfg_getnstr(cfg, SETTING_SYS_MON_METRICS, i));
+		cc_cfg->sys_mon_metrics[i] = cfg_getnstr(cfg, SETTING_SYS_MON_METRICS, i);
 		if (cc_cfg->sys_mon_metrics[i] == NULL) {
 			log_info("%s", "Cannot initialize system monitor metric");
 			cc_cfg->n_sys_mon_metrics = i;
@@ -746,11 +750,18 @@ static void get_sys_mon_metrics(cfg_t *const cfg, cc_cfg_t *const cc_cfg)
 /*
  * get_log_level() - Get the log level setting value
  *
+ * @cfg:	Configuration to get log level.
+ *
  * @Return: The log level value.
  */
-static int get_log_level(void)
+static int get_log_level(cc_cfg_t *const cc_cfg)
 {
-	char *level = cfg_getstr(cfg, SETTING_LOG_LEVEL);
+	char *level = NULL;
+
+	if (!cc_cfg->_data)
+		return LOG_LEVEL_ERROR;
+
+	level = cfg_getstr(cc_cfg->_data, SETTING_LOG_LEVEL);
 
 	if (level == NULL || strlen(level) == 0)
 		return LOG_LEVEL_ERROR;
@@ -772,25 +783,30 @@ static int get_log_level(void)
  */
 static int fill_connector_config(cc_cfg_t *cc_cfg)
 {
-	if (check_cfg())
+	cfg_t *cfg = cc_cfg->_data;
+
+	if (!cfg)
+		return -1;
+
+	if (check_cfg(cfg))
 		return -1;
 
 	/* Fill general settings. */
 	cc_cfg->vendor_id = strtoul(cfg_getstr(cfg, SETTING_VENDOR_ID), NULL, 16);
-	cc_cfg->device_type = strdup(cfg_getstr(cfg, SETTING_DEVICE_TYPE));
-	cc_cfg->fw_version_src = strdup(cfg_getstr(cfg, SETTING_FW_VERSION));
+	cc_cfg->device_type = cfg_getstr(cfg, SETTING_DEVICE_TYPE);
+	cc_cfg->fw_version_src = cfg_getstr(cfg, SETTING_FW_VERSION);
 	free(cc_cfg->fw_version);
 	cc_cfg->fw_version = get_fw_version(cc_cfg->fw_version_src);
 	log_debug("Firmware version: %s", cc_cfg->fw_version);
 
-	cc_cfg->description = strdup(cfg_getstr(cfg, SETTING_DESCRIPTION));
-	cc_cfg->contact = strdup(cfg_getstr(cfg, SETTING_CONTACT));
-	cc_cfg->location = strdup(cfg_getstr(cfg, SETTING_LOCATION));
+	cc_cfg->description = cfg_getstr(cfg, SETTING_DESCRIPTION);
+	cc_cfg->contact = cfg_getstr(cfg, SETTING_CONTACT);
+	cc_cfg->location = cfg_getstr(cfg, SETTING_LOCATION);
 
 	/* Fill connection settings. */
-	cc_cfg->url = strdup(cfg_getstr(cfg, SETTING_RM_URL));
-	cc_cfg->client_cert_path = strdup(cfg_getstr(cfg, SETTING_CLIENT_CERT_PATH));
-	cc_cfg->enable_reconnect = (ccapi_bool_t) cfg_getbool(cfg, SETTING_ENABLE_RECONNECT);
+	cc_cfg->url = cfg_getstr(cfg, SETTING_RM_URL);
+	cc_cfg->client_cert_path = cfg_getstr(cfg, SETTING_CLIENT_CERT_PATH);
+	cc_cfg->enable_reconnect = cfg_getbool(cfg, SETTING_ENABLE_RECONNECT);
 	cc_cfg->reconnect_time = cfg_getint(cfg, SETTING_RECONNECT_TIME);
 	cc_cfg->keepalive_rx = cfg_getint(cfg, SETTING_KEEPALIVE_RX);
 	cc_cfg->keepalive_tx = cfg_getint(cfg, SETTING_KEEPALIVE_TX);
@@ -800,31 +816,31 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 	cc_cfg->services = 0;
 	if (cfg_getbool(cfg, ENABLE_FS_SERVICE)) {
 		cc_cfg->services = cc_cfg->services | FS_SERVICE;
-		get_virtual_directories(cfg, cc_cfg);
+		get_virtual_directories(cc_cfg);
 	}
 
 	if (cfg_getbool(cfg, ENABLE_SYSTEM_MONITOR))
 		cc_cfg->services = cc_cfg->services | SYS_MONITOR_SERVICE;
 
-	cc_cfg->fw_download_path = strdup(cfg_getstr(cfg, SETTING_FW_DOWNLOAD_PATH));
+	cc_cfg->fw_download_path = cfg_getstr(cfg, SETTING_FW_DOWNLOAD_PATH);
 
 	/* Fill On the fly setting */
-	cc_cfg->on_the_fly = (ccapi_bool_t) cfg_getbool(cfg, SETTING_ON_THE_FLY);
+	cc_cfg->on_the_fly = cfg_getbool(cfg, SETTING_ON_THE_FLY);
 
 	/* Fill system monitor settings. */
 	cc_cfg->sys_mon_sample_rate = cfg_getint(cfg, SETTING_SYS_MON_SAMPLE_RATE);
 	cc_cfg->sys_mon_num_samples_upload = cfg_getint(cfg, SETTING_SYS_MON_UPLOAD_SIZE);
-	get_sys_mon_metrics(cfg, cc_cfg);
+	get_sys_mon_metrics(cc_cfg);
 
 	/* Fill static location settings. */
-	cc_cfg->use_static_location = (ccapi_bool_t) cfg_getbool(cfg, SETTING_USE_STATIC_LOCATION);
+	cc_cfg->use_static_location = cfg_getbool(cfg, SETTING_USE_STATIC_LOCATION);
 	cc_cfg->latitude = (float) cfg_getfloat(cfg, SETTING_LATITUDE);
 	cc_cfg->longitude = (float) cfg_getfloat(cfg, SETTING_LONGITUDE);
 	cc_cfg->altitude = (float) cfg_getfloat(cfg, SETTING_ALTITUDE);
 
 	/* Fill logging settings. */
-	cc_cfg->log_level = get_log_level();
-	cc_cfg->log_console = (ccapi_bool_t) cfg_getbool(cfg, SETTING_LOG_CONSOLE);
+	cc_cfg->log_level = get_log_level(cc_cfg);
+	cc_cfg->log_console = cfg_getbool(cfg, SETTING_LOG_CONSOLE);
 
 	return 0;
 }
@@ -916,81 +932,81 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		return -1;
 	}
 
-	cfg_path = filename;
-	cfg = cfg_init(opts, CFGF_IGNORE_UNKNOWN);
-	if (!cfg) {
+	cc_cfg->_data = cfg_init(opts, CFGF_IGNORE_UNKNOWN);
+	if (!cc_cfg->_data) {
 		log_error("Failed initializing configuration file parser: %s (%d)",
 			strerror(errno), errno);
+		//free(data);
 		return -1;
 	}
 
 	/* Custom logging, rather than default Confuse stderr logging */
-	cfg_set_error_function(cfg, conf_error_func);
+	cfg_set_error_function(cc_cfg->_data, conf_error_func);
 
-	cfg_set_validate_func(cfg, SETTING_VENDOR_ID, cfg_check_vendor_id);
-	cfg_set_validate_func(cfg, SETTING_DEVICE_TYPE, cfg_check_device_type);
-	cfg_set_validate_func(cfg, SETTING_FW_VERSION, cfg_check_fw_version);
-	cfg_set_validate_func(cfg, SETTING_DESCRIPTION, cfg_check_description);
-	cfg_set_validate_func(cfg, SETTING_CONTACT, cfg_check_contact);
-	cfg_set_validate_func(cfg, SETTING_LOCATION, cfg_check_location);
-	cfg_set_validate_func(cfg, SETTING_RM_URL, cfg_check_rm_url);
-	cfg_set_validate_func(cfg, SETTING_CLIENT_CERT_PATH, cfg_check_cert_path);
-	cfg_set_validate_func(cfg, SETTING_RECONNECT_TIME, cfg_check_reconnect_time);
-	cfg_set_validate_func(cfg, SETTING_KEEPALIVE_RX, cfg_check_keepalive_rx);
-	cfg_set_validate_func(cfg, SETTING_KEEPALIVE_TX, cfg_check_keepalive_tx);
-	cfg_set_validate_func(cfg, SETTING_WAIT_TIMES, cfg_check_wait_times);
-	cfg_set_validate_func(cfg, SETTING_FW_DOWNLOAD_PATH, cfg_check_fw_download_path);
-	cfg_set_validate_func(cfg, SETTING_SYS_MON_SAMPLE_RATE,
+	cfg_set_validate_func(cc_cfg->_data, SETTING_VENDOR_ID, cfg_check_vendor_id);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_DEVICE_TYPE, cfg_check_device_type);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_VERSION, cfg_check_fw_version);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_DESCRIPTION, cfg_check_description);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_CONTACT, cfg_check_contact);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_LOCATION, cfg_check_location);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_RM_URL, cfg_check_rm_url);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_CLIENT_CERT_PATH, cfg_check_cert_path);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_RECONNECT_TIME, cfg_check_reconnect_time);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_RX, cfg_check_keepalive_rx);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_TX, cfg_check_keepalive_tx);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_WAIT_TIMES, cfg_check_wait_times);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_fw_download_path);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_SAMPLE_RATE,
 			cfg_check_sys_mon_sample_rate);
-	cfg_set_validate_func(cfg, SETTING_SYS_MON_UPLOAD_SIZE,
+	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_UPLOAD_SIZE,
 			cfg_check_sys_mon_upload_size);
-	cfg_set_validate_func(cfg, SETTING_SYS_MON_METRICS, cfg_check_sys_mon_metrics);
-	cfg_set_validate_func(cfg, SETTING_LATITUDE, cfg_check_latitude);
-	cfg_set_validate_func(cfg, SETTING_LONGITUDE, cfg_check_longitude);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_METRICS, cfg_check_sys_mon_metrics);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_LATITUDE, cfg_check_latitude);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_LONGITUDE, cfg_check_longitude);
 
 	/* Parse the configuration file. */
-	switch (cfg_parse(cfg, filename)) {
+	switch (cfg_parse(cc_cfg->_data, filename)) {
 		case CFG_FILE_ERROR:
 			log_error("Configuration file '%s' could not be read: %s\n", filename,
 					strerror(errno));
-			return -1;
+			goto parse_error;
 		case CFG_SUCCESS:
 			break;
 		case CFG_PARSE_ERROR:
 			log_error("Error parsing configuration file '%s'\n", filename);
-			return -1;
+			goto parse_error;
 	}
 
 	return fill_connector_config(cc_cfg);
+
+parse_error:
+	cfg_free(cc_cfg->_data);
+	cc_cfg->_data = NULL;
+
+	return -1;
 }
 
-void close_configuration(void)
-{
-	cfg_free(cfg);
-}
-
-void free_configuration(cc_cfg_t *cc_cfg)
+/*
+ * free_cc_cfg() - Release the values in the cc_cfg structure but not '_data'
+ *
+ * @cc_cfg:	General configuration struct (cc_cfg_t) holding the
+ * 		current connector configuration.
+ */
+static void free_cc_cfg(cc_cfg_t *cc_cfg)
 {
 	unsigned int i;
 
 	if (!cc_cfg)
 		return;
 
-	free(cc_cfg->device_type);
 	cc_cfg->device_type = NULL;
-	free(cc_cfg->fw_version_src);
 	cc_cfg->fw_version_src = NULL;
 	free(cc_cfg->fw_version);
 	cc_cfg->fw_version = NULL;
-	free(cc_cfg->description);
 	cc_cfg->description = NULL;
-	free(cc_cfg->contact);
 	cc_cfg->contact = NULL;
-	free(cc_cfg->location);
 	cc_cfg->location = NULL;
-	free(cc_cfg->url);
 	cc_cfg->url = NULL;
-	free(cc_cfg->client_cert_path);
 	cc_cfg->client_cert_path = NULL;
 
 	for (i = 0; i < cc_cfg->n_vdirs; i++) {
@@ -998,33 +1014,42 @@ void free_configuration(cc_cfg_t *cc_cfg)
 		cc_cfg->vdirs[i].path = NULL;
 	}
 	free(cc_cfg->vdirs);
-	cc_cfg->vdirs = 0;
+	cc_cfg->vdirs = NULL;
+	cc_cfg->n_vdirs = 0;
 
-	free(cc_cfg->fw_download_path);
 	cc_cfg->fw_download_path = NULL;
 
 	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++)
-		free(cc_cfg->sys_mon_metrics[i]);
+		cc_cfg->sys_mon_metrics[i] = NULL;
 	free(cc_cfg->sys_mon_metrics);
+	cc_cfg->sys_mon_metrics = NULL;
+	cc_cfg->n_sys_mon_metrics = 0;
+}
+
+void free_configuration(cc_cfg_t *cc_cfg)
+{
+	if (!cc_cfg)
+		return;
+
+	free_cc_cfg(cc_cfg);
+
+	if (cc_cfg->_data) {
+		cfg_free(cc_cfg->_data);
+		cc_cfg->_data = NULL;
+	}
 
 	free(cc_cfg);
-	cc_cfg = NULL;
 }
 
 int get_configuration(cc_cfg_t *cc_cfg)
 {
 	/* Check if configuration is initialized. */
-	if (cfg == NULL) {
+	if (!cc_cfg || !cc_cfg->_data) {
 		log_error("%s", "Configuration is not initialized");
 		return -1;
 	}
 
 	return fill_connector_config(cc_cfg);
-}
-
-cfg_t *get_confuse_configuration(void)
-{
-	return cfg;
 }
 
 /*
@@ -1037,8 +1062,12 @@ cfg_t *get_confuse_configuration(void)
  */
 static int set_connector_config(cc_cfg_t *cc_cfg)
 {
+	cfg_t *cfg = cc_cfg->_data;
 	unsigned int i;
 	char vid_str[11]; /* "0x" + 8 chars + '\0' */
+
+	if (!cfg)
+		return -1;
 
 	/* Set general settings. */
 	snprintf(vid_str, sizeof vid_str, "0x%08"PRIX32, cc_cfg->vendor_id);
@@ -1093,43 +1122,76 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	return 0;
 }
 
+/*
+ * write_configuration() - Writes to a file a configuration
+ *
+ * @cfg:	Configuration to write.
+ * @path:	Absolute file path of the file.
+ *
+ * Return: 0 if success, -1 otherwise.
+ */
+static int write_configuration(cfg_t *cfg, const char *path)
+{
+	FILE *fp = NULL;
+	int ret;
+
+	if (!cfg || !path || !strlen(path))
+		return -1;
+
+	/* Write configuration to file. */
+	fp = fopen(path, "w+");
+	if (!fp) {
+		log_error("Error opening configuration file to write '%s'", path);
+		return -1;
+	}
+
+	ret = cfg_print(cfg, fp);
+	if (ret != 0)
+		log_error("Error writing configuration to file '%s'", path);
+
+	fclose(fp);
+
+	return ret;
+}
+
 int save_configuration(cc_cfg_t *cc_cfg)
 {
-	FILE *fp;
+	cfg_t *cfg = NULL;
 
 	/* Check if configuration is initialized. */
-	if (cfg == NULL) {
-		log_error("%s", "Configuration is not initialized");
-		goto error;
+	if (!cc_cfg || !cc_cfg->_data) {
+		log_error("Unable to save: %s", "Configuration is not initialized");
+		return -1;
 	}
 
 	/* Set the current configuration. */
 	if (set_connector_config(cc_cfg)) {
-		log_error("%s", "Error setting configuration values");
-		goto error;
+		log_error("Unable to save: %s", "Error setting configuration values");
+		return -1;
 	}
 
-	/* Write configuration to file. */
-	fp = fopen(cfg_path, "w+");
-	if (fp == NULL) {
-		log_error("Error opening configuration file to write '%s'", cfg_path);
-		goto error;
-	}
-	cfg_print(cfg, fp);
-	fclose(fp);
+	cfg = cc_cfg->_data;
 
-	return 0;
-
-error:
-	return -1;
+	return write_configuration(cfg, cfg->filename);
 }
 
 int apply_configuration(cc_cfg_t *cc_cfg)
 {
+	cfg_t *cfg = NULL;
+
+	/* Check if configuration is initialized. */
+	if (!cc_cfg || !cc_cfg->_data) {
+		log_error("Unable to apply: %s", "Configuration is not initialized");
+		return -1;
+	}
+
+	free_cc_cfg(cc_cfg);
+
 	if (fill_connector_config(cc_cfg) != 0)
 		return 1;
 
-	if (save_configuration(cc_cfg) != 0)
+	cfg = cc_cfg->_data;
+	if (write_configuration(cfg, cfg->filename))
 		return 2;
 
 	return 0;

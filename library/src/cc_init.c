@@ -388,7 +388,6 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 
 error:
 	free_configuration(cc_cfg);
-	close_configuration();
 	cc_cfg = NULL;
 
 	return ret;
@@ -781,7 +780,6 @@ cc_stop_error_t stop_cloud_connection(void)
 	set_cloud_connection_status(CC_STATUS_DISCONNECTED);
 
 	free_configuration(cc_cfg);
-	close_configuration();
 	cc_cfg = NULL;
 
 	deinit_logger();

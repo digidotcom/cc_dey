@@ -20,7 +20,6 @@
 #ifndef CC_CONFIG_H_
 #define CC_CONFIG_H_
 
-#include <confuse.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -78,6 +77,7 @@ typedef struct {
  * @log_level:				Level of messaging to log
  * @log_console:			Enable messages logging to the console
  * @on_the_fly:				Enable on-the-fly firmware download support
+ * @_data:				Internal configuration data
  *
  */
 typedef struct {
@@ -91,7 +91,7 @@ typedef struct {
 
 	char *url;
 	char *client_cert_path;
-	ccapi_bool_t enable_reconnect;
+	bool enable_reconnect;
 	uint16_t reconnect_time;
 	uint16_t keepalive_rx;
 	uint16_t keepalive_tx;
@@ -108,16 +108,18 @@ typedef struct {
 	uint32_t sys_mon_num_samples_upload;
 	char **sys_mon_metrics;
 	unsigned int n_sys_mon_metrics;
-	ccapi_bool_t sys_mon_all_metrics;
+	bool sys_mon_all_metrics;
 
-	ccapi_bool_t use_static_location;
+	bool use_static_location;
 	float latitude;
 	float longitude;
 	float altitude;
 
 	int log_level;
-	ccapi_bool_t log_console;
-	ccapi_bool_t on_the_fly;
+	bool log_console;
+	bool on_the_fly;
+
+	void *_data;
 } cc_cfg_t;
 
 /*
@@ -137,15 +139,6 @@ typedef struct {
 int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg);
 
 /*
- * close_configuration() - Close configuration and free internal vars
- *
- * Note that after calling this method, the configuration must be parsed again
- * from the configuration file using 'parse_configuration()' method before
- * trying to use any other configuration function.
- */
-void close_configuration(void);
-
-/*
  * free_configuration() - Release the configuration var
  *
  * @cc_cfg:	General configuration struct (cc_cfg_t) holding the
@@ -162,13 +155,6 @@ void free_configuration(cc_cfg_t *const config);
  * Return: 0 if the configuration is retrieved successfully, -1 otherwise.
  */
 int get_configuration(cc_cfg_t *cc_cfg);
-
-/*
- * get_confuse_configuration() - Retrieve current confuse connector configuration
- *
- * Return: Struct (cfg_t) that holds the current connector configuration.
- */
-cfg_t *get_confuse_configuration(void);
 
 /*
  * save_configuration() - Save the given connector configuration
