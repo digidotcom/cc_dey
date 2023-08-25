@@ -34,34 +34,34 @@
 #include "services.h"
 #include "services_util.h"
 
-#define SERVICE_TAG	"SRV:"
+#define CCCSD_TAG	"CCCSD:"
 
 /**
- * log_srv_debug() - Log the given message as debug
+ * log_cccsd_debug() - Log the given message as debug
  *
  * @format:		Debug message to log.
  * @args:		Additional arguments.
  */
-#define log_srv_debug(format, ...)					\
-	log_debug("%s " format, SERVICE_TAG, __VA_ARGS__)
+#define log_cccsd_debug(format, ...)					\
+	log_debug("%s " format, CCCSD_TAG, __VA_ARGS__)
 
 /**
- * log_srv_info() - Log the given message as info
+ * log_cccsd_info() - Log the given message as info
  *
  * @format:		Warning message to log.
  * @args:		Additional arguments.
  */
-#define log_srv_info(format, ...)					\
-	log_info("%s " format, SERVICE_TAG, __VA_ARGS__)
+#define log_cccsd_info(format, ...)					\
+	log_info("%s " format, CCCSD_TAG, __VA_ARGS__)
 
 /**
- * log_srv_error() - Log the given message as error
+ * log_cccsd_error() - Log the given message as error
  *
  * @format:		Error message to log.
  * @args:		Additional arguments.
  */
-#define log_srv_error(format, ...)					\
-	log_error("%s " format, SERVICE_TAG, __VA_ARGS__)
+#define log_cccsd_error(format, ...)					\
+	log_error("%s " format, CCCSD_TAG, __VA_ARGS__)
 
 void * ccapi_lock_create_and_release(void);
 ccimp_status_t ccapi_lock_acquire(void *lock);
@@ -89,7 +89,7 @@ int lock_acquire(void *lock)
 			break;
 		default:
 			/* Should not occur */
-			log_srv_error("Unknown lock acquire status %d", status);
+			log_cccsd_error("Unknown lock acquire status %d", status);
 			break;
 	}
 
@@ -112,7 +112,7 @@ int lock_release(void *lock)
 			break;
 		default:
 			/* Should not occur */
-			log_srv_error("Unknown lock release status %d", status);
+			log_cccsd_error("Unknown lock release status %d", status);
 			break;
 	}
 
@@ -137,14 +137,14 @@ int lock_destroy(void *lock)
 			break;
 		default:
 			/* Should not occur */
-			log_srv_error("Unknown lock release status %d", status);
+			log_cccsd_error("Unknown lock release status %d", status);
 			break;
 	}
 
 	return ret;
 }
 
-int connect_cc_server(void)
+int connect_cccsd(void)
 {
 	const struct sockaddr_in sa = {
 		.sin_family = AF_INET,
@@ -154,23 +154,23 @@ int connect_cc_server(void)
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (s == -1) {
-		log_srv_error("Failed to connect to CCCSD: %s (%d)",
+		log_cccsd_error("Failed to connect to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		return -1;
 	}
 
 	if (connect(s, (const struct sockaddr *)&sa, sizeof sa) == -1) {
-		log_srv_error("Failed to connect to CCCSD: %s (%d)",
+		log_cccsd_error("Failed to connect to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		return -1;
 	}
 
-	log_srv_debug("Connected to CCCSD (s=%d)", s);
+	log_cccsd_debug("Connected to CCCSD (s=%d)", s);
 
 	return s;
 }
 
-cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsigned long timeout)
+cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long timeout)
 {
 	uint32_t code;
 	void *msg = NULL;
@@ -183,8 +183,8 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 	timeout_val.tv_usec = 0;
 
 	if (read_uint32(fd, &code, timeout > 0 ? &timeout_val : NULL) < 0) {
-		resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
-		log_srv_error("Bad response: %s",
+		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
+		log_cccsd_error("Bad response: %s",
 				"Failed to read data type from CCCSD");
 
 		return resp->code;
@@ -193,14 +193,14 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 	switch(code) {
 		case RESP_END_OF_MESSAGE:
 			resp->code = 0;
-			log_srv_debug("%s", "Success from CCCSD");
+			log_cccsd_debug("%s", "Success from CCCSD");
 
-			return CC_SRV_SEND_ERROR_NONE;
+			return CCCS_SEND_ERROR_NONE;
 		case RESP_ERRORCODE:
 			/* Read error code first */
 			if (read_uint32(fd, (uint32_t *) &resp->code, timeout > 0 ? &timeout_val : NULL) < 0) {
-				resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
-				log_srv_error("Bad response: %s",
+				resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
+				log_cccsd_error("Bad response: %s",
 						"Failed to read error code from CCCSD");
 
 				return resp->code;
@@ -210,16 +210,16 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 			resp->code = 255;
 			break;
 		default:
-			resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
-			log_srv_error("Bad response: Received unknown data type code %" PRIu32 "from CCCSD", code);
+			resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
+			log_cccsd_error("Bad response: Received unknown data type code %" PRIu32 "from CCCSD", code);
 
 			return resp->code;
 	}
 
 	/* Read the error message */
 	if (read_blob(fd, &msg, &msg_len, timeout > 0 ? &timeout_val : NULL) < 0) {
-		log_srv_error("Failed to read response: %s (%d)", strerror(errno), errno);
-		resp->code = CC_SRV_SEND_ERROR_BAD_RESPONSE;
+		log_cccsd_error("Failed to read response: %s (%d)", strerror(errno), errno);
+		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
 
 		return resp->code;
 	}
@@ -227,9 +227,9 @@ cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsign
 	resp->hint = (char *)msg;
 
 	if (resp->hint)
-		log_srv_debug("Error from Cloud: %s (%d)", resp->hint, resp->code);
+		log_cccsd_debug("Error from Cloud: %s (%d)", resp->hint, resp->code);
 	else
-		log_srv_debug("Error from Cloud (%d)", resp->code);
+		log_cccsd_debug("Error from Cloud (%d)", resp->code);
 
-	return CC_SRV_SEND_ERROR_FROM_CLOUD;
+	return CCCS_SEND_ERROR_FROM_CLOUD;
 }

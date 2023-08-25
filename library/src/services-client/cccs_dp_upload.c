@@ -180,22 +180,22 @@ done:
 }
 
 /*
- * send_dp_data() - Send data point data to Cloud Connector server
+ * send_dp_data() - Send data point data to CCCS daemon
  *
  * @data:	Data points to send in csv format.
  * @length:	Total number of bytes to send.
- * @timeout:	Number of seconds to wait for a response from the server.
- * @resp:	Received response from Cloud Connector server.
+ * @timeout:	Number of seconds to wait for a response from the daemon.
+ * @resp:	Received response from CCCS daemon.
  *
  * Response may contain a string with the result of the operation (resp->hint).
  * This string must be freed.
  *
- * Return: CC_SRV_SEND_ERROR_NONE if success, any other error if the
- *         communication with the service fails.
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
  */
-static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigned long timeout, cc_srv_resp_t *resp)
+static cccs_comm_error_t send_dp_data(const char *data, size_t length, unsigned long timeout, cccs_resp_t *resp)
 {
-	cc_srv_comm_error_t ret = CC_SRV_SEND_ERROR_NONE;
+	cccs_comm_error_t ret = CCCS_SEND_ERROR_NONE;
 	int fd = -1;
 
 	if (!data || !length) {
@@ -203,7 +203,7 @@ static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigne
 			log_dp_error("%s", "Unable to upload NULL");
 		if (!length)
 			log_dp_error("%s", "Number of bytes to upload must be greater than 0");
-		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 
 		return ret;
@@ -211,9 +211,9 @@ static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigne
 
 	log_dp_info("%s", "Sending data points to CCCSD");
 
-	fd = connect_cc_server();
+	fd = connect_cccsd();
 	if (fd < 0) {
-		ret = CC_SRV_SEND_UNABLE_TO_CONNECT_TO_SRV;
+		ret = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
 		resp->code = ret;
 
 		return ret;
@@ -225,12 +225,12 @@ static cc_srv_comm_error_t send_dp_data(const char *data, size_t length, unsigne
 		|| write_uint32(fd, upload_datapoint_file_terminate)) { /* End of message */
 		log_dp_error("Could not send data points request to CCCSD: %s (%d)",
 			strerror(errno), errno);
-		ret = CC_SRV_SEND_ERROR_BAD_RESPONSE;
+		ret = CCCS_SEND_ERROR_BAD_RESPONSE;
 		resp->code = ret;
 		goto done;
 	}
 
-	ret = parse_cc_server_response(fd, resp, timeout);
+	ret = parse_cccsd_response(fd, resp, timeout);
 
 done:
 	close(fd);
@@ -238,24 +238,24 @@ done:
 	return ret;
 }
 
-cc_srv_comm_error_t cc_srv_send_dp_csv_file(const char *path, unsigned long const timeout, cc_srv_resp_t *resp)
+cccs_comm_error_t cccs_send_dp_csv_file(const char *path, unsigned long const timeout, cccs_resp_t *resp)
 {
 	char *data = NULL;
 	size_t size = 0;
-	cc_srv_comm_error_t ret;
+	cccs_comm_error_t ret;
 
 	resp->hint = NULL;
 
 	data = read_csv_file(path, &size);
 	if (!data) {
-		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 
 		return ret;
 	}
 
 	ret = send_dp_data(data, size, timeout, resp);
-	if (ret == CC_SRV_SEND_ERROR_NONE)
+	if (ret == CCCS_SEND_ERROR_NONE)
 		log_dp_debug("Data points in '%s' uploaded", path);
 
 	free(data);
@@ -264,7 +264,7 @@ cc_srv_comm_error_t cc_srv_send_dp_csv_file(const char *path, unsigned long cons
 }
 
 /*
- * dp_generate_csv() - Generate the CSV contents in memory to send to the server
+ * dp_generate_csv() - Generate the CSV contents in memory to send to the daemon
  *
  * @dp_collection:	Data point collection to send.
  * @buf_info:		The buffer with the generated CSV.
@@ -399,22 +399,22 @@ static void dp_free_data_points_from_collection(ccapi_dp_collection_t * const dp
 }
 
 /*
- * dp_send_collection() - Send data point collection to Cloud Connector server
+ * dp_send_collection() - Send data point collection to CCCS daemon
  *
  * @dp_collection:	Data point collection to send.
- * @timeout:		Number of seconds to wait for a response from the server.
- * @resp:		Received response from Cloud Connector server.
+ * @timeout:		Number of seconds to wait for a response from the daemon.
+ * @resp:		Received response from CCCS daemon.
  *
  * Response may contain a string with the result of the operation (resp->hint).
  * This string must be freed.
  *
- * Return: CC_SRV_SEND_ERROR_NONE if success, any other error if the
- *         communication with the service fails.
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
  */
-static cc_srv_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_collection,
-	unsigned long const timeout, cc_srv_resp_t *resp)
+static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_collection,
+	unsigned long const timeout, cccs_resp_t *resp)
 {
-	cc_srv_comm_error_t ret = CC_SRV_SEND_ERROR_NONE;
+	cccs_comm_error_t ret = CCCS_SEND_ERROR_NONE;
 	bool collection_lock_acquired = false;
 	buffer_info_t buf_info;
 
@@ -422,7 +422,7 @@ static cc_srv_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_c
 
 	if (dp_collection == NULL || dp_collection->ccapi_data_stream_list == NULL) {
 		log_dp_error("%s", "Invalid data point collection");
-		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 
 		return ret;
@@ -432,7 +432,7 @@ static cc_srv_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_c
 
 	if (lock_acquire(dp_collection->lock) != 0) {
 		log_dp_error("Data point collection %s", "busy");
-		ret = CC_SRV_SEND_ERROR_LOCK;
+		ret = CCCS_SEND_ERROR_LOCK;
 		resp->code = ret;
 
 		return ret;
@@ -444,7 +444,7 @@ static cc_srv_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_c
 	if (dp_generate_csv(dp_collection, &buf_info) > 0) {
 		ret = send_dp_data(buf_info.buffer, buf_info.bytes_written, timeout, resp);
 	} else {
-		ret = CC_SRV_SEND_ERROR_INVALID_ARGUMENT;
+		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 	}
 
@@ -453,21 +453,21 @@ static cc_srv_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_c
 	dp_free_data_points_from_collection(dp_collection);
 
 	if (collection_lock_acquired && lock_release(dp_collection->lock) != 0) {
-		if (ret == CC_SRV_SEND_ERROR_NONE)
-			ret = CC_SRV_SEND_ERROR_LOCK;
+		if (ret == CCCS_SEND_ERROR_NONE)
+			ret = CCCS_SEND_ERROR_LOCK;
 		log_dp_error("Data point collection %s", "busy");
 	}
 
 	return ret;
 }
 
-cc_srv_comm_error_t cc_srv_send_dp_collection(ccapi_dp_collection_t *const dp_collection, cc_srv_resp_t *resp)
+cccs_comm_error_t cccs_send_dp_collection(ccapi_dp_collection_t *const dp_collection, cccs_resp_t *resp)
 {
 	return dp_send_collection(dp_collection, CCAPI_DP_WAIT_FOREVER, resp);
 }
 
-cc_srv_comm_error_t cc_srv_send_dp_collection_with_timeout(ccapi_dp_collection_t *const dp_collection,
-	unsigned long const timeout, cc_srv_resp_t *resp)
+cccs_comm_error_t cccs_send_dp_collection_tout(ccapi_dp_collection_t *const dp_collection,
+	unsigned long const timeout, cccs_resp_t *resp)
 {
 	return dp_send_collection(dp_collection, timeout, resp);
 }

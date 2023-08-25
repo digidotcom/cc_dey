@@ -57,27 +57,27 @@ int lock_release(void *lock);
 int lock_destroy(void *lock);
 
 /**
- * connect_cc_server() - Connect to Cloud Connector server
+ * connect_cccsd() - Connect to CCCS daemon
  *
  * Returns: The file descriptor if success, -1 otherwise.
  */
-int connect_cc_server(void);
+int connect_cccsd(void);
 
 /*
- * parse_cc_server_response() - Parse received response from Cloud Connector server
+ * parse_cccsd_response() - Parse received response from CCCS daemon
  *
  * @fd:		Socket to read response from.
- * @resp:	Received response from Cloud Connector server.
+ * @resp:	Received response from CCCS daemon.
  * @timeout:	Number of seconds to wait for a response.
  *
  * Response may contain a string with the result of the operation (resp->hint).
  * This string must be freed.
  *
- * Return: CC_SRV_SEND_ERROR_NONE if success, any other error if the
- *         communication with the service fails.
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
  *
  * Expects the reply sequence "i:0" or "i:1 b:error-msg".
  */
-cc_srv_comm_error_t parse_cc_server_response(int fd, cc_srv_resp_t *resp, unsigned long timeout);
+cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long timeout);
 
 #endif /* _CCCS_CLIENT_UTILS_H_ */

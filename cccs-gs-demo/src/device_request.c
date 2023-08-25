@@ -141,8 +141,8 @@ typedef struct {
 
 struct handler_t {
 	const char *target;
-	cc_srv_request_data_cb_t data_cb;
-	cc_srv_request_status_cb_t status_cb;
+	cccs_request_data_cb_t data_cb;
+	cccs_request_status_cb_t status_cb;
 };
 
 static void request_status_cb(char const *const target,
@@ -2064,16 +2064,16 @@ static void request_status_cb(char const *const target,
 int register_custom_device_requests(void)
 {
 	unsigned int i;
-	cc_srv_comm_error_t ret;
+	cccs_comm_error_t ret;
 
 	for (i = 0; i < ARRAY_SIZE(request_handlers); i++) {
 		const struct handler_t *handler = &request_handlers[i];
-		cc_srv_resp_t resp;
+		cccs_resp_t resp;
 
-		ret = cc_srv_add_request_target(handler->target,
+		ret = cccs_add_request_target(handler->target,
 			handler->data_cb, handler->status_cb, &resp);
 
-		if (ret != CC_SRV_SEND_ERROR_NONE) {
+		if (ret != CCCS_SEND_ERROR_NONE) {
 			log_dr_error("Cannot register target '%s': CCCSD error %d",
 				handler->target, ret);
 		} else if (resp.code != 0) {
@@ -2097,10 +2097,10 @@ void unregister_custom_device_requests(void)
 
 	for (i = 0; i < ARRAY_SIZE(request_handlers); i++) {
 		const struct handler_t *handler = &request_handlers[i];
-		cc_srv_resp_t resp;
-		cc_srv_comm_error_t ret = cc_srv_remove_request_target(handler->target, &resp);
+		cccs_resp_t resp;
+		cccs_comm_error_t ret = cccs_remove_request_target(handler->target, &resp);
 
-		if (ret != CC_SRV_SEND_ERROR_NONE) {
+		if (ret != CCCS_SEND_ERROR_NONE) {
 			log_dr_error("Cannot unregister target '%s': CCCSD error %d",
 				handler->target, ret);
 		} else if (resp.code != 0) {
