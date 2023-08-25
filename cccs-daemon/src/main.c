@@ -26,7 +26,7 @@
 #include <unistd.h>
 
 #include "daemonize.h"
-#include "device_request.h"
+#include "data_request.h"
 
 #define VERSION		"0.1" GIT_REVISION
 
@@ -118,9 +118,9 @@ static int start_connector(const char *config_file)
 			return EXIT_FAILURE;
 		}
 
-		register_cccsd_device_requests();
+		register_cccsd_data_requests();
 
-		import_devicerequests(REQUEST_TARGETS_DUMP_PATH);
+		import_datarequests(REQUEST_TARGETS_DUMP_PATH);
 
 		start_error = start_cloud_connection();
 		if (start_error != CC_START_ERROR_NONE) {
@@ -133,9 +133,9 @@ static int start_connector(const char *config_file)
 		} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && !stop && !restart);
 
 		if (restart)
-			dump_devicerequests(REQUEST_TARGETS_DUMP_PATH);
+			dump_datarequests(REQUEST_TARGETS_DUMP_PATH);
 
-		unregister_cccsd_device_requests();
+		unregister_cccsd_data_requests();
 
 		stop_cloud_connection();
 	} while (restart);

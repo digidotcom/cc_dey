@@ -32,10 +32,10 @@
 #include "_cccs_utils.h"
 #include "cccs_services.h"
 #include "cccs_receive.h"
-#include "service_device_request.h"
+#include "service_data_request.h"
 #include "services_util.h"
 
-#define DEVICE_REQUEST_TAG		"DEVREQ:"
+#define DATA_REQUEST_TAG		"DREQ:"
 
 /**
  * log_dr_debug() - Log the given message as debug
@@ -44,7 +44,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_debug(format, ...)					\
-	log_debug("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_debug("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 /**
  * log_dr_info() - Log the given message as info
@@ -53,7 +53,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_info(format, ...)					\
-	log_info("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_info("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 
 /**
@@ -63,7 +63,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_warning(format, ...)					\
-	log_warning("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_warning("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 /**
  * log_dr_error() - Log the given message as error
@@ -72,7 +72,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_error(format, ...)					\
-	log_error("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_error("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 /* Similar to 'ccapi_receive_target_t' in ccapi_definitions.h */
 typedef struct {
@@ -102,9 +102,9 @@ typedef enum {
 	REQ_KEY_REGISTER_DR,
 	REQ_KEY_UNREGISTER_DR,
 	REQ_KEY_UNKOWN
-} devreq_action_type_t;
+} dreq_action_type_t;
 
-static char* devreq_action_type_tags[] = {
+static char* req_action_type_tags[] = {
 	REQ_TAG_REGISTER_DR,
 	REQ_TAG_UNREGISTER_DR,
 	"unknown"
@@ -121,7 +121,7 @@ static pthread_t listen_thread;
 static bool listen_thread_valid;
 static volatile bool stop_listening = false;
 
-/* Similar to the one in service_device_request.c */
+/* Similar to the one in service_data_request.c */
 static int add_registered_target(const request_data_t target)
 {
 	/* If needed, (re)alloc memory */
@@ -147,7 +147,7 @@ static int add_registered_target(const request_data_t target)
 	return 0;
 }
 
-/* Similar to the one in service_device_request.c */
+/* Similar to the one in service_data_request.c */
 static request_data_t *find_request_data(const char *target)
 {
 	size_t i;
@@ -160,7 +160,7 @@ static request_data_t *find_request_data(const char *target)
 	return NULL;
 }
 
-/* Similar to the one in service_device_request.c */
+/* Similar to the one in service_data_request.c */
 static int remove_registered_target(const char * target) {
 	request_data_t *req = find_request_data(target);
 	size_t elements_to_move;
@@ -192,13 +192,13 @@ static server_sock_t get_server_socket(void)
 		goto done;
 
 	if ((server_sock.fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		log_dr_error("Could not open connection to CCCSD to listen to device requests: %s (%d)",
+		log_dr_error("Could not open connection to CCCSD to listen to data requests: %s (%d)",
 			strerror(errno), errno);
 		goto error;
 	}
 
 	if (pipe(server_sock.stop_pipe)) {
-		log_dr_error("Unable to notify when device requests arrive: %s (%d)",
+		log_dr_error("Unable to notify when data requests arrive: %s (%d)",
 			strerror(errno), errno);
 		goto error;
 	}
@@ -234,7 +234,7 @@ done:
 	return server_sock;
 }
 
-static cccs_comm_error_t send_device_request_data(devreq_action_type_t type, int port,
+static cccs_comm_error_t send_data_request_data(dreq_action_type_t type, int port,
 	char const * const target, unsigned long timeout, cccs_resp_t *resp)
 {
 	cccs_comm_error_t ret;
@@ -245,20 +245,20 @@ static cccs_comm_error_t send_device_request_data(devreq_action_type_t type, int
 
 	switch (type) {
 		case REQ_KEY_REGISTER_DR:
-			log_dr_info("Registering '%s' device requests", target);
+			log_dr_info("Registering '%s' data request", target);
 			break;
 		case REQ_KEY_UNREGISTER_DR:
-			log_dr_info("Unregistering '%s' device requests", target);
+			log_dr_info("Unregistering '%s' data request", target);
 			break;
 		default:
-			log_dr_error("Unknown device request action '%d'", type);
+			log_dr_error("Unknown data request action '%d'", type);
 			ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 			resp->code = ret;
 
 			return ret;
 	}
 
-	type_tag = devreq_action_type_tags[type];
+	type_tag = req_action_type_tags[type];
 
 	fd = connect_cccsd();
 	if (fd < 0) {
@@ -272,7 +272,7 @@ static cccs_comm_error_t send_device_request_data(devreq_action_type_t type, int
 		|| write_uint32(fd, port)	/* Port */
 		|| write_string(fd, target)	/* Target */
 		|| write_uint32(fd, 0)) {	/* End of message */
-		log_dr_error("Could not %s '%s' device request: %s (%d)",
+		log_dr_error("Could not %s '%s' data request: %s (%d)",
 			type == REQ_KEY_REGISTER_DR ? "register" : "unregister",
 			target, strerror(errno), errno);
 		ret = CCCS_SEND_ERROR_BAD_RESPONSE;
@@ -294,7 +294,7 @@ static void *listen_threaded(void *server_sock)
 	server_sock_t *sock = (server_sock_t *)server_sock;
 
 	if (listen(sock->fd, 5)) {
-		log_dr_error("Failed start listening to device requests: %s (%d)",
+		log_dr_error("Failed start listening to data requests: %s (%d)",
 			strerror(errno), errno);
 		goto done;
 	}
@@ -346,7 +346,7 @@ static void *listen_threaded(void *server_sock)
 		}
 
 		if (lock_acquire(active_requests.lock) != 0) {
-			log_dr_error("Error processing '%s' request: Unable to lock, device request service busy",
+			log_dr_error("Error processing '%s' request: Unable to lock, data request service busy",
 					target);
 			goto loop_done;
 		}
@@ -418,7 +418,7 @@ static void *listen_threaded(void *server_sock)
 		}
 loop_done:
 		if (lock_acquired && lock_release(active_requests.lock) != 0)
-			log_dr_error("Error processing '%s' request: Unable to release lock, device request service busy",
+			log_dr_error("Error processing '%s' request: Unable to release lock, data request service busy",
 					target);
 
 		if (close(request_sock) < 0)
@@ -504,7 +504,7 @@ cccs_comm_error_t cccs_add_request_target_tout(char const * const target,
 	resp->hint = NULL;
 
 	if (!target) {
-		log_dr_error("%s", "Invalid device request target");
+		log_dr_error("%s", "Invalid data request target");
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 
@@ -514,7 +514,7 @@ cccs_comm_error_t cccs_add_request_target_tout(char const * const target,
 	if (!active_requests.lock) {
 		active_requests.lock = get_lock();
 		if (!active_requests.lock) {
-			log_dr_error("Error adding target '%s': Unable to create lock, device request service busy",
+			log_dr_error("Error adding target '%s': Unable to create lock, data request service busy",
 					target);
 			ret = CCCS_SEND_ERROR_LOCK;
 			resp->code = ret;
@@ -523,7 +523,7 @@ cccs_comm_error_t cccs_add_request_target_tout(char const * const target,
 		}
 	}
 	if (lock_acquire(active_requests.lock) != 0) {
-		log_dr_error("Error adding target '%s': Unable to lock, device request service busy",
+		log_dr_error("Error adding target '%s': Unable to lock, data request service busy",
 				target);
 		lock_destroy(active_requests.lock);
 		ret = CCCS_SEND_ERROR_LOCK;
@@ -545,7 +545,7 @@ cccs_comm_error_t cccs_add_request_target_tout(char const * const target,
 			goto done;
 		}
 
-		ret = send_device_request_data(REQ_KEY_REGISTER_DR, sock.port,
+		ret = send_data_request_data(REQ_KEY_REGISTER_DR, sock.port,
 			target, timeout, resp);
 		if (ret)
 			goto done;
@@ -556,7 +556,7 @@ cccs_comm_error_t cccs_add_request_target_tout(char const * const target,
 		new_req_data.max_request_size = 0;
 
 		if (add_registered_target(new_req_data)) {
-			log_dr_error("Could not register '%s' device request: Out of memory",
+			log_dr_error("Could not register '%s' data request: Out of memory",
 					target);
 			free(req_data);
 			ret = -2;
@@ -573,7 +573,7 @@ done:
 	if (lock_acquired && lock_release(active_requests.lock) != 0) {
 		if (ret == CCCS_SEND_ERROR_NONE)
 			ret = CCCS_SEND_ERROR_LOCK;
-		log_dr_error("Error adding target '%s': Unable to release lock, device request service busy",
+		log_dr_error("Error adding target '%s': Unable to release lock, data request service busy",
 				target);
 	}
 
@@ -595,7 +595,7 @@ cccs_comm_error_t cccs_remove_request_target_tout(char const * const target, uns
 	resp->hint = NULL;
 
 	if (!target) {
-		log_dr_error("%s", "Invalid device request target");
+		log_dr_error("%s", "Invalid data request target");
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 
@@ -610,7 +610,7 @@ cccs_comm_error_t cccs_remove_request_target_tout(char const * const target, uns
 	}
 
 	if (lock_acquire(active_requests.lock) != 0) {
-		log_dr_error("Error removing target '%s': Unable to lock, device request service busy",
+		log_dr_error("Error removing target '%s': Unable to lock, data request service busy",
 				target);
 		ret = CCCS_SEND_ERROR_LOCK;
 		resp->code = ret;
@@ -629,10 +629,10 @@ cccs_comm_error_t cccs_remove_request_target_tout(char const * const target, uns
 	if (active_requests.size == 0)
 		stop_listening_for_local_requests();
 
-	ret = send_device_request_data(REQ_KEY_UNREGISTER_DR, server_sock.port, target, timeout, resp);
+	ret = send_data_request_data(REQ_KEY_UNREGISTER_DR, server_sock.port, target, timeout, resp);
 
 	if (lock_release(active_requests.lock) != 0) {
-		log_dr_error("Error removing target '%s': Unable to release lock, device request service busy",
+		log_dr_error("Error removing target '%s': Unable to release lock, data request service busy",
 				target);
 		if (ret == CCCS_SEND_ERROR_NONE)
 			ret = CCCS_SEND_ERROR_LOCK;
@@ -640,7 +640,7 @@ cccs_comm_error_t cccs_remove_request_target_tout(char const * const target, uns
 
 	if (active_requests.size == 0) {
 		if (lock_destroy(active_requests.lock) != 0)
-			log_dr_error("Error removing target '%s': Unable to destroy lock, device request service busy",
+			log_dr_error("Error removing target '%s': Unable to destroy lock, data request service busy",
 					target);
 		active_requests.lock = NULL;
 	}

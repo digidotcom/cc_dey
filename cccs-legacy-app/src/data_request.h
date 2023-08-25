@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,25 +17,16 @@
  * ===========================================================================
  */
 
-#ifndef DEVICE_REQUEST_H_
-#define DEVICE_REQUEST_H_
+#ifndef DATA_REQUEST_H_
+#define DATA_REQUEST_H_
 
 #include <cloudconnector.h>
 
-#if !(defined ARRAY_SIZE)
-#define ARRAY_SIZE(array)		(sizeof(array) / sizeof(array[0]))
-#endif
-
 /*
- * register_cccsd_device_requests() - Register custom device requests
+ * register_custom_data_requests() - Register custom data requests
  *
- * Return: Error code after registering the custom device requests.
+ * Return: Error code after registering the custom data requests.
  */
-ccapi_receive_error_t register_cccsd_device_requests(void);
+ccapi_receive_error_t register_custom_data_requests(void);
 
-/*
- * unregister_cccsd_device_requests() - Unregister custom device requests
- */
-void unregister_cccsd_device_requests(void);
-
-#endif /* DEVICE_REQUEST_H_ */
+#endif /* DATA_REQUEST_H_ */

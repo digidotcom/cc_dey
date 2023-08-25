@@ -182,7 +182,7 @@ int apply_configuration(cc_cfg_t *cc_cfg);
  */
 char *get_client_cert_path(void);
 
-int import_devicerequests(const char *file_path);
-int dump_devicerequests(const char *file_path);
+int import_datarequests(const char *file_path);
+int dump_datarequests(const char *file_path);
 
 #endif /* CC_CONFIG_H_ */

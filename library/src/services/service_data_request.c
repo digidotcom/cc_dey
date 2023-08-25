@@ -26,12 +26,12 @@
 #include "cc_logging.h"
 #include "ccapi/ccapi.h"
 #include "services_util.h"
-#include "service_device_request.h"
+#include "service_data_request.h"
 #include "_utils.h"
 
 #define TARGET_EDP_CERT_UPDATE	"builtin/edp_certificate_update"
 
-#define DEVICE_REQUEST_TAG		"DEVREQ:"
+#define DATA_REQUEST_TAG		"DREQ:"
 
 /**
  * log_dr_debug() - Log the given message as debug
@@ -40,7 +40,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_debug(format, ...)				\
-	log_debug("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_debug("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 /**
  * log_dr_warning() - Log the given message as warning
@@ -49,7 +49,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_warning(format, ...)				\
-	log_warning("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_warning("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 /**
  * log_dr_error() - Log the given message as error
@@ -58,7 +58,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_error(format, ...)				\
-	log_error("%s " format, DEVICE_REQUEST_TAG, __VA_ARGS__)
+	log_error("%s " format, DATA_REQUEST_TAG, __VA_ARGS__)
 
 typedef struct {
 	/* If IPv6 support gets added, this will change to struct sockaddr_storage.*/
@@ -163,12 +163,12 @@ static int get_socket_for_target(const char *target)
 	}
 
 	if ((sock_fd = socket(req->recipient.sin_family, SOCK_STREAM, 0)) < 0) {
-		log_dr_error("Could not open connection for device request: %s", strerror(errno));
+		log_dr_error("Could not open connection for data request: %s", strerror(errno));
 		goto out;
 	}
 
 	if (connect(sock_fd, (struct sockaddr *)&req->recipient, sizeof(struct sockaddr_in)) < 0) {
-		log_dr_error("Could not connect to deliver device request: %s", strerror(errno));
+		log_dr_error("Could not connect to deliver data request: %s", strerror(errno));
 		goto out;
 	}
 
@@ -183,7 +183,7 @@ out:
 	}
 }
 
-static ccapi_receive_error_t device_request(const char *target,
+static ccapi_receive_error_t data_request(const char *target,
 			   ccapi_transport_t transport,
 			   const ccapi_buffer_info_t *request_buffer_info,
 			   ccapi_buffer_info_t *response_buffer_info)
@@ -206,14 +206,14 @@ static ccapi_receive_error_t device_request(const char *target,
 	if (write_string(sock_fd, REQ_TYPE_REQUEST_CB)  ||					/* The request type */
 		write_string(sock_fd, target) ||						/* The registered target device name */
 		write_blob(sock_fd, request_buffer_info->buffer, request_buffer_info->length)) {/* The payload data passed to the device callback */
-		log_dr_error("Could not write device request: %s (%d)", strerror(errno), errno);
+		log_dr_error("Could not write data request: %s (%d)", strerror(errno), errno);
 		error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto out;
 	}
 	/* Read the blob response from the device */
 	if (read_uint32(sock_fd, &error, &timeout) ||
 		read_blob(sock_fd, &response_buffer_info->buffer, &response_buffer_info->length, &timeout)) {
-		log_dr_error("Could not receive device request data: %s (%d)", strerror(errno), errno);
+		log_dr_error("Could not receive request data: %s (%d)", strerror(errno), errno);
 		error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto out;
 	}
@@ -232,7 +232,7 @@ out:
 	return error;
 }
 
-static void device_request_done(const char *target,
+static void data_request_done(const char *target,
 		ccapi_transport_t transport,
 		ccapi_buffer_info_t *response_buffer_info,
 		ccapi_receive_error_t receive_error)
@@ -242,7 +242,7 @@ static void device_request_done(const char *target,
 	int sock_fd = get_socket_for_target(target);
 
 	if (receive_error != CCAPI_RECEIVE_ERROR_NONE)
-		log_dr_error("Error on device request response, target='%s' - transport='%d' - error='%d'",
+		log_dr_error("Error on data request response, target='%s' - transport='%d' - error='%d'",
 			target, transport, receive_error);
 
 	if (sock_fd < 0)
@@ -253,7 +253,7 @@ static void device_request_done(const char *target,
 		|| write_string(sock_fd, target)	/* The registered target name */
 		|| write_uint32(sock_fd, error_code)	/* The DRM call return status code */
 		|| write_string(sock_fd, err_msg)) {	/* And a text description of the status code */
-		log_dr_error("Could not write device request: %s (%d)", strerror(errno), errno);
+		log_dr_error("Could not write data request: %s (%d)", strerror(errno), errno);
 		goto out;
 	}
 out:
@@ -332,17 +332,17 @@ static ccapi_receive_error_t unregister_target(const char *target)
 }
 
 /* Note: fd is ignored if < 0 (when there is no need to write the error messages) */
-static int register_device_request(int fd, const request_data_t *req_data)
+static int register_data_request(int fd, const request_data_t *req_data)
 {
 	int result = 0;
 	request_data_t *previously_registered_req = NULL;
-	ccapi_receive_error_t status = ccapi_receive_add_target(req_data->target, device_request, device_request_done, CCAPI_RECEIVE_NO_LIMIT);
+	ccapi_receive_error_t status = ccapi_receive_add_target(req_data->target, data_request, data_request_done, CCAPI_RECEIVE_NO_LIMIT);
 
 	if (status == CCAPI_RECEIVE_ERROR_TARGET_ALREADY_ADDED) {
 		previously_registered_req = find_request_data(req_data->target);
 		if (!previously_registered_req) {
 			/* This should never happen */
-			log_dr_error("%s", "Target already registered in CCAPI, but not registered on service_device_request!!");
+			log_dr_error("%s", "Target already registered in CCAPI, but not registered on service_data_request!!");
 			if (fd >= 0)
 				send_error(fd, "Internal connector error");
 		} else {
@@ -353,7 +353,7 @@ static int register_device_request(int fd, const request_data_t *req_data)
 					sizeof(req_data->recipient));
 		}
 	} else if (status != CCAPI_RECEIVE_ERROR_NONE) {
-		log_dr_error("Could not register device request: %d", status);
+		log_dr_error("Could not register data request: %d", status);
 		if (fd >= 0)
 			send_error(fd, to_user_error_msg(status));
 		result = status;
@@ -363,7 +363,7 @@ static int register_device_request(int fd, const request_data_t *req_data)
 	if (!previously_registered_req) {
 		if (add_registered_target(req_data)) {
 			if (fd >= 0)
-				send_error(fd, "Could not register device request, out of memory");
+				send_error(fd, "Could not register data request, out of memory");
 			result = -1;
 		}
 	}
@@ -378,7 +378,7 @@ _handle_register(int fd, request_data_t *req, bool expect_to_read_ip, int expect
 	if (read_request(fd, req, expect_to_read_ip, expected_ip_af))
 		return -1;
 
-	if (register_device_request(fd, req))
+	if (register_data_request(fd, req))
 		return -1;
 
 	send_ok(fd);
@@ -405,7 +405,7 @@ _handle_unregister(int fd, request_data_t *req, bool expect_to_read_ip, int expe
 	return 0;
 }
 
-int handle_register_device_request(int fd)
+int handle_register_data_request(int fd)
 {
 	request_data_t req_data;
 
@@ -416,7 +416,7 @@ int handle_register_device_request(int fd)
 	return _handle_register(fd, &req_data, false, 0);
 }
 
-int handle_register_device_request_ipv4(int fd)
+int handle_register_data_request_ipv4(int fd)
 {
 	request_data_t req_data;
 
@@ -424,7 +424,7 @@ int handle_register_device_request_ipv4(int fd)
 	return _handle_register(fd, &req_data, true, AF_INET);
 }
 
-int handle_unregister_device_request(int fd)
+int handle_unregister_data_request(int fd)
 {
 	request_data_t req_data;
 
@@ -437,7 +437,7 @@ int handle_unregister_device_request(int fd)
 	return _handle_unregister(fd, &req_data, false, 0);
 }
 
-int handle_unregister_device_request_ipv4(int fd)
+int handle_unregister_data_request_ipv4(int fd)
 {
 	request_data_t req_data;
 
@@ -447,7 +447,7 @@ int handle_unregister_device_request_ipv4(int fd)
 	return _handle_unregister(fd, &req_data, true, AF_INET);
 }
 
-int import_devicerequests(const char *file_path)
+int import_datarequests(const char *file_path)
 {
 	int ret = -1;
 	size_t n;
@@ -512,7 +512,7 @@ int import_devicerequests(const char *file_path)
 		temp_string[string_len] = '\0';
 		temp.target = temp_string;
 
-		register_device_request(-1, &temp);
+		register_data_request(-1, &temp);
 		free(temp_string);
 	}
 
@@ -522,7 +522,7 @@ out:
 	return ret;
 }
 
-int dump_devicerequests(const char *file_path)
+int dump_datarequests(const char *file_path)
 {
 	int ret = -1;
 	size_t n = active_requests.size;
@@ -565,7 +565,7 @@ out:
 	return ret;
 }
 
-/******************** Built-in device requests ********************/
+/******************** Built-in data requests ********************/
 
 #ifdef CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
 static ccapi_receive_error_t edp_cert_update_cb(const char *const target,
@@ -620,7 +620,7 @@ static void builtin_request_status_cb(const char *const target,
 {
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 	if (receive_error != CCAPI_RECEIVE_ERROR_NONE) {
-		log_dr_error("Error on device request response: target='%s' - transport='%d' - error='%d'",
+		log_dr_error("Error on data request response: target='%s' - transport='%d' - error='%d'",
 			      target, transport, receive_error);
 	}
 	/* Free the response buffer */
@@ -649,12 +649,12 @@ ccapi_receive_error_t register_builtin_requests(void)
 
 /**
  * receive_default_accept_cb() - Default accept callback for non registered
- *                               device requests
+ *                               data requests
  *
- * @target:	Target ID associated to the device request.
- * @transport:	Communication transport used by the device request.
+ * @target:	Target ID associated to the data request.
+ * @transport:	Communication transport used by the data request.
  *
- * Return: CCAPI_FALSE if the device request is not accepted,
+ * Return: CCAPI_FALSE if the data request is not accepted,
  *         CCAPI_TRUE otherwise.
  */
 static ccapi_bool_t receive_default_accept_cb(char const *const target,
@@ -681,15 +681,15 @@ static ccapi_bool_t receive_default_accept_cb(char const *const target,
 
 /**
  * receive_default_data_cb() - Default data callback for non registered
- *                             device requests
+ *                             data requests
  *
- * @target:			Target ID associated to the device request.
- * @transport:			Communication transport used by the device request.
- * @request_buffer_info:	Buffer containing the device request.
+ * @target:			Target ID associated to the data request.
+ * @transport:			Communication transport used by the data request.
+ * @request_buffer_info:	Buffer containing the data request.
  * @response_buffer_info:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and sends an answer to Device
- * Cloud indicating that the device request with that target is not registered.
+ * Cloud indicating that the data request with that target is not registered.
  */
 static ccapi_receive_error_t receive_default_data_cb(char const *const target,
 		ccapi_transport_t const transport,
@@ -704,13 +704,13 @@ static ccapi_receive_error_t receive_default_data_cb(char const *const target,
 	if (request_buffer_info->length > 0) {
 		request_buffer = calloc(request_buffer_info->length + 1, sizeof(char));
 		if (request_buffer == NULL) {
-			log_dr_error("Could not read received device request: %s", "Out of memory");
+			log_dr_error("Could not read received data request: %s", "Out of memory");
 			return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		}
 		memcpy(request_buffer, request_buffer_info->buffer, request_buffer_info->length);
 		request_data = trim(request_buffer);
 		if (request_data == NULL) {
-			log_dr_error("Could not read received device request: %s", "Out of memory");
+			log_dr_error("Could not read received data request: %s", "Out of memory");
 			free(request_buffer);
 
 			return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -726,7 +726,7 @@ static ccapi_receive_error_t receive_default_data_cb(char const *const target,
 
 		response_buffer_info->buffer = calloc(len + 1, sizeof(char));
 		if (response_buffer_info->buffer == NULL) {
-			log_dr_error("Could not read received device request: %s", "Out of memory");
+			log_dr_error("Could not read received data request: %s", "Out of memory");
 			return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		}
 		response_buffer_info->length = sprintf(response_buffer_info->buffer,
@@ -738,10 +738,10 @@ static ccapi_receive_error_t receive_default_data_cb(char const *const target,
 
 /**
  * receive_default_status_cb() - Default status callback for non registered
- *                               device requests
+ *                               data requests
  *
- * @target:			Target ID associated to the device request.
- * @transport:			Communication transport used by the device request.
+ * @target:			Target ID associated to the data request.
+ * @transport:			Communication transport used by the data request.
  * @response_buffer_info:	Buffer containing the response data.
  * @receive_error:		The error status of the receive process.
  *

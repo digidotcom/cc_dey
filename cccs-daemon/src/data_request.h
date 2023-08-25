@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Digi International Inc.
+ * Copyright (c) 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,27 +17,25 @@
  * ===========================================================================
  */
 
-#ifndef SERVICE_DEVICE_REQUEST_H
-#define SERVICE_DEVICE_REQUEST_H
+#ifndef DATA_REQUEST_H_
+#define DATA_REQUEST_H_
 
-#define REQ_TAG_REGISTER_DR		"register_devicerequest"
-#define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
-#define REQ_TAG_REGISTER_DR_IPV4	"register_devicerequest_ipv4"
-#define REQ_TAG_UNREGISTER_DR_IPV4	"unregister_devicerequest_ipv4"
+#include <cloudconnector.h>
 
-#define REQ_TYPE_REQUEST_CB	"request"
-#define REQ_TYPE_STATUS_CB	"status"
-
-int handle_register_device_request(int fd);
-int handle_unregister_device_request(int fd);
-int handle_register_device_request_ipv4(int fd);
-int handle_unregister_device_request_ipv4(int fd);
+#if !(defined ARRAY_SIZE)
+#define ARRAY_SIZE(array)		(sizeof(array) / sizeof(array[0]))
+#endif
 
 /*
- * register_builtin_requests() - Register built-in device requests
+ * register_cccsd_data_requests() - Register custom data requests
  *
- * Return: Error code after registering the built-in device requests.
+ * Return: Error code after registering the custom data requests.
  */
-ccapi_receive_error_t register_builtin_requests(void);
+ccapi_receive_error_t register_cccsd_data_requests(void);
 
-#endif
+/*
+ * unregister_cccsd_data_requests() - Unregister custom data requests
+ */
+void unregister_cccsd_data_requests(void);
+
+#endif /* DATA_REQUEST_H_ */

@@ -25,7 +25,7 @@
 
 #include "ccapi/ccapi.h"
 #include "cc_logging.h"
-#include "service_device_request.h"
+#include "service_data_request.h"
 #include "service_dp_upload.h"
 #include "services.h"
 #include "services_util.h"
@@ -48,19 +48,19 @@ struct handler_t {
 	},
 	{
 		REQ_TAG_REGISTER_DR,
-		handle_register_device_request
+		handle_register_data_request
 	},
 	{
 		REQ_TAG_REGISTER_DR_IPV4,
-		handle_register_device_request_ipv4
+		handle_register_data_request_ipv4
 	},
 	{
 		REQ_TAG_UNREGISTER_DR,
-		handle_unregister_device_request
+		handle_unregister_data_request
 	},
 	{
 		REQ_TAG_UNREGISTER_DR_IPV4,
-		handle_unregister_device_request_ipv4
+		handle_unregister_data_request_ipv4
 	}
 };
 

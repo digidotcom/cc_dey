@@ -23,7 +23,7 @@
 #include <json_tokener.h>
 #include <json_util.h>
 
-#include "device_request.h"
+#include "data_request.h"
 
 #define TARGET_CCCSD_GET_CONFIG		"cccsd_get_config"
 #define TARGET_CCCSD_SET_CONFIG		"cccsd_set_config"
@@ -225,11 +225,11 @@ static json_object *convert_settings_to_json(cfg_t *cfg, json_object *json_setti
 }
 
 /*
- * get_cccsd_config_cb() - Data callback for 'cccs_get_config' device requests
+ * get_cccsd_config_cb() - Data callback for 'cccs_get_config' data requests
  *
- * @target:		Target ID of the device request (cccs_get_config).
- * @transport:		Communication transport used by the device request.
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (cccs_get_config).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -558,11 +558,11 @@ static void convert_json_to_cfg(json_object *json, cfg_t *cfg)
 }
 
 /*
- * set_cccsd_config_cb() - Data callback for 'ccds_set_config' device requests
+ * set_cccsd_config_cb() - Data callback for 'cccds_set_config' data requests
  *
- * @target:		Target ID of the device request (cccs_set_config).
- * @transport:		Communication transport used by the device request.
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (cccs_set_config).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -680,10 +680,10 @@ done:
 }
 
 /*
- * request_status_cb() - Status callback for cc device requests
+ * request_status_cb() - Status callback for data requests
  *
- * @target:		Target ID of the device request.
- * @transport:		Communication transport used by the device request.
+ * @target:		Target ID of the data request.
+ * @transport:		Communication transport used by the data request.
  * @resp_buffer:	Buffer containing the response data.
  * @receive_error:	The error status of the receive process.
  *
@@ -705,7 +705,7 @@ static void request_status_cb(char const *const target,
 		free(resp_buffer->buffer);
 }
 
-ccapi_receive_error_t register_cccsd_device_requests(void)
+ccapi_receive_error_t register_cccsd_data_requests(void)
 {
 	char *target = TARGET_CCCSD_GET_CONFIG;
 	ccapi_receive_error_t error;
@@ -732,7 +732,7 @@ done:
 	return error;
 }
 
-void unregister_cccsd_device_requests(void)
+void unregister_cccsd_data_requests(void)
 {
 	unsigned int i;
 	char *targets[] = {

@@ -29,7 +29,7 @@
 #include "cc_logging.h"
 #include "cc_system_monitor.h"
 #include "network_utils.h"
-#include "service_device_request.h"
+#include "service_data_request.h"
 #include "services.h"
 #include "_utils.h"
 
@@ -201,7 +201,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	rci_internal_data.device_type = cc_cfg->device_type;
 #endif /* ENABLE_RCI */
 
-	/* Initialize device request service. */
+	/* Initialize data request service. */
 	start->service.receive = &receive_service;
 
 	/* Initialize short messaging. */

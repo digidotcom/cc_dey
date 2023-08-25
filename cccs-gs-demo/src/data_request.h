@@ -17,19 +17,19 @@
  * ===========================================================================
  */
 
-#ifndef DEVICE_REQUEST_H_
-#define DEVICE_REQUEST_H_
+#ifndef DATA_REQUEST_H_
+#define DATA_REQUEST_H_
 
 /*
- * register_custom_device_requests() - Register custom device requests
+ * register_custom_data_requests() - Register custom data requests
  *
- * Return: Error code after registering the custom device requests.
+ * Return: Error code after registering the custom data requests.
  */
-int register_custom_device_requests(void);
+int register_custom_data_requests(void);
 
 /*
- * unregister_custom_device_requests() - Unregister custom device requests
+ * unregister_custom_data_requests() - Unregister custom data requests
  */
-void unregister_custom_device_requests(void);
+void unregister_custom_data_requests(void);
 
-#endif /* DEVICE_REQUEST_H_ */
+#endif /* DATA_REQUEST_H_ */

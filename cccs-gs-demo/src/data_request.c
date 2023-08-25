@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "device_request.h"
+#include "data_request.h"
 
 #define TARGET_DEVICE_INFO		"device_info"
 #define TARGET_GET_CONFIG		"get_config"
@@ -51,7 +51,7 @@
 
 #define USER_LED_ALIAS			"USER_LED"
 
-#define DEVREQ_TAG			"DEMO-REQ:"
+#define DREQ_TAG			"DEMO-REQ:"
 
 #define MAX_RESPONSE_SIZE		512
 #define PARAM_LENGTH			25
@@ -113,7 +113,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_debug(format, ...)				\
-	log_debug("%s " format, DEVREQ_TAG, __VA_ARGS__)
+	log_debug("%s " format, DREQ_TAG, __VA_ARGS__)
 
 /**
  * log_dr_warning() - Log the given message as warning
@@ -122,7 +122,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_warning(format, ...)				\
-	log_warning("%s " format, DEVREQ_TAG, __VA_ARGS__)
+	log_warning("%s " format, DREQ_TAG, __VA_ARGS__)
 
 /*
  * log_dr_error() - Log the given message as error
@@ -131,7 +131,7 @@
  * @args:		Additional arguments.
  */
 #define log_dr_error(format, ...)				\
-	log_error("%s " format, DEVREQ_TAG, __VA_ARGS__)
+	log_error("%s " format, DREQ_TAG, __VA_ARGS__)
 
 typedef struct {
 	bool enable;
@@ -630,10 +630,10 @@ static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool compl
 }
 
 /*
- * device_info_cb() - Data callback for 'device_info' device requests
+ * device_info_cb() - Data callback for 'device_info' data requests
  *
- * @target:		Target ID of the device request (device_info).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (device_info).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -944,10 +944,10 @@ done:
 }
 
 /*
- * get_config_cb() - Data callback for 'get_config' device requests
+ * get_config_cb() - Data callback for 'get_config' data requests
  *
- * @target:		Target ID of the device request (get_config).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (get_config).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -1484,10 +1484,10 @@ static int get_bt_config(json_object *bt_req, bt_config_t *bt_cfg, json_object *
 }
 
 /*
- * set_config_cb() - Data callback for 'set_config' device requests
+ * set_config_cb() - Data callback for 'set_config' data requests
  *
- * @target:		Target ID of the device request (set_config).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (set_config).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -1714,10 +1714,10 @@ done:
 }
 
 /*
- * get_time_cb() - Data callback for 'get_time' device requests
+ * get_time_cb() - Data callback for 'get_time' data requests
  *
- * @target:		Target ID of the device request (get_time).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (get_time).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -1747,10 +1747,10 @@ static ccapi_receive_error_t get_time_cb(char const *const target,
 }
 
 /*
- * update_user_led_cb() - Data callback for 'user_led' device requests
+ * update_user_led_cb() - Data callback for 'user_led' data requests
  *
- * @target:		Target ID of the device request (user_led).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (user_led).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -1832,10 +1832,10 @@ exit:
 }
 
 /*
- * play_music_cb() - Data callback for 'play_music' device requests
+ * play_music_cb() - Data callback for 'play_music' data requests
  *
- * @target:		Target ID of the device request (play_music).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (play_music).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -1948,10 +1948,10 @@ exit:
 }
 
 /*
- * set_volume_cb() - Data callback for 'set_audio_volume' device requests
+ * set_volume_cb() - Data callback for 'set_audio_volume' data requests
  *
- * @target:		Target ID of the device request (set_audio_volume).
- * @req_buffer:		Buffer containing the device request.
+ * @target:		Target ID of the data request (set_audio_volume).
+ * @req_buffer:		Buffer containing the data request.
  * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
@@ -2036,9 +2036,9 @@ exit:
 }
 
 /*
- * request_status_cb() - Status callback for application device requests
+ * request_status_cb() - Status callback for application data requests
  *
- * @target:		Target ID of the device request.
+ * @target:		Target ID of the data request.
  * @resp_buffer:	Buffer containing the response data.
  * @rcv_error:		The error status of the receive process.
  * @rcv_error_hint:	The error hint from the connector daemon.
@@ -2061,7 +2061,7 @@ static void request_status_cb(char const *const target,
 		free(resp_buffer->buffer);
 }
 
-int register_custom_device_requests(void)
+int register_custom_data_requests(void)
 {
 	unsigned int i;
 	cccs_comm_error_t ret;
@@ -2091,7 +2091,7 @@ int register_custom_device_requests(void)
 	return ret;
 }
 
-void unregister_custom_device_requests(void)
+void unregister_custom_data_requests(void)
 {
 	unsigned int i;
 

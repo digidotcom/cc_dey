@@ -29,7 +29,7 @@
 
 #include "cccs_services.h"
 #include "data_points.h"
-#include "device_request.h"
+#include "data_request.h"
 
 #define VERSION		"0.1" GIT_REVISION
 
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
-	register_custom_device_requests();
+	register_custom_data_requests();
 
 	/* Do the real work. */
 	if (start_monitoring() != 0) {
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
 
 	stop_monitoring();
 
-	unregister_custom_device_requests();
+	unregister_custom_data_requests();
 
 done:
 	deinit_logger();

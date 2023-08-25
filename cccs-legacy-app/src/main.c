@@ -27,7 +27,7 @@
 
 #include "daemonize.h"
 #include "data_points.h"
-#include "device_request.h"
+#include "data_request.h"
 
 #define VERSION				"0.1" GIT_REVISION
 
@@ -115,7 +115,7 @@ static int start_connector(const char *config_file)
 		return EXIT_FAILURE;
 	}
 
-	register_custom_device_requests();
+	register_custom_data_requests();
 
 	start_error = start_cloud_connection();
 	if (start_error != CC_START_ERROR_NONE) {
