@@ -187,6 +187,7 @@ install-cccs-headers:
 	install -d $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)
 	install -m 0644 src/cc_logging.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/cccs_services.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
+	install -m 0644 src/services-client/cccs_definitions.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/cccs_datapoints.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/cccs_receive.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/cc_utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
@@ -203,7 +204,7 @@ install-daemon-headers:
 	install -m 0644 src/cc_api/include/custom/*.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/custom/
 	install -m 0644 src/cc_api/include/ccimp/ccimp_types.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/ccimp/
 	install -m 0644 src/custom/custom_connector_config.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/custom/
-	install -m 0644 src/cloudconnector.h src/cc_config.h src/cc_init.h src/cc_logging.h src/cc_system_monitor.h src/utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/
+	install -m 0644 src/cloudconnector.h src/cc_config.h src/cc_init.h src/cc_logging.h src/cc_system_monitor.h src/cc_utils.h src/utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR)/
 
 install-certs:
 	install -d $(DESTDIR)/etc/ssl/certs

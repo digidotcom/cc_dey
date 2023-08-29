@@ -146,29 +146,29 @@ struct handler_t {
 };
 
 static void request_status_cb(char const *const target,
-		ccapi_buffer_info_t *const resp_buffer,
+		cccs_buffer_info_t *const resp_buffer,
 		int rcv_error, const char *const rcv_error_hint);
-static ccapi_receive_error_t device_info_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
-static ccapi_receive_error_t get_config_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
-static ccapi_receive_error_t set_config_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
-static ccapi_receive_error_t get_time_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
-static ccapi_receive_error_t update_user_led_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
-static ccapi_receive_error_t play_music_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
-static ccapi_receive_error_t set_volume_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t device_info_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t get_config_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t set_config_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t get_time_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t update_user_led_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t play_music_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
+static cccs_receive_error_t set_volume_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer);
 
 static struct handler_t request_handlers[] = {
 	{
@@ -398,9 +398,9 @@ static json_object *add_json_element(const char *name, json_object **root)
  * @root:	JSON object to add Bluetooth details.
  * @complete:	True to include enable and name.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t add_bt_json(json_object **root, bool complete)
+static cccs_receive_error_t add_bt_json(json_object **root, bool complete)
 {
 	bt_state_t bt_state;
 	char mac[MAC_STR_LENGTH];
@@ -411,17 +411,17 @@ static ccapi_receive_error_t add_bt_json(json_object **root, bool complete)
 		bt_state.mac[2], bt_state.mac[3], bt_state.mac[4], bt_state.mac[5]);
 
 	if (json_object_object_add(*root, "bt-mac", json_object_new_string(mac)) < 0)
-		return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		return CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 
 	if (complete) {
 		if (json_object_object_add(*root, CFG_FIELD_ENABLE, json_object_new_boolean(bt_state.enable)) < 0)
-			return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			return CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 
 		if (json_object_object_add(*root, CFG_FIELD_NAME, json_object_new_string(bt_state.name)) < 0)
-			return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			return CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	}
 
-	return CCAPI_RECEIVE_ERROR_NONE;
+	return CCCS_RECEIVE_ERROR_NONE;
 }
 
 /*
@@ -513,11 +513,11 @@ static json_object *get_net_iface_json(const char *iface_name, bool complete)
  * @root:	JSON object to add network interfaces details.
  * @complete:	True to include status, type, gateway, netmask, dns1, and dns2.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t add_net_ifaces_json(json_object **root, bool complete)
+static cccs_receive_error_t add_net_ifaces_json(json_object **root, bool complete)
 {
-	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t ret = CCCS_RECEIVE_ERROR_NONE;
 	net_names_list_t list_ifaces;
 	int i;
 
@@ -527,7 +527,7 @@ static ccapi_receive_error_t add_net_ifaces_json(json_object **root, bool comple
 			net_state_error_t err = NET_STATE_ERROR_NO_IFACES;
 			if (json_object_object_add(*root, CFG_FIELD_STATUS, json_object_new_int(err)) < 0
 				|| json_object_object_add(*root, CFG_FIELD_DESC, json_object_new_string(ldx_net_code_to_str(err))) < 0)
-				ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+				ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		}
 
 		return ret;
@@ -542,7 +542,7 @@ static ccapi_receive_error_t add_net_ifaces_json(json_object **root, bool comple
 		if (!i_item || json_object_object_add(*root, list_ifaces.names[i], i_item) < 0) {
 			if (i_item)
 				json_object_put(i_item);
-			ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			break;
 		}
 	}
@@ -595,11 +595,11 @@ error:
  * @root:	JSON object to add WiFi interfaces details.
  * @complete:	True to include status, type, ssid, security mode, gateway, netmask, dns1, and dns2.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool complete)
+static cccs_receive_error_t add_wifi_ifaces_json(json_object **root, bool complete)
 {
-	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t ret = CCCS_RECEIVE_ERROR_NONE;
 	net_names_list_t list_ifaces;
 	int i;
 
@@ -609,7 +609,7 @@ static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool compl
 			wifi_state_error_t err = WIFI_STATE_ERROR_NO_IFACES;
 			if (json_object_object_add(*root, CFG_FIELD_STATUS, json_object_new_int(err)) < 0
 				|| json_object_object_add(*root, CFG_FIELD_DESC, json_object_new_string(ldx_wifi_code_to_str(err))) < 0)
-				ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+				ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		}
 
 		return ret;
@@ -621,7 +621,7 @@ static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool compl
 		if (!i_item || json_object_object_add(*root, list_ifaces.names[i], i_item) < 0) {
 			if (i_item)
 				json_object_put(i_item);
-			ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			break;
 		}
 	}
@@ -639,14 +639,14 @@ static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool compl
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t device_info_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t device_info_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
 	json_object *root = NULL;
-	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t status = CCCS_RECEIVE_ERROR_NONE;
 
 	UNUSED_ARGUMENT(req_buffer);
 
@@ -694,7 +694,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 
 	root = json_object_new_object();
 	if (!root) {
-		status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto error;
 	}
 
@@ -711,7 +711,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		}
 
 		if (json_object_object_add(root, "dey_version", json_object_new_string(version)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
@@ -733,7 +733,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		}
 
 		if (json_object_object_add(root, "kernel_version", json_object_new_string(kernel)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			free(resp);
 			goto error;
 		}
@@ -748,7 +748,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("%s", "Error getting U-Boot version");
 
 		if (json_object_object_add(root, "uboot_version", json_object_new_string(uboot)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
@@ -765,7 +765,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("%s", "Error getting serial number");
 
 		if (json_object_object_add(root, "serial_number", json_object_new_string(board_sn)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 
@@ -774,7 +774,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("%s", "Error getting device type");
 
 		if (json_object_object_add(root, "device_type", json_object_new_string(dev_type)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 
@@ -783,7 +783,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("%s", "Error getting SOM variant");
 
 		if (json_object_object_add(root, "module_variant", json_object_new_string(som_variant)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 
@@ -792,7 +792,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("%s", "Error getting board variant");
 
 		if (json_object_object_add(root, "board_variant", json_object_new_string(board_variant)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 
@@ -801,7 +801,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("%s", "Error getting board ID");
 
 		if (json_object_object_add(root, "board_id", json_object_new_string(board_id)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
@@ -839,12 +839,12 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		free(resp);
 
 		if (json_object_object_add(root, "mca_fw_version", json_object_new_string(fw_version)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 
 		if (json_object_object_add(root, "mca_hw_version", json_object_new_string(hw_version)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
@@ -861,7 +861,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			log_dr_error("Error getting storage size: %s", "File not readable");
 
 		if (json_object_object_add(root, "total_st", json_object_new_int64(total_st)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
@@ -876,7 +876,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			total_mem = s_info.totalram / 1024;
 
 		if (json_object_object_add(root, "total_mem", json_object_new_int64(total_mem)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
@@ -903,26 +903,26 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		}
 
 		if (json_object_object_add(root, "resolution", json_object_new_string(resolution)) < 0) {
-			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 			goto error;
 		}
 	}
 
 	status = add_bt_json(&root, false);
-	if (status != CCAPI_RECEIVE_ERROR_NONE)
+	if (status != CCCS_RECEIVE_ERROR_NONE)
 		goto error;
 
 	status = add_net_ifaces_json(&root, false);
-	if (status != CCAPI_RECEIVE_ERROR_NONE)
+	if (status != CCCS_RECEIVE_ERROR_NONE)
 		goto error;
 
 	status = add_wifi_ifaces_json(&root, false);
-	if (status != CCAPI_RECEIVE_ERROR_NONE)
+	if (status != CCCS_RECEIVE_ERROR_NONE)
 		goto error;
 
 	resp_buffer->buffer = strdup(json_object_to_json_string(root));
 	if (resp_buffer->buffer == NULL) {
-		status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto error;
 	}
 
@@ -953,15 +953,15 @@ done:
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t get_config_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t get_config_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
 	char *request = req_buffer->buffer;
 	json_object *req = NULL, *json_element = NULL, *resp = NULL;
-	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t status = CCCS_RECEIVE_ERROR_NONE;
 	bool eth_cfg = false, wifi_cfg = false, bt_cfg = false;
 
 	log_dr_debug("%s: target='%s'", __func__, target);
@@ -1068,7 +1068,7 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			goto error;
 
 		status = add_net_ifaces_json(&item, true);
-		if (status != CCAPI_RECEIVE_ERROR_NONE)
+		if (status != CCCS_RECEIVE_ERROR_NONE)
 			goto error;
 	}
 
@@ -1078,7 +1078,7 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			goto error;
 
 		status = add_wifi_ifaces_json(&item, true);
-		if (status != CCAPI_RECEIVE_ERROR_NONE)
+		if (status != CCCS_RECEIVE_ERROR_NONE)
 			goto error;
 	}
 
@@ -1088,7 +1088,7 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			goto error;
 
 		status = add_bt_json(&item, true);
-		if (status != CCAPI_RECEIVE_ERROR_NONE)
+		if (status != CCCS_RECEIVE_ERROR_NONE)
 			goto error;
 	}
 
@@ -1100,12 +1100,12 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 
 bad_format:
 	resp_buffer->buffer = strdup("Invalid format");
-	status = resp_buffer->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+	status = resp_buffer->buffer == NULL ? CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 	log_dr_error("Cannot parse request for target '%s': Invalid format", target);
 	goto done;
 
 error:
-	status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+	status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 
 done:
@@ -1493,15 +1493,15 @@ static int get_bt_config(json_object *bt_req, bt_config_t *bt_cfg, json_object *
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t set_config_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t set_config_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
 	char *request = req_buffer->buffer;
 	json_object *req = NULL, *json_element = NULL, *resp = NULL;
-	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t status = CCCS_RECEIVE_ERROR_NONE;
 	int valid_fields = 0, bt_devs = 0, n_eth_ifaces = 0, n_wifi_ifaces = 0, i;
 	net_config_t *net_cfgs = NULL;
 	wifi_config_t *wifi_cfgs = NULL;
@@ -1678,7 +1678,7 @@ bad_format:
 	if (resp_buffer->buffer != NULL)
 		free(resp_buffer->buffer);
 	resp_buffer->buffer = strdup("Invalid format");
-	status = resp_buffer->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+	status = resp_buffer->buffer == NULL ? CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 	log_dr_error("Cannot parse request for target '%s': Invalid format", target);
 	goto done;
 
@@ -1686,7 +1686,7 @@ error:
 	if (resp_buffer->buffer != NULL)
 		free(resp_buffer->buffer);
 	resp_buffer->buffer = strdup("Out of memory");
-	status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+	status = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	log_dr_error("Cannot process request for target '%s': Out of memory", target);
 
 done:
@@ -1723,11 +1723,11 @@ done:
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t get_time_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t get_time_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
 	UNUSED_ARGUMENT(req_buffer);
 
@@ -1736,14 +1736,14 @@ static ccapi_receive_error_t get_time_cb(char const *const target,
 	resp_buffer->buffer = calloc(MAX_RESPONSE_SIZE + 1, sizeof(char));
 	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
-		return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		return CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	}
 
 	time_t t = time(NULL);
 	resp_buffer->length = snprintf(resp_buffer->buffer,
 			MAX_RESPONSE_SIZE, "Time: %s", ctime(&t));
 
-	return CCAPI_RECEIVE_ERROR_NONE;
+	return CCCS_RECEIVE_ERROR_NONE;
 }
 
 /*
@@ -1756,13 +1756,13 @@ static ccapi_receive_error_t get_time_cb(char const *const target,
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t update_user_led_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t update_user_led_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
-	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t ret = CCCS_RECEIVE_ERROR_NONE;
 	char *val = NULL, *error_msg = NULL;
 	gpio_t *led = NULL;
 	gpio_value_t led_value = GPIO_LOW;
@@ -1772,7 +1772,7 @@ static ccapi_receive_error_t update_user_led_cb(char const *const target,
 	val = calloc(req_buffer->length + 1, sizeof(char));
 	if (val == NULL) {
 		error_msg = "Out of memory";
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
 
@@ -1785,7 +1785,7 @@ static ccapi_receive_error_t update_user_led_cb(char const *const target,
 		led_value = GPIO_LOW;
 	} else {
 		error_msg = "Unknown LED status";
-		ret = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+		ret = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto done;
 	}
 
@@ -1793,19 +1793,19 @@ static ccapi_receive_error_t update_user_led_cb(char const *const target,
 	led = ldx_gpio_request_by_alias(USER_LED_ALIAS, GPIO_OUTPUT_LOW, REQUEST_SHARED);
 	if (led == NULL) {
 		error_msg = "Failed to initialize LED";
-		ret = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+		ret = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto done;
 	}
 
 	if (ldx_gpio_set_value(led, led_value) != EXIT_SUCCESS) {
 		error_msg = "Failed to set LED";
-		ret = CCAPI_RECEIVE_ERROR_STATUS_SESSION_ERROR;
+		ret = CCCS_RECEIVE_ERROR_STATUS_SESSION_ERROR;
 		goto done;
 	}
 
 done:
 	resp_buffer->length = 2; /* 'OK' length */
-	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+	if (ret != CCCS_RECEIVE_ERROR_NONE) {
 		resp_buffer->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
@@ -1813,11 +1813,11 @@ done:
 	resp_buffer->buffer = calloc(resp_buffer->length + 1, sizeof(char));
 	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto exit;
 	}
 
-	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+	if (ret != CCCS_RECEIVE_ERROR_NONE) {
 		resp_buffer->length = sprintf(resp_buffer->buffer, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	} else {
@@ -1841,15 +1841,15 @@ exit:
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t play_music_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t play_music_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
 	char *request = req_buffer->buffer, *error_msg = NULL, *resp = NULL, *music_file = NULL;
 	json_object *req = NULL, *json_element = NULL;
-	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t ret = CCCS_RECEIVE_ERROR_NONE;
 	bool play = false;
 
 	log_dr_debug("%s: target='%s'", __func__, target);
@@ -1893,7 +1893,7 @@ static ccapi_receive_error_t play_music_cb(char const *const target,
 		/* Verify that music file exists. */
 		if (access(music_file, F_OK) != 0) {
 			error_msg = "File does not exist";
-			ret = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+			ret = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 			goto done;
 		}
 		/* Build play command. */
@@ -1901,7 +1901,7 @@ static ccapi_receive_error_t play_music_cb(char const *const target,
 		cmd = calloc(cmd_len + 1, sizeof(char));
 		if (cmd == NULL) {
 			error_msg = "Out of memory";
-			ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+			ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		} else {
 			sprintf(cmd, CMD_PLAY_MUSIC, music_file);
 			/* Do not check for error because 'setsid' always returns -15. */
@@ -1914,12 +1914,12 @@ static ccapi_receive_error_t play_music_cb(char const *const target,
 
 bad_format:
 	error_msg = "Invalid format";
-	ret = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+	ret = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 	log_dr_error("Cannot parse request for target '%s': Invalid request format", target);
 
 done:
 	resp_buffer->length = 2; /* 'OK' length */
-	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+	if (ret != CCCS_RECEIVE_ERROR_NONE) {
 		resp_buffer->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
@@ -1927,11 +1927,11 @@ done:
 	resp_buffer->buffer = calloc(resp_buffer->length + 1, sizeof(char));
 	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto exit;
 	}
 
-	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+	if (ret != CCCS_RECEIVE_ERROR_NONE) {
 		resp_buffer->length = sprintf(resp_buffer->buffer, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	} else {
@@ -1957,13 +1957,13 @@ exit:
  * Logs information about the received request and executes the corresponding
  * command.
  *
- * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
+ * Return: CCCS_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
-static ccapi_receive_error_t set_volume_cb(char const *const target,
-		ccapi_buffer_info_t const *const req_buffer,
-		ccapi_buffer_info_t *const resp_buffer)
+static cccs_receive_error_t set_volume_cb(char const *const target,
+		cccs_buffer_info_t const *const req_buffer,
+		cccs_buffer_info_t *const resp_buffer)
 {
-	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
+	cccs_receive_error_t ret = CCCS_RECEIVE_ERROR_NONE;
 	char *cmd = NULL, *error_msg = NULL, *resp = NULL, *val = NULL;
 	uint16_t volume, cmd_len = 0;
 
@@ -1971,7 +1971,7 @@ static ccapi_receive_error_t set_volume_cb(char const *const target,
 
 	val = calloc(req_buffer->length + 1, sizeof(char));
 	if (val == NULL) {
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
 
@@ -1983,7 +1983,7 @@ static ccapi_receive_error_t set_volume_cb(char const *const target,
 	if (strlen(val) != (uint16_t)snprintf(NULL, 0, "%d", volume)) {
 		error_msg = "Volume value must be an integer";
 		log_dr_error("Argument for target '%s' is not an integer: '%s'", target, val);
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
 
@@ -1993,13 +1993,13 @@ static ccapi_receive_error_t set_volume_cb(char const *const target,
 	if (cmd == NULL) {
 		error_msg = "Out of memory";
 		log_dr_error("Cannot change volume: %s", error_msg);
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
 	sprintf(cmd, CMD_SET_VOLUME, volume, volume);
 	if (ldx_process_execute_cmd(cmd, &resp, 2) != 0 || resp == NULL) {
 		error_msg = "Error setting audio volume";
-		ret = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+		ret = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 		if (resp != NULL)
 			log_dr_error("%s: %s", error_msg, resp);
 		else
@@ -2008,7 +2008,7 @@ static ccapi_receive_error_t set_volume_cb(char const *const target,
 
 done:
 	resp_buffer->length = 2; /* 'OK' length */
-	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+	if (ret != CCCS_RECEIVE_ERROR_NONE) {
 		resp_buffer->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
@@ -2016,11 +2016,11 @@ done:
 	resp_buffer->buffer = calloc(resp_buffer->length + 1, sizeof(char));
 	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
-		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
+		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto exit;
 	}
 
-	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+	if (ret != CCCS_RECEIVE_ERROR_NONE) {
 		resp_buffer->length = sprintf(resp_buffer->buffer, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	} else {
@@ -2049,7 +2049,7 @@ exit:
  * Cleans and frees the response buffer.
  */
 static void request_status_cb(char const *const target,
-		ccapi_buffer_info_t *const resp_buffer,
+		cccs_buffer_info_t *const resp_buffer,
 		int rcv_error, const char *const rcv_error_hint)
 {
 	log_dr_debug(

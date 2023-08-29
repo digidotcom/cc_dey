@@ -17,17 +17,30 @@
  * ===========================================================================
  */
 
-#ifndef _CCCS_SERVICES_H_
-#define _CCCS_SERVICES_H_
+#ifndef _CCCS_DEFINITIONS_H_
+#define _CCCS_DEFINITIONS_H_
 
-#include "cc_logging.h"
-/* Keep 'cccs_datapoints.h' before 'cc_utils.h' because 'cc_utils.h' uses:
-     1. 'ccapi_timestamp_t' defined in 'ccapi/ccapi_datapoints.h'
-     2. or 'cccs_timestamp_t' defined in 'cccs_datapoints.h' when building
-        'services-client' code.
-*/
-#include "cccs_datapoints.h"
-#include "cccs_receive.h"
-#include "cc_utils.h"
+typedef enum {
+	CCCS_SEND_ERROR_NONE,
+	CCCS_SEND_ERROR_ERROR_FROM_DAEMON,
+	CCCS_SEND_ERROR_INVALID_ARGUMENT,
+	CCCS_SEND_ERROR_OUT_OF_MEMORY,
+	CCCS_SEND_ERROR_LOCK,
+	CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON,
+	CCCS_SEND_ERROR_BAD_RESPONSE,
+	CCCS_SEND_ERROR_FROM_CLOUD,
+} cccs_comm_error_t;
 
-#endif /* _CCCS_SERVICES_H_ */
+/**
+ * struct cccs_resp_t - Response from ConnectCore Cloud Services daemon
+ *
+ * @code:	Response code, 0 success.
+ * @hint:	Null-terminated string with error hint, can be NULL.
+ * 		It must be freed.
+ */
+typedef struct {
+	int code;
+	char *hint;
+} cccs_resp_t;
+
+#endif /* _CCCS_DEFINITIONS_H_ */

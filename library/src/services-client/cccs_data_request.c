@@ -80,8 +80,8 @@ typedef struct {
 	cccs_request_data_cb_t data_cb;
 	cccs_request_status_cb_t status_cb;
 	size_t max_request_size;
-	ccapi_buffer_info_t req_buffer;
-	ccapi_buffer_info_t resp_buffer;
+	cccs_buffer_info_t req_buffer;
+	cccs_buffer_info_t resp_buffer;
 } request_data_t;
 
 typedef struct {
@@ -363,9 +363,9 @@ static void *listen_threaded(void *server_sock)
 
 		/* Execute data callback */
 		if (!strcmp(cb_type, REQ_TYPE_REQUEST_CB)) {
-			ccapi_buffer_info_t req_buffer = registered_req->req_buffer;
-			ccapi_buffer_info_t resp_buffer = registered_req->resp_buffer;
-			ccapi_receive_error_t error;
+			cccs_buffer_info_t req_buffer = registered_req->req_buffer;
+			cccs_buffer_info_t resp_buffer = registered_req->resp_buffer;
+			cccs_receive_error_t error;
 
 			if (read_blob(request_sock, &req_buffer.buffer, &req_buffer.length, &timeout)) {
 				log_dr_error("Unable to get '%s' request data from CCCSD", target);
@@ -374,7 +374,7 @@ static void *listen_threaded(void *server_sock)
 					log_dr_error("Cannot generate error response for target '%s': Out of memory", target);
 					goto loop_done;
 				}
-				error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+				error = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
 				resp_buffer.length = strlen(resp_buffer.buffer);
 			} else {
 				error = registered_req->data_cb(target, &req_buffer, &resp_buffer);
@@ -383,7 +383,7 @@ static void *listen_threaded(void *server_sock)
 				req_buffer.buffer = NULL;
 				req_buffer.length = 0;
 
-				if (error != CCAPI_RECEIVE_ERROR_NONE)
+				if (error != CCCS_RECEIVE_ERROR_NONE)
 					log_dr_error("Error executing '%s' request: %d", target, error);
 			}
 
@@ -397,7 +397,7 @@ static void *listen_threaded(void *server_sock)
 			}
 		/* Execute status callback */
 		} else if (!strcmp(cb_type, REQ_TYPE_STATUS_CB)) {
-			ccapi_buffer_info_t resp_buffer = registered_req->resp_buffer;
+			cccs_buffer_info_t resp_buffer = registered_req->resp_buffer;
 			uint32_t error;
 			char *error_str = NULL;
 

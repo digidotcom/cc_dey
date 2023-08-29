@@ -70,7 +70,7 @@
  */
 typedef struct {
 	gpio_t *button;
-	ccapi_dp_collection_handle_t dp_collection;
+	cccs_dp_collection_handle_t dp_collection;
 	gpio_value_t value;
 	uint32_t num_samples_upload;
 } button_cb_data_t;
@@ -103,29 +103,29 @@ static gpio_t *get_user_button(void)
  *
  * Return: Error code after the initialization of the monitor collection.
  *
- * The return value will always be 'CCAPI_DP_ERROR_NONE' unless there is any
+ * The return value will always be 'CCCS_DP_ERROR_NONE' unless there is any
  * problem creating the collection.
  */
-static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection)
+static cccs_dp_error_t init_monitor(cccs_dp_collection_handle_t *dp_collection)
 {
-	ccapi_dp_error_t dp_error = ccapi_dp_create_collection(dp_collection);
+	cccs_dp_error_t dp_error = cccs_dp_create_collection(dp_collection);
 
-	if (dp_error != CCAPI_DP_ERROR_NONE) {
+	if (dp_error != CCCS_DP_ERROR_NONE) {
 		log_mon_error("Error initializing demo monitor, %d", dp_error);
 		return dp_error;
 	}
 
-	dp_error = ccapi_dp_add_data_stream_to_collection_extra(*dp_collection,
+	dp_error = cccs_dp_add_data_stream_to_collection_extra(*dp_collection,
 			DATA_STREAM_USER_BUTTON,
-			CCAPI_DP_KEY_DATA_INT32 " " CCAPI_DP_KEY_TS_EPOCH,
+			CCCS_DP_KEY_DATA_INT32 " " CCCS_DP_KEY_TS_EPOCH,
 			DATA_STREAM_BUTTON_UNITS, NULL);
-	if (dp_error != CCAPI_DP_ERROR_NONE) {
+	if (dp_error != CCCS_DP_ERROR_NONE) {
 		log_mon_error("Cannot add '%s' stream to data point collection, error %d",
 					DATA_STREAM_USER_BUTTON, dp_error);
 		return dp_error;
 	}
 
-	return CCAPI_DP_ERROR_NONE;
+	return CCCS_DP_ERROR_NONE;
 }
 
 /*
@@ -135,9 +135,9 @@ static ccapi_dp_error_t init_monitor(ccapi_dp_collection_handle_t *dp_collection
  */
 static void add_button_sample(button_cb_data_t *data)
 {
-	ccapi_dp_error_t dp_error;
+	cccs_dp_error_t dp_error;
 	uint32_t count = 0;
-	ccapi_timestamp_t *timestamp = get_timestamp();
+	cccs_timestamp_t *timestamp = get_timestamp();
 
 	if (!timestamp) {
 		log_mon_error("%s", "Cannot get user_button sample timestamp");
@@ -146,17 +146,17 @@ static void add_button_sample(button_cb_data_t *data)
 
 	data->value = data->value ? GPIO_LOW : GPIO_HIGH;
 
-	dp_error = ccapi_dp_add(data->dp_collection, DATA_STREAM_USER_BUTTON,
+	dp_error = cccs_dp_add(data->dp_collection, DATA_STREAM_USER_BUTTON,
 			data->value, timestamp);
 	free_timestamp(timestamp);
-	if (dp_error != CCAPI_DP_ERROR_NONE) {
+	if (dp_error != CCCS_DP_ERROR_NONE) {
 		log_mon_error("Cannot add user_button value, %d", dp_error);
 		return;
 	} else {
 		log_mon_debug("user_button = %d %s", data->value, DATA_STREAM_BUTTON_UNITS);
 	}
 
-	ccapi_dp_get_collection_points_count(data->dp_collection, &count);
+	cccs_dp_get_collection_points_count(data->dp_collection, &count);
 	if (count >= data->num_samples_upload) {
 		cccs_comm_error_t ret;
 		cccs_resp_t resp;
@@ -202,8 +202,8 @@ int start_monitoring(void)
 	if (is_monitoring())
 		return 0;
 
-	ccapi_dp_error_t dp_error = init_monitor(&cb_data.dp_collection);
-	if (dp_error != CCAPI_DP_ERROR_NONE)
+	cccs_dp_error_t dp_error = init_monitor(&cb_data.dp_collection);
+	if (dp_error != CCCS_DP_ERROR_NONE)
 		goto error;
 
 	cb_data.button = get_user_button();
@@ -224,7 +224,7 @@ int start_monitoring(void)
 
 error:
 	ldx_gpio_free(cb_data.button);
-	ccapi_dp_destroy_collection(cb_data.dp_collection);
+	cccs_dp_destroy_collection(cb_data.dp_collection);
 
 	return 1;
 }
@@ -242,7 +242,7 @@ void stop_monitoring(void)
 		ldx_gpio_stop_wait_interrupt(cb_data.button);
 
 	ldx_gpio_free(cb_data.button);
-	ccapi_dp_destroy_collection(cb_data.dp_collection);
+	cccs_dp_destroy_collection(cb_data.dp_collection);
 
 	is_running = false;
 

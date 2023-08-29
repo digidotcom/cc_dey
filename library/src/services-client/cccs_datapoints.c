@@ -16,7 +16,6 @@
  * Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
  * ===========================================================================
  */
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -25,17 +24,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "cc_logging.h"
-/* Keep 'dp_csv_generator.h' before 'cccs_services.h' and '_cccs_utils.h' because:
-  1. 'dp_csv_generator.h' includes 'ccimp/ccimp_types.h' where
-     'ccapi_buffer_info_t' is defined.
-  2. 'cccs_services.h' includes 'cccs_receive.h' that redefines
-     'ccapi_buffer_info_t' only if 'ccimp/ccimp_types.h' is not included.
-  3. '_cccs_utils.h' includes 'cccs_services.h' (see point 2) */
-#include "dp_csv_generator.h"
+#include "ccimp/ccimp_types.h"
+#include "ccapi/ccapi_transport.h"
+#include "ccapi/ccapi_datapoints.h"
+
 #include "_cccs_utils.h"
+#include "cc_logging.h"
 #include "cccs_datapoints.h"
 #include "cccs_services.h"
+#include "dp_csv_generator.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
 
@@ -69,35 +66,35 @@
 	log_error("%s " format, SERVICE_TAG, __VA_ARGS__)
 
 typedef enum {
-	CCAPI_DP_ARG_DATA_INT32,
-	CCAPI_DP_ARG_DATA_INT64,
-	CCAPI_DP_ARG_DATA_FLOAT,
-	CCAPI_DP_ARG_DATA_DOUBLE,
-	CCAPI_DP_ARG_DATA_STRING,
-	CCAPI_DP_ARG_DATA_JSON,
-	CCAPI_DP_ARG_DATA_GEOJSON,
-	CCAPI_DP_ARG_TS_EPOCH,
-	CCAPI_DP_ARG_TS_EPOCH_MS,
-	CCAPI_DP_ARG_TS_ISO8601,
-	CCAPI_DP_ARG_LOCATION,
-	CCAPI_DP_ARG_QUALITY,
-	CCAPI_DP_ARG_INVALID
-} ccapi_dp_argument_t;
+	CCCS_DP_ARG_DATA_INT32,
+	CCCS_DP_ARG_DATA_INT64,
+	CCCS_DP_ARG_DATA_FLOAT,
+	CCCS_DP_ARG_DATA_DOUBLE,
+	CCCS_DP_ARG_DATA_STRING,
+	CCCS_DP_ARG_DATA_JSON,
+	CCCS_DP_ARG_DATA_GEOJSON,
+	CCCS_DP_ARG_TS_EPOCH,
+	CCCS_DP_ARG_TS_EPOCH_MS,
+	CCCS_DP_ARG_TS_ISO8601,
+	CCCS_DP_ARG_LOCATION,
+	CCCS_DP_ARG_QUALITY,
+	CCCS_DP_ARG_INVALID
+} cccs_dp_argument_t;
 
-typedef struct ccapi_dp_data_stream {
+typedef struct cccs_dp_data_stream {
 	connector_data_stream_t *ccfsm_data_stream;
 	struct {
-		ccapi_dp_argument_t *list;
+		cccs_dp_argument_t *list;
 		unsigned int count;
 	} arguments;
-	struct ccapi_dp_data_stream * next;
-} ccapi_dp_data_stream_t;
+	struct cccs_dp_data_stream *next;
+} cccs_dp_data_stream_t;
 
 typedef struct ccapi_dp_collection {
-	ccapi_dp_data_stream_t *ccapi_data_stream_list;
+	cccs_dp_data_stream_t *cccs_data_stream_list;
 	uint32_t dp_count;
 	void * lock;
-} ccapi_dp_collection_t;
+} cccs_dp_collection_t;
 
 /*
  * Reads a file into memory 
@@ -266,20 +263,20 @@ cccs_comm_error_t cccs_send_dp_csv_file(const char *path, unsigned long const ti
 /*
  * dp_generate_csv() - Generate the CSV contents in memory to send to the daemon
  *
- * @dp_collection:	Data point collection to send.
- * @buf_info:		The buffer with the generated CSV.
+ * @collection:	Data point collection to send.
+ * @buf_info:	The buffer with the generated CSV.
  *
  * Buffer contains the result of the operation. It must be freed.
  *
  * Return: The size of the CSV buffer, -1 if error.
  */
-static size_t dp_generate_csv(ccapi_dp_collection_t * const dp_collection, buffer_info_t *buf_info)
+static size_t dp_generate_csv(cccs_dp_collection_t * const collection, buffer_info_t *buf_info)
 {
 	csv_process_data_t process_data;
 
 	process_data.current_csv_field = csv_data;
-	process_data.current_data_stream = dp_collection->ccapi_data_stream_list->ccfsm_data_stream;
-	process_data.current_data_point = dp_collection->ccapi_data_stream_list->ccfsm_data_stream->point;
+	process_data.current_data_stream = collection->cccs_data_stream_list->ccfsm_data_stream;
+	process_data.current_data_point = collection->cccs_data_stream_list->ccfsm_data_stream->point;
 	process_data.data.init = false;
 
 	buf_info->bytes_written = 0;
@@ -295,13 +292,13 @@ static size_t dp_generate_csv(ccapi_dp_collection_t * const dp_collection, buffe
 	return generate_dp_csv(&process_data, buf_info);
 }
 
-static void chain_collection_ccfsm_data_streams(ccapi_dp_collection_t * const dp_collection)
+static void chain_collection_ccfsm_data_streams(cccs_dp_collection_t * const collection)
 {
-	ccapi_dp_data_stream_t *current_ds = dp_collection->ccapi_data_stream_list;
+	cccs_dp_data_stream_t *current_ds = collection->cccs_data_stream_list;
 
 	while (current_ds != NULL) {
 		connector_data_stream_t *const ccfsm_ds = current_ds->ccfsm_data_stream;
-		ccapi_dp_data_stream_t *const next_ds = current_ds->next;
+		cccs_dp_data_stream_t *const next_ds = current_ds->next;
 
 		if (next_ds != NULL)
 			ccfsm_ds->next = next_ds->ccfsm_data_stream;
@@ -378,15 +375,15 @@ static unsigned int dp_free_data_points_in_data_stream(connector_data_stream_t *
 /*
  * dp_free_data_points_from_collection() - Free data points in the provided collection
  *
- * @dp_collection:	The data point collection with data points to free.
+ * @collection:	The data point collection with data points to free.
  */
-static void dp_free_data_points_from_collection(ccapi_dp_collection_t * const dp_collection)
+static void dp_free_data_points_from_collection(cccs_dp_collection_t * const collection)
 {
-	ccapi_dp_data_stream_t *current_ds = dp_collection->ccapi_data_stream_list;
+	cccs_dp_data_stream_t *current_ds = collection->cccs_data_stream_list;
 
 	while (current_ds != NULL) {
 		connector_data_stream_t * const ccfsm_ds = current_ds->ccfsm_data_stream;
-		ccapi_dp_data_stream_t const * const next_ds = current_ds->next;
+		cccs_dp_data_stream_t const * const next_ds = current_ds->next;
 
 		if (next_ds != NULL)
 			ccfsm_ds->next = next_ds->ccfsm_data_stream;
@@ -395,15 +392,15 @@ static void dp_free_data_points_from_collection(ccapi_dp_collection_t * const dp
 		ccfsm_ds->point = NULL;
 		current_ds = current_ds->next;
 	}
-	dp_collection->dp_count = 0;
+	collection->dp_count = 0;
 }
 
 /*
  * dp_send_collection() - Send data point collection to CCCS daemon
  *
- * @dp_collection:	Data point collection to send.
- * @timeout:		Number of seconds to wait for a response from the daemon.
- * @resp:		Received response from CCCS daemon.
+ * @collection:	Data point collection to send.
+ * @timeout:	Number of seconds to wait for a response from the daemon.
+ * @resp:	Received response from CCCS daemon.
  *
  * Response may contain a string with the result of the operation (resp->hint).
  * This string must be freed.
@@ -411,7 +408,7 @@ static void dp_free_data_points_from_collection(ccapi_dp_collection_t * const dp
  * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
  *         communication with the daemon fails.
  */
-static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_collection,
+static cccs_comm_error_t dp_send_collection(cccs_dp_collection_t * const collection,
 	unsigned long const timeout, cccs_resp_t *resp)
 {
 	cccs_comm_error_t ret = CCCS_SEND_ERROR_NONE;
@@ -420,7 +417,7 @@ static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_col
 
 	resp->hint = NULL;
 
-	if (dp_collection == NULL || dp_collection->ccapi_data_stream_list == NULL) {
+	if (collection == NULL || collection->cccs_data_stream_list == NULL) {
 		log_dp_error("%s", "Invalid data point collection");
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
@@ -430,7 +427,7 @@ static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_col
 
 	/* TODO check if it is running */
 
-	if (lock_acquire(dp_collection->lock) != 0) {
+	if (lock_acquire(collection->lock) != 0) {
 		log_dp_error("Data point collection %s", "busy");
 		ret = CCCS_SEND_ERROR_LOCK;
 		resp->code = ret;
@@ -439,9 +436,9 @@ static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_col
 	}
 	collection_lock_acquired = true;
 
-	chain_collection_ccfsm_data_streams(dp_collection);
+	chain_collection_ccfsm_data_streams(collection);
 
-	if (dp_generate_csv(dp_collection, &buf_info) > 0) {
+	if (dp_generate_csv(collection, &buf_info) > 0) {
 		ret = send_dp_data(buf_info.buffer, buf_info.bytes_written, timeout, resp);
 	} else {
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
@@ -450,9 +447,9 @@ static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_col
 
 	free(buf_info.buffer);
 
-	dp_free_data_points_from_collection(dp_collection);
+	dp_free_data_points_from_collection(collection);
 
-	if (collection_lock_acquired && lock_release(dp_collection->lock) != 0) {
+	if (collection_lock_acquired && lock_release(collection->lock) != 0) {
 		if (ret == CCCS_SEND_ERROR_NONE)
 			ret = CCCS_SEND_ERROR_LOCK;
 		log_dp_error("Data point collection %s", "busy");
@@ -461,13 +458,65 @@ static cccs_comm_error_t dp_send_collection(ccapi_dp_collection_t * const dp_col
 	return ret;
 }
 
-cccs_comm_error_t cccs_send_dp_collection(ccapi_dp_collection_t *const dp_collection, cccs_resp_t *resp)
+cccs_comm_error_t cccs_send_dp_collection(cccs_dp_collection_t *const collection, cccs_resp_t *resp)
 {
-	return dp_send_collection(dp_collection, CCAPI_DP_WAIT_FOREVER, resp);
+	return dp_send_collection(collection, CCCS_DP_WAIT_FOREVER, resp);
 }
 
-cccs_comm_error_t cccs_send_dp_collection_tout(ccapi_dp_collection_t *const dp_collection,
+cccs_comm_error_t cccs_send_dp_collection_tout(cccs_dp_collection_t *const collection,
 	unsigned long const timeout, cccs_resp_t *resp)
 {
-	return dp_send_collection(dp_collection, timeout, resp);
+	return dp_send_collection(collection, timeout, resp);
+}
+
+cccs_dp_error_t cccs_dp_create_collection(cccs_dp_collection_handle_t *const collection)
+{
+	return (cccs_dp_error_t) ccapi_dp_create_collection(collection);
+}
+
+cccs_dp_error_t cccs_dp_clear_collection(cccs_dp_collection_handle_t const collection)
+{
+	return (cccs_dp_error_t) ccapi_dp_clear_collection(collection);
+}
+
+cccs_dp_error_t cccs_dp_destroy_collection(cccs_dp_collection_handle_t const collection)
+{
+	return (cccs_dp_error_t)ccapi_dp_destroy_collection(collection);
+}
+
+cccs_dp_error_t cccs_dp_add_data_stream_to_collection(
+	cccs_dp_collection_handle_t const collection,
+	char const * const stream_id,
+	char const * const format_string)
+{
+	return (cccs_dp_error_t) ccapi_dp_add_data_stream_to_collection(collection, stream_id, format_string);
+}
+
+cccs_dp_error_t cccs_dp_add_data_stream_to_collection_extra(
+	cccs_dp_collection_handle_t const collection,
+	char const * const stream_id,
+	char const * const format_string,
+	char const * const units,
+	char const * const forward_to)
+{
+	return (cccs_dp_error_t) ccapi_dp_add_data_stream_to_collection_extra(collection, stream_id, format_string, units, forward_to);
+}
+
+cccs_dp_error_t cccs_dp_remove_data_stream_from_collection(
+	cccs_dp_collection_handle_t const collection,
+	char const * const stream_id)
+{
+	return (cccs_dp_error_t) ccapi_dp_remove_data_stream_from_collection(collection, stream_id);
+}
+
+cccs_dp_error_t cccs_dp_get_collection_points_count(
+	cccs_dp_collection_handle_t const collection,
+	uint32_t * const count)
+{
+	return (cccs_dp_error_t) ccapi_dp_get_collection_points_count(collection, count);
+}
+
+cccs_dp_error_t cccs_dp_remove_older_data_point_from_streams(cccs_dp_collection_handle_t const collection)
+{
+	return (cccs_dp_error_t) ccapi_dp_remove_older_data_point_from_streams(collection);
 }

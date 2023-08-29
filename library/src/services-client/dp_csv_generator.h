@@ -23,7 +23,6 @@
 #include <stddef.h>
 
 #include "connector_api.h"
-#include "ccimp/ccimp_types.h"
 #include "stringify_tools.h"
 
 /************************************************************************

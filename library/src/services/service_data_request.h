@@ -33,11 +33,15 @@ int handle_unregister_data_request(int fd);
 int handle_register_data_request_ipv4(int fd);
 int handle_unregister_data_request_ipv4(int fd);
 
+/* Avoid definition of not required function in CCCS API that is using an
+internal type: 'ccapi_receive_error_t' */
+#ifndef _CCCS_RECEIVE_H_
 /*
  * register_builtin_requests() - Register built-in data requests
  *
  * Return: Error code after registering the built-in data requests.
  */
 ccapi_receive_error_t register_builtin_requests(void);
+#endif /* _CCCS_RECEIVE_H_*/
 
 #endif /* SERVICE_DATA_REQUEST_H */

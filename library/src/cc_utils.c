@@ -30,15 +30,15 @@
 
 ccapi_timestamp_t *get_timestamp(void)
 {
-	return get_timestamp_by_type(CC_TS_DEFAULT);
+	return get_timestamp_by_type(CCCS_TS_DEFAULT);
 }
 
-ccapi_timestamp_t *get_timestamp_by_type(cc_timestamp_type_t type)
+ccapi_timestamp_t *get_timestamp_by_type(cccs_timestamp_type_t type)
 {
 	ccapi_timestamp_t *timestamp = NULL;
 	struct timeval now;
 
-	if (type >= CC_TS_INVALID || type < CC_TS_DEFAULT)
+	if (type >= CCCS_TS_INVALID || type < CCCS_TS_DEFAULT)
 		return NULL;
 
 	timestamp = calloc(1, sizeof(*timestamp));
@@ -49,10 +49,10 @@ ccapi_timestamp_t *get_timestamp_by_type(cc_timestamp_type_t type)
 		goto error;
 
 	switch (type) {
-		case CC_TS_EPOCH_MS:
+		case CCCS_TS_EPOCH_MS:
 			timestamp->epoch_msec = now.tv_sec * 1000 + now.tv_usec / 1000;
 			break;
-		case CC_TS_ISO8601:
+		case CCCS_TS_ISO8601:
 			{
 				size_t len = strlen("2016-09-27T07:07:09.546Z") + 1;
 				char *date = calloc(len, sizeof(*date));
@@ -69,8 +69,8 @@ ccapi_timestamp_t *get_timestamp_by_type(cc_timestamp_type_t type)
 				free(date);
 				goto error;
 			}
-		case CC_TS_DEFAULT:
-		case CC_TS_EPOCH:
+		case CCCS_TS_DEFAULT:
+		case CCCS_TS_EPOCH:
 			timestamp->epoch.seconds = now.tv_sec;
 			timestamp->epoch.milliseconds = now.tv_usec / 1000;
 			break;
@@ -88,24 +88,24 @@ error:
 
 void free_timestamp(ccapi_timestamp_t *timestamp)
 {
-	free_timestamp_by_type(timestamp, CC_TS_DEFAULT);
+	free_timestamp_by_type(timestamp, CCCS_TS_DEFAULT);
 }
 
-void free_timestamp_by_type(ccapi_timestamp_t *timestamp, cc_timestamp_type_t type)
+void free_timestamp_by_type(ccapi_timestamp_t *timestamp, cccs_timestamp_type_t type)
 {
 	if (!timestamp)
 		return;
 
 	switch (type) {
-		case CC_TS_EPOCH_MS:
+		case CCCS_TS_EPOCH_MS:
 			timestamp->epoch_msec = 0;
 			break;
-		case CC_TS_ISO8601:
+		case CCCS_TS_ISO8601:
 			free((char *)timestamp->iso8601);
 			timestamp->iso8601 = NULL;
 			break;
-		case CC_TS_DEFAULT:
-		case CC_TS_EPOCH:
+		case CCCS_TS_DEFAULT:
+		case CCCS_TS_EPOCH:
 			timestamp->epoch.seconds = 0;
 			timestamp->epoch.milliseconds = 0;
 			break;
