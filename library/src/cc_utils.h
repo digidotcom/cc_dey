@@ -28,46 +28,6 @@ typedef enum {
 	CCCS_TS_INVALID
 } cccs_timestamp_type_t;
 
-#ifdef _CCCS_DATAPOINTS_H_
-/*
- * get_timestamp() - Get the current timestamp of the system
- *
- * This is equivalent to 'get_timestamp_by_type(CCCS_TS_DEFAULT)'.
- * 'CCCS_TS_DEFAULT' is equivalent to 'CCCS_TS_EPOCH'.
- *
- * Return: The current timestamp, NULL if error. It must be freed.
- */
-cccs_timestamp_t *get_timestamp(void);
-
-/*
- * get_timestamp_by_type() - Get the current timestamp of the system
- *
- * @type:	Timestamp type, 'CCCS_TS_DEFAULT' to use default timestamp type, 'CCCS_TS_EPOCH'.
- *
- * Return: The current timestamp, NULL if error. It must be freed.
- */
-cccs_timestamp_t *get_timestamp_by_type(cccs_timestamp_type_t type);
-
-/*
- * free_timestamp() - Free given timestamp structure
- *
- * This is equivalent to 'free_timestamp_by_type(timestamp, CCCS_TS_DEFAULT)'.
- * 'CCCS_TS_DEFAULT' is equivalent to 'CCCS_TS_EPOCH'.
- *
- * @timestamp:	The timestamp structure to release.
- */
-void free_timestamp(cccs_timestamp_t *timestamp);
-
-/*
- * free_timestamp_by_type() - Free given timestamp structure
- *
- * @timestamp:	The timestamp structure to release.
- * @type:	Timestamp type, 'CCCS_TS_DEFAULT' to use default timestamp type, 'CCCS_TS_EPOCH'.
- */
-void free_timestamp_by_type(cccs_timestamp_t *timestamp, cccs_timestamp_type_t type);
-
-#else /* _CCCS_DATAPOINTS_H_ */
-
 /*
  * get_timestamp() - Get the current timestamp of the system
  *
@@ -104,7 +64,5 @@ void free_timestamp(ccapi_timestamp_t *timestamp);
  * @type:	Timestamp type, 'CCCS_TS_DEFAULT' to use default timestamp type, 'CCCS_TS_EPOCH'.
  */
 void free_timestamp_by_type(ccapi_timestamp_t *timestamp, cccs_timestamp_type_t type);
-
-#endif /* _CCCS_DATAPOINTS_H_ */
 
 #endif /* _CC_UTILS_H__ */

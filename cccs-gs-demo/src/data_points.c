@@ -116,9 +116,8 @@ static cccs_dp_error_t init_monitor(cccs_dp_collection_handle_t *dp_collection)
 	}
 
 	dp_error = cccs_dp_add_data_stream_to_collection_extra(*dp_collection,
-			DATA_STREAM_USER_BUTTON,
-			CCCS_DP_KEY_DATA_INT32 " " CCCS_DP_KEY_TS_EPOCH,
-			DATA_STREAM_BUTTON_UNITS, NULL);
+			DATA_STREAM_USER_BUTTON, CCCS_DP_KEY_DATA_INT32,
+			true, DATA_STREAM_BUTTON_UNITS, NULL);
 	if (dp_error != CCCS_DP_ERROR_NONE) {
 		log_mon_error("Cannot add '%s' stream to data point collection, error %d",
 					DATA_STREAM_USER_BUTTON, dp_error);
@@ -137,18 +136,11 @@ static void add_button_sample(button_cb_data_t *data)
 {
 	cccs_dp_error_t dp_error;
 	uint32_t count = 0;
-	cccs_timestamp_t *timestamp = get_timestamp();
-
-	if (!timestamp) {
-		log_mon_error("%s", "Cannot get user_button sample timestamp");
-		return;
-	}
 
 	data->value = data->value ? GPIO_LOW : GPIO_HIGH;
 
 	dp_error = cccs_dp_add(data->dp_collection, DATA_STREAM_USER_BUTTON,
-			data->value, timestamp);
-	free_timestamp(timestamp);
+			data->value);
 	if (dp_error != CCCS_DP_ERROR_NONE) {
 		log_mon_error("Cannot add user_button value, %d", dp_error);
 		return;

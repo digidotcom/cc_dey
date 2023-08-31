@@ -21,13 +21,7 @@
 #define _CCCS_SERVICES_H_
 
 #include "cc_logging.h"
-/* Keep 'cccs_datapoints.h' before 'cc_utils.h' because 'cc_utils.h' uses:
-     1. 'ccapi_timestamp_t' defined in 'ccapi/ccapi_datapoints.h'
-     2. or 'cccs_timestamp_t' defined in 'cccs_datapoints.h' when building
-        'services-client' code.
-*/
 #include "cccs_datapoints.h"
 #include "cccs_receive.h"
-#include "cc_utils.h"
 
 #endif /* _CCCS_SERVICES_H_ */

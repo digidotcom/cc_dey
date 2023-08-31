@@ -18,6 +18,7 @@
  */
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,13 +31,20 @@
 
 #include "_cccs_utils.h"
 #include "cc_logging.h"
+#include "cc_utils.h"
 #include "cccs_datapoints.h"
 #include "cccs_services.h"
 #include "dp_csv_generator.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
+#include "_utils.h"
 
 #define SERVICE_TAG	"DP:"
+
+/* For internal use only */
+#define CCCS_DP_KEY_TS_EPOCH		"ts_epoch"
+#define CCCS_DP_KEY_TS_EPOCH_MS		"ts_epoch_ms"
+#define CCCS_DP_KEY_TS_ISO8601		"ts_iso"
 
 /**
  * log_dp_debug() - Log the given message as debug
@@ -487,19 +495,89 @@ cccs_dp_error_t cccs_dp_destroy_collection(cccs_dp_collection_handle_t const col
 cccs_dp_error_t cccs_dp_add_data_stream_to_collection(
 	cccs_dp_collection_handle_t const collection,
 	char const * const stream_id,
-	char const * const format_string)
+	char const * const format_string,
+	bool add_local_timestamp)
 {
-	return (cccs_dp_error_t) ccapi_dp_add_data_stream_to_collection(collection, stream_id, format_string);
+	return (cccs_dp_error_t) cccs_dp_add_data_stream_to_collection_extra(collection, stream_id, format_string, add_local_timestamp, NULL, NULL);
+}
+
+static char *rm_substring(char *str, const char *rm_str) {
+	char *end_rm_ptr = NULL, *end_valid_prt = NULL, *rm_ptr = NULL;
+	size_t len;
+
+	if (!str || !rm_str || !*str || !*rm_str)
+		return str;
+
+	end_valid_prt = strstr(str, rm_str);
+	if (!end_valid_prt)
+		return str;
+
+	len = strlen(rm_str);
+	rm_ptr = end_valid_prt;
+
+	while ((rm_ptr = strstr(end_rm_ptr = rm_ptr + len, rm_str)) != NULL) {
+		int n_bytes_to_move = rm_ptr - end_rm_ptr;
+
+		memmove(end_valid_prt, end_rm_ptr, n_bytes_to_move);
+		end_valid_prt += n_bytes_to_move;
+	}
+
+	memmove(end_valid_prt, end_rm_ptr, strlen(end_rm_ptr) + 1);
+
+	return str;
 }
 
 cccs_dp_error_t cccs_dp_add_data_stream_to_collection_extra(
 	cccs_dp_collection_handle_t const collection,
 	char const * const stream_id,
 	char const * const format_string,
+	bool add_local_timestamp,
 	char const * const units,
 	char const * const forward_to)
 {
-	return (cccs_dp_error_t) ccapi_dp_add_data_stream_to_collection_extra(collection, stream_id, format_string, units, forward_to);
+	cccs_dp_error_t ret;
+	char *new_fs = NULL;
+
+	if (add_local_timestamp
+	    /*  Avoid adding the key if it is already there */
+	    && !strstr(format_string, CCCS_DP_KEY_TS_ISO8601)
+	    && !strstr(format_string, CCCS_DP_KEY_TS_EPOCH_MS)
+	    && !strstr(format_string, CCCS_DP_KEY_TS_EPOCH)) {
+		int len = snprintf(NULL, 0, "%s " CCCS_DP_KEY_TS_EPOCH, format_string);
+
+		new_fs = calloc(len + 1, sizeof(*new_fs));
+		if (new_fs) {
+			sprintf(new_fs, "%s " CCCS_DP_KEY_TS_EPOCH, format_string);
+			new_fs = trim(new_fs);
+		} else {
+			log_dp_error("Unable to add timeout to data stream format: %s", "Out of memory");
+		}
+	} else if (!add_local_timestamp
+		/* Remove key if it is already there */
+		&& (strstr(format_string, CCCS_DP_KEY_TS_ISO8601)
+			|| strstr(format_string, CCCS_DP_KEY_TS_EPOCH_MS)
+			|| strstr(format_string, CCCS_DP_KEY_TS_EPOCH))) {
+		new_fs = strdup(format_string);
+		if (new_fs) {
+			new_fs = rm_substring(new_fs, CCCS_DP_KEY_TS_ISO8601);
+			new_fs = rm_substring(new_fs, CCCS_DP_KEY_TS_EPOCH_MS);
+			new_fs = rm_substring(new_fs, CCCS_DP_KEY_TS_EPOCH);
+
+			new_fs = trim(new_fs);
+		} else {
+			log_dp_error("Unable to add timeout to data stream format: %s", "Out of memory");
+		}
+	}
+
+	if (!new_fs)
+		new_fs = (char *)format_string;
+
+	ret = (cccs_dp_error_t) ccapi_dp_add_data_stream_to_collection_extra(collection, stream_id, new_fs, units, forward_to);
+
+	if (new_fs != format_string)
+		free(new_fs);
+
+	return ret;
 }
 
 cccs_dp_error_t cccs_dp_remove_data_stream_from_collection(
@@ -514,6 +592,225 @@ cccs_dp_error_t cccs_dp_get_collection_points_count(
 	uint32_t * const count)
 {
 	return (cccs_dp_error_t) ccapi_dp_get_collection_points_count(collection, count);
+}
+
+static cccs_dp_data_stream_t *find_stream_id_in_collection(cccs_dp_collection_t * const collection, char const * const stream_id)
+{
+	cccs_dp_data_stream_t *current_ds = collection->cccs_data_stream_list;
+	cccs_dp_data_stream_t *data_stream = NULL;
+
+	while (current_ds != NULL) {
+		if (strcmp(stream_id, current_ds->ccfsm_data_stream->stream_id) == 0) {
+			data_stream = current_ds;
+			goto done;
+		}
+		current_ds = current_ds->next;
+	}
+
+done:
+	return data_stream;
+}
+
+static cccs_dp_error_t parse_arg_list_and_create_dp(
+	/*int n_args, */va_list *arg_list, cccs_dp_data_stream_t * const data_stream,
+	connector_data_point_t * * const new_data_point)
+{
+	cccs_dp_argument_t * const arg = data_stream->arguments.list;
+	int const fmt_count = data_stream->arguments.count;
+	connector_data_point_t *datapoint = calloc(1, sizeof (*datapoint));
+	cccs_dp_error_t ret = CCCS_DP_ERROR_NONE;
+	int i;
+	va_list arg_list_copy;
+
+	if (!datapoint) {
+		ret = CCCS_DP_ERROR_INSUFFICIENT_MEMORY;
+		goto done;
+	}
+
+	datapoint->data.type = connector_data_type_native;
+	datapoint->quality.type = connector_quality_type_ignore;
+	datapoint->location.type = connector_location_type_ignore;
+	datapoint->time.source = connector_time_cloud;
+
+	datapoint->description = NULL;
+	datapoint->data.element.native.string_value = NULL;
+	datapoint->time.value.iso8601_string = NULL;
+
+	va_copy(arg_list_copy, *arg_list);
+
+	for (i = 0; i < fmt_count; i++) {
+		switch (arg[i]) {
+			case CCCS_DP_ARG_DATA_INT32:
+				{
+					datapoint->data.element.native.int_value = va_arg(arg_list_copy, int32_t);
+					break;
+				}
+			case CCCS_DP_ARG_DATA_INT64:
+				{
+					datapoint->data.element.native.long_value = va_arg(arg_list_copy, int64_t);
+					break;
+				}
+			case CCCS_DP_ARG_DATA_FLOAT:
+				{
+					double const aux = va_arg(arg_list_copy, double); /* ‘float’ is promoted to ‘double’ when passed through ‘...’ */
+					datapoint->data.element.native.float_value = (float)aux;
+					break;
+				}
+			case CCCS_DP_ARG_DATA_DOUBLE:
+				{
+					datapoint->data.element.native.double_value = va_arg(arg_list_copy, double);
+					break;
+				}
+			case CCCS_DP_ARG_DATA_STRING:
+			case CCCS_DP_ARG_DATA_JSON:
+			case CCCS_DP_ARG_DATA_GEOJSON:
+				{
+					char const * const string_dp = va_arg(arg_list_copy, char const * const);
+
+					datapoint->data.element.native.string_value = strdup(string_dp);
+					if (datapoint->data.element.native.string_value == NULL) {
+						ret = CCCS_DP_ERROR_INSUFFICIENT_MEMORY;
+						goto done;
+					}
+					break;
+				}
+			case CCCS_DP_ARG_TS_EPOCH:
+				{
+					ccapi_timestamp_t *timestamp = get_timestamp_by_type(CCCS_TS_EPOCH);
+
+					if (!timestamp) {
+						ret = CCCS_DP_ERROR_INSUFFICIENT_MEMORY;
+						goto done;
+					}
+
+					datapoint->time.source = connector_time_local_epoch_fractional;
+					datapoint->time.value.since_epoch_fractional.seconds = timestamp->epoch.seconds;
+					datapoint->time.value.since_epoch_fractional.milliseconds = timestamp->epoch.milliseconds;
+
+					/*if (i == n_args)
+						free_timestamp(timestamp);*/
+					free_timestamp_by_type(timestamp, CCCS_TS_EPOCH);
+					break;
+				}
+			case CCCS_DP_ARG_TS_EPOCH_MS:
+				{
+					ccapi_timestamp_t *timestamp = get_timestamp_by_type(CCCS_TS_EPOCH_MS);
+
+					if (!timestamp) {
+						ret = CCCS_DP_ERROR_INSUFFICIENT_MEMORY;
+						goto done;
+					}
+
+					datapoint->time.source = connector_time_local_epoch_whole;
+					datapoint->time.value.since_epoch_whole.milliseconds = timestamp->epoch_msec;
+
+					free_timestamp_by_type(timestamp, CCCS_TS_EPOCH_MS);
+					break;
+				}
+			case CCCS_DP_ARG_TS_ISO8601:
+				{
+					ccapi_timestamp_t *timestamp = get_timestamp_by_type(CCCS_TS_ISO8601);
+
+					if (!timestamp) {
+						ret = CCCS_DP_ERROR_INSUFFICIENT_MEMORY;
+						goto done;
+					}
+
+					datapoint->time.source = connector_time_local_iso8601;
+					datapoint->time.value.iso8601_string = strdup(timestamp->iso8601);
+					if (datapoint->time.value.iso8601_string == NULL)
+						ret = CCCS_DP_ERROR_INSUFFICIENT_MEMORY;
+
+					free_timestamp_by_type(timestamp, CCCS_TS_EPOCH_MS);
+
+					if (ret != CCCS_DP_ERROR_NONE)
+						goto done;
+					break;
+				}
+			case CCCS_DP_ARG_LOCATION:
+				{
+					ccapi_location_t const * const location = va_arg(arg_list_copy, ccapi_location_t *);
+
+					datapoint->location.type = connector_location_type_native;
+					datapoint->location.value.native.latitude = location->latitude;
+					datapoint->location.value.native.longitude = location->longitude;
+					datapoint->location.value.native.elevation = location->elevation;
+					break;
+				}
+			case CCCS_DP_ARG_QUALITY:
+				{
+					datapoint->quality.type = connector_quality_type_native;
+					datapoint->quality.value = (int)va_arg(arg_list_copy, int32_t);
+					break;
+				}
+			case CCCS_DP_ARG_INVALID:
+				{
+					ret = CCCS_DP_ERROR_INVALID_ARGUMENT;
+					goto done;
+				}
+		}
+	}
+done:
+	if (datapoint && ret != CCCS_DP_ERROR_NONE) {
+		free(datapoint->data.element.native.string_value);
+		free(datapoint->time.value.iso8601_string);
+		free(datapoint);
+		datapoint = NULL;
+	}
+
+	va_end(arg_list_copy);
+
+	*new_data_point = datapoint;
+
+	return ret;
+}
+
+cccs_dp_error_t cccs_dp_add(cccs_dp_collection_handle_t const collection, char const * const stream_id, ...)
+{
+	cccs_dp_error_t ret = CCCS_DP_ERROR_NONE;
+	cccs_dp_data_stream_t *data_stream;
+
+	if (!collection)
+		return CCCS_DP_ERROR_INVALID_ARGUMENT;
+
+	if (lock_acquire(collection->lock) != 0) {
+		log_dp_error("Data point collection %s", "busy");
+
+		return CCCS_DP_ERROR_LOCK_FAILED;
+	}
+
+	data_stream = find_stream_id_in_collection(collection, stream_id);
+	if (!data_stream) {
+		ret = CCCS_DP_ERROR_INVALID_STREAM_ID;
+		goto done;
+	}
+
+	{
+		connector_data_point_t *datapoint = NULL;
+		va_list arg_list;
+
+		va_start(arg_list, stream_id);
+		ret = parse_arg_list_and_create_dp(&arg_list, data_stream, &datapoint);
+		va_end(arg_list);
+
+		if (ret == CCCS_DP_ERROR_NONE && !datapoint)
+			ret = CCCS_DP_ERROR_INVALID_ARGUMENT;
+
+		if (ret != CCCS_DP_ERROR_NONE)
+			goto done;
+
+		datapoint->next = data_stream->ccfsm_data_stream->point;
+		data_stream->ccfsm_data_stream->point = datapoint;
+		collection->dp_count += 1;
+	}
+done:
+	if (lock_release(collection->lock) != 0) {
+		if (ret == CCCS_DP_ERROR_NONE)
+			ret = CCCS_DP_ERROR_LOCK_FAILED;
+		log_dp_error("Data point collection %s", "busy");
+	}
+
+	return ret;
 }
 
 cccs_dp_error_t cccs_dp_remove_older_data_point_from_streams(cccs_dp_collection_handle_t const collection)

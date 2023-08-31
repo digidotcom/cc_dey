@@ -190,7 +190,6 @@ install-cccs-headers:
 	install -m 0644 src/services-client/cccs_definitions.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/cccs_datapoints.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 	install -m 0644 src/services-client/cccs_receive.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
-	install -m 0644 src/cc_utils.h $(DESTDIR)/$(INSTALL_HEADERS_DIR_SRV)/
 
 install-daemon-pkgconfig:
 	install -d $(DESTDIR)/usr/lib/pkgconfig

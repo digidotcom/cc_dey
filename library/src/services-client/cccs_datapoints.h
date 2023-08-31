@@ -20,6 +20,7 @@
 #ifndef _CCCS_DATAPOINTS_H_
 #define _CCCS_DATAPOINTS_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -34,10 +35,6 @@
 #define CCCS_DP_KEY_DATA_STRING		"string"
 #define CCCS_DP_KEY_DATA_JSON		"json"
 #define CCCS_DP_KEY_DATA_GEOJSON	"geojson"
-
-#define CCCS_DP_KEY_TS_EPOCH		"ts_epoch"
-#define CCCS_DP_KEY_TS_EPOCH_MS		"ts_epoch_ms"
-#define CCCS_DP_KEY_TS_ISO8601		"ts_iso"
 
 #define CCCS_DP_KEY_LOCATION		"loc"
 #define CCCS_DP_KEY_QUALITY		"qual"
@@ -75,22 +72,6 @@ typedef struct {
 	float longitude;
 	float elevation;
 } cccs_location_t;
-
-/**
- * struct cccs_timestamp_t - Timestamp of a data point
- *
- * @epoch:	Structure with the seconds and ms elapsed since 00:00:00 UTC on 1 January 1970
- * @epoch_msec:	Number of ms since 00:00:00 UTC on 1 January 1970
- * @iso8601:	Null-terminated string with the timestamp in ISO 8601 formats
- */
-typedef union {
-	struct {
-		uint32_t seconds;
-		uint32_t milliseconds;
-	} epoch;
-	uint64_t epoch_msec;
-	char const * iso8601;
-} cccs_timestamp_t;
 
 typedef struct ccapi_dp_collection *cccs_dp_collection_handle_t;
 
@@ -132,6 +113,11 @@ cccs_dp_error_t cccs_dp_destroy_collection(cccs_dp_collection_handle_t const col
  *			Must be unique.
  * @format_string:	Null-terminated string to define the data points the
  * 			stream contains and how it is expected.
+ * @add_local_timestamp:If true, the timestamp of each data point in the stream
+ *			will be the timestamp when the sample is added to
+ *			the data stream using 'cccs_dp_data()' function.
+ *			If false, the timestamp will be set by the server when
+ *			data is uploaded.
  *
  * For 'format_string' information see 'cccs_dp_add_data_stream_to_collection_extra()'.
  *
@@ -140,7 +126,8 @@ cccs_dp_error_t cccs_dp_destroy_collection(cccs_dp_collection_handle_t const col
 cccs_dp_error_t cccs_dp_add_data_stream_to_collection(
 	cccs_dp_collection_handle_t const collection,
 	char const * const stream_id,
-	char const * const format_string);
+	char const * const format_string,
+	bool add_local_timestamp);
 
 /*
  * cccs_dp_add_data_stream_to_collection_extra() - Add a data stream to a data point collection
@@ -150,6 +137,11 @@ cccs_dp_error_t cccs_dp_add_data_stream_to_collection(
  *			Must be unique.
  * @format_string:	Null-terminated string to define the data points the
  *			stream contains and how it is expected.
+ * @add_local_timestamp:If true, the timestamp of each data point in the stream
+ *			will be the timestamp when the sample is added to
+ *			the data stream using 'cccs_dp_data()' function.
+ *			If false, the timestamp will be set by the server when
+ *			data is uploaded.
  * @units:		Null-terminated string for the units of the data in
  *			the stream, such as, seconds, C, etc.
  *			NULL for no units.
@@ -168,14 +160,6 @@ cccs_dp_error_t cccs_dp_add_data_stream_to_collection(
  *         CCCS_DP_KEY_DATA_JSON	Null-terminated string that represents a JSON object
  *         CCCS_DP_KEY_DATA_GEOJSON	Null-terminated string that represents a GeoJSON object
  *
- *    - Timestamp	[Optional] Format of the data points timestamp.
- *      		See 'get_timestamp_by_type()'/'get_timestamp()' functions.
- *      Possible values:
- *         [Not present]		DRM will add the timestamp according to the upload time
- *         CCCS_DP_KEY_TS_EPOCH		Structure holding the seconds elapsed since 00:00:00 UTC on 1 January 1970 and the ms portion
- *         CCCS_DP_KEY_TS_EPOCH_MS	64-bit unsigned integer with the number of ms since 00:00:00 UTC on 1 January 1970
- *         CCCS_DP_KEY_TS_ISO8601	Null-terminated string with the timestamp in ISO 8601 format
- *
  *    - Location	[Optional] Data points capture location.
  *      		See 'cccs_location_t'.
  *      Possible values:
@@ -189,13 +173,13 @@ cccs_dp_error_t cccs_dp_add_data_stream_to_collection(
  * when adding a data point with 'cccs_dp_add' (like in printf/scanf functions).
  *
  * For example:
- *      CCCS_DP_KEY_DATA_STRING CCCS_DP_KEY_TS_EPOCH_MS CCCS_DP_KEY_LOCATION
+ *      CCCS_DP_KEY_DATA_STRING CCCS_DP_KEY_LOCATION CCCS_DP_KEY_QUALITY
  *
- * It is equivalent to 'string ts_epoch_ms loc'.
+ * It is equivalent to 'string loc qual'.
  * It means that all data points added to the data stream must pass:
  *     - a null-terminated string as the first argument,
- *     - a 64-bit unsigned integer for the timestamp as the second one,
- *     - and the location structure as the third one
+ *     - the location structure as the second one,
+ *     - and an integer for the quality as the third one.
  *
  * Return: CCCS_SEND_ERROR_NONE if success, any other error if it fails.
  */
@@ -203,6 +187,7 @@ cccs_dp_error_t cccs_dp_add_data_stream_to_collection_extra(
 	cccs_dp_collection_handle_t const collection,
 	char const * const stream_id,
 	char const * const format_string,
+	bool add_local_timestamp,
 	char const * const units,
 	char const * const forward_to);
 
@@ -230,9 +215,6 @@ cccs_dp_error_t cccs_dp_get_collection_points_count(
 	cccs_dp_collection_handle_t const collection,
 	uint32_t * const count);
 
-#ifndef _CCAPI_DATAPOINTS_H_ /* Only define 'ccapi_dp_add' if not already defined */
-cccs_dp_error_t ccapi_dp_add(cccs_dp_collection_handle_t const collection, char const * const stream_id, ...);
-# endif /* _CCAPI_DATAPOINTS_H_ */
 /*
  * cccs_dp_add() - Add data point to a data stream in a data point collection
  *
@@ -246,7 +228,7 @@ cccs_dp_error_t ccapi_dp_add(cccs_dp_collection_handle_t const collection, char 
  *
  * Return: CCCS_SEND_ERROR_NONE if success, any other error if it fails.
  */
-#define cccs_dp_add(collection, stream_id, ...)  ccapi_dp_add(collection, stream_id, __VA_ARGS__)
+cccs_dp_error_t cccs_dp_add(cccs_dp_collection_handle_t const collection, char const * const stream_id, ...);
 
 /*
  * cccs_dp_remove_older_data_point_from_streams() - Remove the oldest data point of each data stream in a collection
@@ -258,7 +240,7 @@ cccs_dp_error_t ccapi_dp_add(cccs_dp_collection_handle_t const collection, char 
 cccs_dp_error_t cccs_dp_remove_older_data_point_from_streams(cccs_dp_collection_handle_t const collection);
 
 /*
- * cccs_send_dp_csv_file() - Send provided CSV file with data points to CCCS daemon
+ * cccs_send_dp_csv_file() - Send provided CSV file with data points to CCCS daemon to be uploaded
  *
  * @path:	Absolute path of the CSV file.
  * @timeout:	Number of seconds to wait for a CCCS daemon response.
@@ -308,7 +290,7 @@ cccs_dp_error_t cccs_dp_remove_older_data_point_from_streams(cccs_dp_collection_
 cccs_comm_error_t cccs_send_dp_csv_file(const char *path, unsigned long const timeout, cccs_resp_t *resp);
 
 /*
- * cccs_send_dp_collection() - Send provided data point collection to CCCS daemon
+ * cccs_send_dp_collection() - Send provided data point collection to CCCS daemon to be uploaded
  *
  * @collection:	Data point collection to send to CCCS daemon.
  * @resp:	Received response from CCCS daemon.
@@ -322,7 +304,7 @@ cccs_comm_error_t cccs_send_dp_csv_file(const char *path, unsigned long const ti
 cccs_comm_error_t cccs_send_dp_collection(cccs_dp_collection_handle_t const collection, cccs_resp_t *resp);
 
 /*
- * cccs_send_dp_collection_tout() - Send provided data point collection to CCCS daemon
+ * cccs_send_dp_collection_tout() - Send provided data point collection to CCCS daemon to be uploaded
  *
  * @collection:	Data point collection to send to CCCS daemon.
  * @timeout:	Number of seconds to wait for response from the daemon.
