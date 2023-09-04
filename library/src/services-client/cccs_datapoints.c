@@ -104,91 +104,76 @@ typedef struct ccapi_dp_collection {
 	void * lock;
 } cccs_dp_collection_t;
 
+typedef union {
+	struct {
+		char *data;
+		size_t length;
+		char *stream_id;
+	} blob;
+	struct {
+		char *path;
+		char *stream_id;
+	} file;
+} cccs_dp_data_t;
+
 /*
- * Reads a file into memory 
+ * send_dp_data_type() - Send data point data to CCCS daemon
  *
- * @path:	Absolute path of the file to read.
- * @size:	Size of data read.
+ * @fd:		Socket file descriptor.
+ * @type:	Type of the data to upload: 'upload_datapoint_file_metrics' or
+ *		'upload_datapoint_file_path_metrics' or
+ *		'upload_datapoint_file_metrics_binary' or
+ *		'upload_datapoint_file_path_binary'.
+ * @data:	Data points data to send.
  *
- * Return: The data read.
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
  */
-static char *read_csv_file(const char *path, size_t *size)
+static cccs_comm_error_t send_dp_data_type(int fd, upload_datapoint_file_t type, cccs_dp_data_t data)
 {
-	size_t capacity = 0, read_len = 0;
-	char *data = NULL, *tmp = NULL;
-	struct stat sb;
-	int fd = -1, len;
+	switch (type) {
+		case upload_datapoint_file_metrics:
+		case upload_datapoint_file_metrics_binary:
+			if (write_string(fd, REQ_TAG_DP_FILE_REQUEST)						/* The request type */
+				|| write_uint32(fd, type)							/* CSV data or binary data*/
+				|| write_blob(fd, data.blob.data, data.blob.length)				/* Data */
+				|| (data.blob.stream_id != NULL && write_string(fd, data.blob.stream_id))	/* Stream id, only for binary data */
+				|| write_uint32(fd, upload_datapoint_file_terminate)) {				/* End of message */
+				log_dp_error("Could not send data points request to CCCSD: %s (%d)",
+					strerror(errno), errno);
 
-	if (!path) {
-		log_dp_error("%s", "Invalid file path");
-		return NULL;
-	}
-
-	log_dp_debug("Reading data points from '%s'", path);
-
-	fd = open(path, O_RDONLY);
-	if (fd == -1) {
-		log_dp_error("Unable to open file '%s': %s (%d)", path, strerror(errno), errno);
-		return NULL;
-	}
-
-	/* Preallocate if possible */
-	if (fstat(fd, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size < (long int)INT32_MAX) {
-		capacity = sb.st_size;
-		data = calloc(capacity, sizeof(char));
-		if (!data) {
-			log_dp_error("Unable to read file '%s': Out of memory", path);
-			goto error;
-		}
-	}
-
-	do {
-		if (read_len + BUFSIZ >= capacity) {
-			/* Grow buffer by BUFSIZ if exceeding capacity */
-			tmp = realloc(data, capacity += BUFSIZ);
-			if (!tmp) {
-				log_dp_error("Unable to read file '%s': Out of memory", path);
-				goto error;
+				return CCCS_SEND_ERROR_BAD_RESPONSE;
 			}
-			data = tmp;
-		}
+			break;
+		case upload_datapoint_file_path_metrics:;
+		case upload_datapoint_file_path_binary:
+			if (write_string(fd, REQ_TAG_DP_FILE_REQUEST)						/* The request type */
+				|| write_uint32(fd, type)							/* CSV or Binary File path */
+				|| write_string(fd, data.file.path)						/* Path of file to send */
+				|| (data.file.stream_id != NULL && write_string(fd, data.file.stream_id))	/* Stream id, only for binary file */
+				|| write_uint32(fd, upload_datapoint_file_terminate)) {				/* End of message */
+				log_dp_error("Could not send data points file '%s' to CCCSD: %s (%d)",
+					data.file.path, strerror(errno), errno);
 
-		len = read(fd, data + read_len, capacity - read_len);
-		if (len == -1) {
-			log_dp_error("Unable to read file '%s': %s (%d)", path, strerror(errno), errno);
-			goto error;
-		}
-		read_len += len;
-	} while (len);
-
-	if (read_len > 0) { /* To avoid a free */
-		tmp = realloc(data, read_len);
-		if (!tmp) {
-			log_dp_error("Unable to read file '%s': Out of memory", path);
-			goto error;
-		}
-		data = tmp;
+				return CCCS_SEND_ERROR_BAD_RESPONSE;
+			}
+			break;
+		default:
+			/* Should not occur */
+			break;
 	}
 
-	goto done;
-
-error:
-	free(data);
-	data = NULL;
-	read_len = 0;
-
-done:
-	close(fd);
-	*size = read_len;
-
-	return data;
+	return CCCS_SEND_ERROR_NONE;
 }
 
 /*
  * send_dp_data() - Send data point data to CCCS daemon
  *
- * @data:	Data points to send in csv format.
- * @length:	Total number of bytes to send.
+ * @type:	Type of the data to upload: 'upload_datapoint_file_metrics' or
+ *		'upload_datapoint_file_path_metrics' or
+ *		'upload_datapoint_file_metrics_binary' or
+ *		'upload_datapoint_file_path_binary'.
+ * @data:	Data points data to send.
  * @timeout:	Number of seconds to wait for a response from the daemon.
  * @resp:	Received response from CCCS daemon.
  *
@@ -198,20 +183,74 @@ done:
  * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
  *         communication with the daemon fails.
  */
-static cccs_comm_error_t send_dp_data(const char *data, size_t length, unsigned long timeout, cccs_resp_t *resp)
+static cccs_comm_error_t send_dp_data(upload_datapoint_file_t type, cccs_dp_data_t data, unsigned long timeout, cccs_resp_t *resp)
 {
 	cccs_comm_error_t ret = CCCS_SEND_ERROR_NONE;
 	int fd = -1;
 
-	if (!data || !length) {
-		if (!data)
-			log_dp_error("%s", "Unable to upload NULL");
-		if (!length)
-			log_dp_error("%s", "Number of bytes to upload must be greater than 0");
+	if (type != upload_datapoint_file_metrics
+		&& type != upload_datapoint_file_path_metrics
+		&& type != upload_datapoint_file_path_binary
+		&& type != upload_datapoint_file_metrics_binary) {
+		log_dp_error("%s", "Invalid upload type");
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 
 		return ret;
+	}
+
+	switch (type) {
+		case upload_datapoint_file_metrics:
+			if (!data.blob.data)
+				log_dp_error("%s", "Unable to upload NULL");
+			if (!data.blob.length)
+				log_dp_error("%s", "Number of bytes to upload must be greater than 0");
+			if (!data.blob.data || !data.blob.length) {
+				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
+				resp->code = ret;
+
+				return ret;
+			}
+			break;
+		case upload_datapoint_file_path_metrics:
+			if (!data.file.path) {
+				log_dp_error("%s", "File path must be defined");
+
+				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
+				resp->code = ret;
+
+				return ret;
+			}
+			break;
+		case upload_datapoint_file_path_binary:
+			if (!data.file.path)
+				log_dp_error("%s", "File path must be defined");
+			if (!data.file.stream_id)
+				log_dp_error("%s", "Destination stream id must be defined");
+			if (!data.file.path || !data.file.stream_id) {
+				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
+				resp->code = ret;
+
+				return ret;
+			}
+			break;
+		case upload_datapoint_file_metrics_binary:
+			if (!data.blob.data)
+				log_dp_error("%s", "Unable to upload NULL");
+			if (!data.blob.length)
+				log_dp_error("%s", "Number of bytes to upload must be greater than 0");
+			if (!data.blob.stream_id)
+				log_dp_error("%s", "Destination stream id must be defined");
+			if (!data.blob.data || !data.blob.length || !data.blob.stream_id) {
+				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
+				resp->code = ret;
+
+				return ret;
+			}
+			break;
+		default:
+			/* Should not occur */
+			break;
 	}
 
 	log_dp_info("%s", "Sending data points to CCCSD");
@@ -224,13 +263,8 @@ static cccs_comm_error_t send_dp_data(const char *data, size_t length, unsigned 
 		return ret;
 	}
 
-	if (write_string(fd, REQ_TAG_DP_FILE_REQUEST)			/* The request type */
-		|| write_uint32(fd, upload_datapoint_file_metrics)	/* CSV data */
-		|| write_blob(fd, data, length)
-		|| write_uint32(fd, upload_datapoint_file_terminate)) { /* End of message */
-		log_dp_error("Could not send data points request to CCCSD: %s (%d)",
-			strerror(errno), errno);
-		ret = CCCS_SEND_ERROR_BAD_RESPONSE;
+	ret = send_dp_data_type(fd, type, data);
+	if (ret != CCCS_SEND_ERROR_NONE) {
 		resp->code = ret;
 		goto done;
 	}
@@ -245,25 +279,17 @@ done:
 
 cccs_comm_error_t cccs_send_dp_csv_file(const char *path, unsigned long const timeout, cccs_resp_t *resp)
 {
-	char *data = NULL;
-	size_t size = 0;
 	cccs_comm_error_t ret;
+	cccs_dp_data_t data_to_send = {
+		.file.path = (char *)path,
+		.file.stream_id = NULL,
+	};
 
 	resp->hint = NULL;
 
-	data = read_csv_file(path, &size);
-	if (!data) {
-		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-		resp->code = ret;
-
-		return ret;
-	}
-
-	ret = send_dp_data(data, size, timeout, resp);
+	ret = send_dp_data(upload_datapoint_file_path_metrics, data_to_send, timeout, resp);
 	if (ret == CCCS_SEND_ERROR_NONE)
 		log_dp_debug("Data points in '%s' uploaded", path);
-
-	free(data);
 
 	return ret;
 }
@@ -447,7 +473,12 @@ static cccs_comm_error_t dp_send_collection(cccs_dp_collection_t * const collect
 	chain_collection_ccfsm_data_streams(collection);
 
 	if (dp_generate_csv(collection, &buf_info) > 0) {
-		ret = send_dp_data(buf_info.buffer, buf_info.bytes_written, timeout, resp);
+		cccs_dp_data_t data_to_send = {
+			.blob.data = buf_info.buffer,
+			.blob.length = buf_info.bytes_written,
+		};
+
+		ret = send_dp_data(upload_datapoint_file_metrics, data_to_send, timeout, resp);
 	} else {
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
@@ -455,7 +486,8 @@ static cccs_comm_error_t dp_send_collection(cccs_dp_collection_t * const collect
 
 	free(buf_info.buffer);
 
-	dp_free_data_points_from_collection(collection);
+	if (ret == CCCS_SEND_ERROR_NONE)
+		dp_free_data_points_from_collection(collection);
 
 	if (collection_lock_acquired && lock_release(collection->lock) != 0) {
 		if (ret == CCCS_SEND_ERROR_NONE)
@@ -475,6 +507,50 @@ cccs_comm_error_t cccs_send_dp_collection_tout(cccs_dp_collection_t *const colle
 	unsigned long const timeout, cccs_resp_t *resp)
 {
 	return dp_send_collection(collection, timeout, resp);
+}
+
+cccs_comm_error_t cccs_send_dp_binary_file(char const * const path,
+	char const * const stream_id, unsigned long const timeout, cccs_resp_t *resp)
+{
+	cccs_comm_error_t ret;
+	cccs_dp_data_t data_to_send = {
+		.file.path = (char *)path,
+		.file.stream_id = (char *)stream_id,
+	};
+
+	resp->hint = NULL;
+
+	ret = send_dp_data(upload_datapoint_file_path_binary, data_to_send, timeout, resp);
+	if (ret == CCCS_SEND_ERROR_NONE)
+		log_dp_debug("Binary data point in '%s' uploaded to '%s'", path, stream_id);
+
+	return ret;
+}
+
+cccs_comm_error_t cccs_send_binary_dp(char const * const stream_id,
+	void const * const data, size_t const bytes, cccs_resp_t *resp)
+{
+	return cccs_send_binary_dp_tout(stream_id, data, bytes, CCCS_DP_WAIT_FOREVER, resp);
+}
+
+cccs_comm_error_t cccs_send_binary_dp_tout(char const * const stream_id,
+	void const * const data, size_t const bytes,
+	unsigned long const timeout, cccs_resp_t *resp)
+{
+	cccs_comm_error_t ret;
+	cccs_dp_data_t data_to_send = {
+		.blob.data = (char *)data,
+		.blob.length = bytes,
+		.blob.stream_id = (char *)stream_id,
+	};
+
+	resp->hint = NULL;
+
+	ret = send_dp_data(upload_datapoint_file_metrics_binary, data_to_send, timeout, resp);
+	if (ret == CCCS_SEND_ERROR_NONE)
+		log_dp_debug("Binary data point uploaded to '%s'", stream_id);
+
+	return ret;
 }
 
 cccs_dp_error_t cccs_dp_create_collection(cccs_dp_collection_handle_t *const collection)

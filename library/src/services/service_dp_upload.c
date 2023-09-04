@@ -25,15 +25,32 @@
 #include "service_dp_upload.h"
 #include "services_util.h"
 
-static ccapi_send_error_t upload_datapoint_file(char const * const buff, size_t size, char const cloud_path[], ccapi_string_info_t * const hint_string_info, ccapi_optional_uint8_t *err_from_server)
+static ccapi_send_error_t upload_datapoint_file(uint32_t type,
+	char const * const buff, size_t size,
+	char const cloud_path[],
+	ccapi_string_info_t * const hint_string_info,
+	ccapi_optional_uint8_t *err_from_server)
 {
 #define TIMEOUT 5
-	ccapi_send_error_t send_error;
+	ccapi_send_error_t send_error = CCAPI_SEND_ERROR_NONE;
 	char const file_type[] = "text/plain";
 
-	send_error = ccapi_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
-		cloud_path, file_type, buff, size,
-		CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+	switch (type) {
+		case upload_datapoint_file_events:
+		case upload_datapoint_file_metrics:
+			send_error = ccapi_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				cloud_path, file_type, buff, size,
+				CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+			break;
+		case upload_datapoint_file_path_metrics:
+			send_error = ccapi_send_file_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				buff, cloud_path, file_type,
+				CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+			break;
+		default:
+			/* Should not occur */
+			break;
+	}
 
 	if (send_error != CCAPI_SEND_ERROR_NONE)
 		log_error("Send error: %d Hint: %s", send_error, hint_string_info->string);
@@ -42,13 +59,47 @@ static ccapi_send_error_t upload_datapoint_file(char const * const buff, size_t 
 #undef TIMEOUT
 }
 
+static ccapi_dp_b_error_t upload_binary_datapoint(uint32_t type,
+	char const * const buff, size_t size,
+	char const stream_id[],
+	ccapi_string_info_t * const hint_string_info,
+	ccapi_optional_uint8_t *err_from_server)
+{
+#define TIMEOUT 5
+	ccapi_dp_b_error_t send_error = CCAPI_DP_B_ERROR_NONE;
+
+	switch (type) {
+		case upload_datapoint_file_metrics_binary:
+			send_error = ccapi_dp_binary_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				stream_id, buff, size,
+				TIMEOUT, hint_string_info, err_from_server);
+			break;
+		case upload_datapoint_file_path_binary:
+			send_error = ccapi_dp_binary_send_file_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				buff, stream_id,
+				TIMEOUT, hint_string_info, err_from_server);
+			break;
+		default:
+			/* Should not occur */
+			break;
+	}
+
+	if (send_error != CCAPI_DP_B_ERROR_NONE)
+		log_error("Send binary error: %d Hint: %s", send_error, hint_string_info->string);
+
+	return send_error;
+#undef TIMEOUT
+}
+
 int handle_datapoint_file_upload(int fd)
 {
-	while(1) {
-		ccapi_send_error_t ret;
+	while (1) {
+		int ret;
 		uint32_t type;
 		size_t size;
-		void * blob;
+		void *blob = NULL;
+		char *file_path = NULL, *stream_id = NULL, *cloud_path = NULL;
+		char const * err_msg = NULL;
 		struct timeval timeout = {
 			.tv_sec = SOCKET_READ_TIMEOUT_SEC,
 			.tv_usec = 0
@@ -70,36 +121,92 @@ int handle_datapoint_file_upload(int fd)
 		if (type == upload_datapoint_file_terminate)
 			break;
 
-		if (type != upload_datapoint_file_metrics && type != upload_datapoint_file_events) {
-			send_error(fd, "Invalid datapoint type");
+		if (type != upload_datapoint_file_metrics
+			&& type != upload_datapoint_file_events
+			&& type != upload_datapoint_file_path_metrics
+			&& type != upload_datapoint_file_path_binary
+			&& type != upload_datapoint_file_metrics_binary) {
+			send_error(fd, "Invalid data point type");
+
 			return 1;
 		}
 
-		/* Read the datapoint(s) blob of data from the client process */
-		if (read_blob(fd, &blob, &size, &timeout)) {
-			send_error(fd, "Failed to read datapoint data");
-			return 1;
+		/* Read data point(s) blob/file path */
+		switch (type) {
+			case upload_datapoint_file_path_metrics:
+			case upload_datapoint_file_path_binary:
+				/* Read data point(s) file path */
+				if (read_string(fd, &file_path, NULL, &timeout) < 0) {
+					send_error(fd, "Failed to read data point file path");
+					return 1;
+				}
+				break;
+			case upload_datapoint_file_events:
+			case upload_datapoint_file_metrics:
+			case upload_datapoint_file_metrics_binary:
+			default:
+				/* Read the data point(s) blob of data from the client process */
+				if (read_blob(fd, &blob, &size, &timeout)) {
+					send_error(fd, "Failed to read data point data");
+					return 1;
+				}
+				break;
 		}
 
-		char* cloud_path;
-		switch(type) {
+		/* Determine cloud_path/stream_id*/
+		switch (type) {
 			case upload_datapoint_file_events:
 				cloud_path = "DeviceLog/EventLog.json";
 				break;
+			case upload_datapoint_file_metrics_binary:
+			case upload_datapoint_file_path_binary:
+				/* Read the data stream name */
+				if (read_string(fd, &stream_id, NULL, &timeout) < 0) {
+					send_error(fd, "Failed to read data point stream id");
+					free(blob);
+					free(file_path);
+					return 1;
+				}
+				break;
 			case upload_datapoint_file_metrics:
+			case upload_datapoint_file_path_metrics:
 			default:
 				cloud_path = "DataPoint/.csv";
 				break;
 		}
 
-		/* Upload the blob to the cloud */
-		ret = upload_datapoint_file(blob, size, cloud_path, &hint_string_info, &err_from_server);
+		/* Upload data to cloud */
+		switch (type) {
+			case upload_datapoint_file_path_metrics:
+				/* Upload the file to the cloud */
+				ret = upload_datapoint_file(type, file_path, 0, cloud_path, &hint_string_info, &err_from_server);
+				err_msg = to_send_error_msg(ret);
+				break;
+			case upload_datapoint_file_metrics_binary:
+				/* Upload the file to the cloud */
+				ret = upload_binary_datapoint(type, blob, size, stream_id, &hint_string_info, &err_from_server);
+				err_msg = dp_b_to_send_error_msg(ret);
+				break;
+			case upload_datapoint_file_path_binary:
+				/* Upload the file to the cloud */
+				ret = upload_binary_datapoint(type, file_path, 0, stream_id, &hint_string_info, &err_from_server);
+				err_msg = dp_b_to_send_error_msg(ret);
+				break;
+			case upload_datapoint_file_events:
+			case upload_datapoint_file_metrics:
+			default:
+				/* Upload the blob to the cloud */
+				ret = upload_datapoint_file(type, blob, size, cloud_path, &hint_string_info, &err_from_server);
+				err_msg = to_send_error_msg(ret);
+				break;
+		}
 
 		free(blob);
+		free(file_path);
+		free(stream_id);
 
 		if (ret) {
-			char const * const err_msg = to_send_error_msg(ret);
-			char * err_msg_with_hint = NULL;
+			char *err_msg_with_hint = NULL;
 
 			if (!err_from_server.known) {
 				/* Use a sentinel value of 255 to indicate something went wrong */
@@ -116,9 +223,8 @@ int handle_datapoint_file_upload(int fd)
 			send_ok(fd);
 		}
 
-		if (ret != CCAPI_SEND_ERROR_NONE) {
+		if (ret != 0)
 			return 1;
-		}
 	}
 
 	return 0;

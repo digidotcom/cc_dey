@@ -319,4 +319,57 @@ cccs_comm_error_t cccs_send_dp_collection(cccs_dp_collection_handle_t const coll
 cccs_comm_error_t cccs_send_dp_collection_tout(cccs_dp_collection_handle_t const collection,
 	unsigned long const timeout, cccs_resp_t *resp);
 
+/*
+ * cccs_send_dp_binary_file() - Send provided file as binary data point to CCCS daemon to be uploaded
+ *
+ * @path:	Absolute path of the binary file.
+ * @stream_id:	Stream id to upload the file as binary data point.
+ * @timeout:	Number of seconds to wait for a CCCS daemon response.
+ * @resp:	Received response from CCCS daemon.
+ *
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
+ *
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
+ */
+cccs_comm_error_t cccs_send_dp_binary_file(char const * const path,
+	char const * const stream_id, unsigned long const timeout, cccs_resp_t *resp);
+
+/*
+ * cccs_send_binary_dp() - Send provided data as binary data point to CCCS daemon to be uploaded
+ *
+ * @stream_id:	Data point collection to send to CCCS daemon.
+ * @data:	The data bytes to be uploaded.
+ * @bytes:	The number of bytes to be uploaded.
+ * @resp:	Received response from CCCS daemon.
+ *
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
+ *
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
+ */
+cccs_comm_error_t cccs_send_binary_dp(char const * const stream_id,
+	void const * const data, size_t const bytes, cccs_resp_t *resp);
+
+/*
+ * cccs_send_binary_dp_tout() - Send provided data as binary data point to CCCS daemon to be uploaded
+ *
+ * @stream_id:	Data point collection to send to CCCS daemon.
+ * @data:	The data bytes to be uploaded.
+ * @bytes:	The number of bytes to be uploaded.
+ * @timeout:	Number of seconds to wait for response from the daemon.
+ * @resp:	Received response from CCCS daemon.
+ *
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
+ *
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
+ */
+cccs_comm_error_t cccs_send_binary_dp_tout(char const * const stream_id,
+	void const * const data, size_t const bytes,
+	unsigned long const timeout, cccs_resp_t *resp);
+
 #endif /* _CCCS_DATAPOINTS_H_ */
