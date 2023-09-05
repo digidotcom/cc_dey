@@ -32,7 +32,7 @@
 #include "data_points.h"
 #include "data_request.h"
 
-#define VERSION		"0.1" GIT_REVISION
+#define VERSION		"1.0.0" GIT_REVISION
 
 #define USAGE \
 	"ConnectCore Cloud Services demo.\n" \
