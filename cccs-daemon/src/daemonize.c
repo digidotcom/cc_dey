@@ -145,7 +145,7 @@ static void daemonize(char const *const name)
 
 	/* Open .pid file while root. We can write it once we know child PID. */
 	umask(0022);
-	snprintf(pid_filename, sizeof(pid_filename), "/var/run/%s.pid", name);
+	snprintf(pid_filename, sizeof(pid_filename), "/run/%s.pid", name);
 	pid_fp = fopen(pid_filename, "w+");
 	if (pid_fp == NULL) {
 		syslog(LOG_ERR, "Unable to open pid file (errno: %d)", errno);
