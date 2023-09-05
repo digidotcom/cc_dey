@@ -100,10 +100,45 @@ static int setup_signal_handler(void)
 	return 0;
 }
 
+/*
+ * create_pid_file() - Create and write the PID file
+ *
+ * @pid_file: Absolute path of the PID file.
+ *
+ * Return: 0 on success, 1 otherwise.
+ */
+static int create_pid_file(char const * const pid_file)
+{
+	pid_t pid = getpid();
+	FILE *pid_fp = NULL;
+	int len;
+
+	pid_fp = fopen(pid_file, "w");
+	if (!pid_fp) {
+		log_error("Unable to create PID file '%s'", pid_file);
+
+		return 1;
+	}
+
+	len = fprintf(pid_fp, "%u", pid);
+
+	fclose(pid_fp);
+
+	if (len <= 0) {
+		log_error("Unable to write to PID file '%s'", pid_file);
+		unlink(pid_file);
+
+		return 1;
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int result = EXIT_SUCCESS;
 	char *name = basename(argv[0]);
+	char pid_file[PATH_MAX];
 	static int opt, opt_index;
 	int log_options = LOG_CONS | LOG_NDELAY | LOG_PID | LOG_PERROR;
 	static const char *short_options = "h";
@@ -112,8 +147,15 @@ int main(int argc, char *argv[])
 			{NULL, 0, NULL, 0}
 	};
 
-	/* Initialize the logging interface. */
+	/* Initialize the logging interface */
 	init_logger(LOG_DEBUG, log_options, name);
+
+	/* Create pid file */
+	snprintf(pid_file, sizeof(pid_file), "/run/%s.pid", name);
+	if (create_pid_file(pid_file)) {
+		result = EXIT_FAILURE;
+		goto done;
+	}
 
 	while (1) {
 		opt = getopt_long(argc, argv, short_options, long_options,
@@ -139,7 +181,7 @@ int main(int argc, char *argv[])
 
 	register_custom_data_requests();
 
-	/* Do the real work. */
+	/* Do the real work */
 	if (start_monitoring() != 0) {
 		log_error("%s", "Cannot start monitoring");
 		goto done;
@@ -155,6 +197,8 @@ int main(int argc, char *argv[])
 
 done:
 	deinit_logger();
+
+	unlink(pid_file);
 
 	return result;
 }
