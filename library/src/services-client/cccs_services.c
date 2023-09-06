@@ -26,6 +26,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/types.h>
+#include <signal.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "ccimp/ccimp_types.h"
 
@@ -67,6 +70,8 @@ void * ccapi_lock_create_and_release(void);
 ccimp_status_t ccapi_lock_acquire(void *lock);
 ccimp_status_t ccapi_lock_release(void *lock);
 ccimp_status_t ccapi_lock_destroy(void *lock);
+
+static volatile bool stop_requested;
 
 void *get_lock(void)
 {
@@ -154,14 +159,14 @@ int connect_cccsd(void)
 	int s = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (s == -1) {
-		log_cccsd_error("Failed to connect to CCCSD: %s (%d)",
+		log_cccsd_debug("Failed to connect to CCCSD: %s (%d)",
 			strerror(errno), errno);
 		return -1;
 	}
 
 	if (connect(s, (const struct sockaddr *)&sa, sizeof sa) == -1) {
-		log_cccsd_error("Failed to connect to CCCSD: %s (%d)",
-			strerror(errno), errno);
+		log_cccsd_debug("Failed to connect to CCCSD (s=%d): %s (%d)",
+			s, strerror(errno), errno);
 		return -1;
 	}
 
@@ -232,4 +237,83 @@ cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long 
 		log_cccsd_debug("Error from Cloud (%d)", resp->code);
 
 	return CCCS_SEND_ERROR_FROM_CLOUD;
+}
+
+/**
+ * signal_handler() - Manage signal received.
+ *
+ * @signum:	Received signal.
+ */
+static void signal_handler(int signum)
+{
+	log_debug("%s: Received signal %d", __func__, signum);
+	stop_requested = true;
+}
+
+/*
+ * setup_signal_handler() - Setup process signals
+ *
+ * Return: 0 on success, 1 otherwise.
+ */
+static int setup_signal_handler(struct sigaction *orig_action)
+{
+	struct sigaction new_action;
+
+	memset(&new_action, 0, sizeof(new_action));
+	new_action.sa_handler = signal_handler;
+	sigemptyset(&new_action.sa_mask);
+	new_action.sa_flags = 0;
+
+	sigaction(SIGINT, NULL, orig_action);
+	if (orig_action->sa_handler != SIG_IGN) {
+		if (sigaction(SIGINT, &new_action, NULL)) {
+			log_error("Failed to install signal handler: %s (%d)",
+				strerror(errno), errno);
+
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+bool cccs_is_daemon_ready(long timeout)
+{
+	struct sigaction orig_action;
+	int ret;
+	bool ready = false;
+	int start = time(NULL);
+
+	if (timeout < 0)
+		timeout = CCCSD_WAIT_FOREVER;
+
+	/* Set a signal handler to be able to cancel while trying to connect */
+	ret = setup_signal_handler(&orig_action);
+
+	do {
+		int fd = connect_cccsd();
+
+		if (fd >= 0) {
+			close(fd);
+			ready = true;
+			goto done;
+		}
+		if (stop_requested)
+			goto done;
+		sleep(1);
+	} while (timeout == CCCSD_WAIT_FOREVER || time(NULL) - start < timeout);
+
+done:
+	stop_requested = false;
+
+	/* Restore the original signal handler */
+	if (!ret)
+		sigaction(SIGINT, &orig_action, NULL);
+
+	if (ready)
+		log_debug("%s", "CCCS daemon ready");
+	else
+		log_debug("%s", "CCCS daemon not ready");
+
+	return ready;
 }

@@ -262,6 +262,7 @@ static cccs_comm_error_t send_data_request_data(dreq_action_type_t type, int por
 
 	fd = connect_cccsd();
 	if (fd < 0) {
+		log_dr_error("%s", "Unable to connect to CCCS daemon");
 		ret = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
 		resp->code = ret;
 

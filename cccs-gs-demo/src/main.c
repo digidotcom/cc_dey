@@ -17,6 +17,7 @@
  * ===========================================================================
  */
 
+#include <errno.h>
 #include <getopt.h>
 #include <libgen.h>
 #include <limits.h>
@@ -40,6 +41,9 @@
 	"Version: %s\n" \
 	"\n" \
 	"Usage: %s [options]\n\n" \
+	"  -t  --daemon-timeout=<N>  Number of seconds to wait for CCCS daemon to be ready.\n" \
+	"                            -1 to wait until is ready (default value if not specified)\n" \
+	"                            0 not to wait, if it is not ready the application exits.\n" \
 	"  -h  --help                Print help and exit\n" \
 	"\n"
 
@@ -141,8 +145,10 @@ int main(int argc, char *argv[])
 	char pid_file[PATH_MAX];
 	static int opt, opt_index;
 	int log_options = LOG_CONS | LOG_NDELAY | LOG_PID | LOG_PERROR;
-	static const char *short_options = "h";
+	long daemon_timeout = CCCSD_WAIT_FOREVER;
+	static const char *short_options = "ht:";
 	static const struct option long_options[] = {
+			{"daemon-timeout", required_argument, NULL, 't'},
 			{"help", no_argument, NULL, 'h'},
 			{NULL, 0, NULL, 0}
 	};
@@ -164,6 +170,21 @@ int main(int argc, char *argv[])
 			break;
 
 		switch (opt) {
+		case 't':
+		{
+			char *tmp = NULL;
+			long arg = CCCSD_WAIT_FOREVER;
+
+			arg = strtol(optarg, &tmp, 0);
+			if (*tmp != '\0' || errno == EINVAL) {
+				log_error("Invalid timeout '%s'", optarg);
+				usage(name);
+				result = EXIT_FAILURE;
+				goto done;
+			}
+			daemon_timeout = arg;
+			break;
+		}
 		case 'h':
 			usage(name);
 			goto done;
@@ -179,11 +200,17 @@ int main(int argc, char *argv[])
 		goto done;
 	}
 
+	if (!cccs_is_daemon_ready(daemon_timeout)) {
+		log_error("%s", "CCCS daemon not ready... exiting");
+		result = EXIT_FAILURE;
+		goto done;
+	}
+
 	register_custom_data_requests();
 
 	/* Do the real work */
 	if (start_monitoring() != 0) {
-		log_error("%s", "Cannot start monitoring");
+		log_error("%s", "Cannot start monitoring... exiting");
 		goto done;
 	}
 

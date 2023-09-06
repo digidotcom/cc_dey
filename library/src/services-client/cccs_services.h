@@ -24,4 +24,19 @@
 #include "cccs_datapoints.h"
 #include "cccs_receive.h"
 
+#define CCCSD_WAIT_FOREVER		-1
+#define CCCSD_NO_WAIT			0
+
+/*
+ * cccs_is_daemon_ready() - Check if CCCS daemon is ready
+ *
+ * @timeout:	Number of seconds to wait for CCCS daemon readiness.
+ *		CCCSD_WAIT_FOREVER to block until the daemon is ready,
+ *		CCCSD_NO_WAIT to return immediately,
+ *		any other value blocks until either the daemon is ready or the time is up.
+ *
+ * Return: True if ready, false otherwise.
+ */
+bool cccs_is_daemon_ready(long timeout);
+
 #endif /* _CCCS_SERVICES_H_ */
