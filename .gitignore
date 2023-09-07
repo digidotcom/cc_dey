@@ -4,5 +4,10 @@
 *.o
 *~
 *.map
+libcccs*
 libcloudconnector.*
 app/cloud-connector
+cccs-daemon/cccsd
+cccs-gs-demo/cccs-gs-demo
+cccs-legacy-app/cloud-connector
+library/*.pc

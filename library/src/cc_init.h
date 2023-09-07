@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -20,9 +20,6 @@
 #ifndef CC_INIT_H_
 #define CC_INIT_H_
 
-/*------------------------------------------------------------------------------
-                 D A T A    T Y P E S    D E F I N I T I O N S
- ------------------------------------------------------------------------------*/
 typedef enum {
 	CC_INIT_ERROR_NONE,
 	CC_INIT_CCAPI_START_ERROR_NULL_PARAMETER,
@@ -73,12 +70,36 @@ typedef enum {
 	CC_STATUS_CONNECTED
 } cc_status_t;
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
+/*
+ * init_cloud_connection() - Initialize Cloud connection
+ *
+ * @config_file: Absolute path of the configuration file to use. NULL to
+ * 		 use the default one (/etc/cccs.conf).
+ *
+ * Return: 0 if Cloud connection is successfully initialized, error code
+ *	   otherwise.
+ */
 cc_init_error_t init_cloud_connection(const char *config_file);
+
+/*
+ * start_cloud_connection() - Start Cloud connection
+ *
+ * Return: 0 if Cloud connection is successfully started, error code otherwise.
+ */
 cc_start_error_t start_cloud_connection(void);
+
+/*
+ * stop_cloud_connection() - Stop Cloud connection
+ *
+ * Return: 0 if Cloud connection is successfully stopped, error code otherwise.
+ */
 cc_stop_error_t stop_cloud_connection(void);
+
+/*
+ * get_cloud_connection_status() - Return the status of the connection
+ *
+ * Return: The connection status.
+ */
 cc_status_t get_cloud_connection_status(void);
 
 #endif /* CC_INIT_H_ */

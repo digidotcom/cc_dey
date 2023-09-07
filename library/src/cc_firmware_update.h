@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -22,6 +22,14 @@
 
 #include "ccapi/ccapi.h"
 
+/*
+ * init_fw_service() - Initialization of firmware service
+ *
+ * @fw_version:	The current firmware version.
+ * @fw_service:	Struct to store the firmware service initialization.
+ *
+ * Returns: 0 on success, 1 otherwise.
+ */
 int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_service);
 
 #endif /* CC_FIRMWARE_UPDATE_H_ */

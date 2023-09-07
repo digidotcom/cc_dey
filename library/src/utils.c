@@ -34,50 +34,41 @@
 #include "_utils.h"
 #include "utils.h"
 
-/**
- * file_exists() - Check that the file with the given name exists
- *
- * @filename:	Full path of the file to check if it exists.
- *
- * Return: 1 if the file exits, 0 if it does not exist.
- */
+#define DAEMON_NAME			"CCCSD"
+
+int init_logger(int level, int options, char *name)
+{
+	if (!name)
+		openlog(DAEMON_NAME, options, LOG_USER);
+	else
+		openlog(name, options, LOG_USER);
+	setlogmask(LOG_UPTO(level));
+
+	/* Init CCAPI logging */
+	return ccimp_logging_init();
+}
+
+void deinit_logger(void)
+{
+	ccimp_logging_deinit();
+	closelog();
+}
+
 int file_exists(const char * const filename)
 {
 	return access(filename, F_OK) == 0;
 }
 
-/**
- * file_readable() - Check that the file with the given name can be read
- *
- * @filename:	Full path of the file to check if it is readable.
- *
- * Return: 1 if the file is readable, 0 if it cannot be read.
- */
 int file_readable(const char * const filename)
 {
 	return access(filename, R_OK) == 0;
 }
 
-/**
- * file_writable() - Check that the file with the given name can be written
- *
- * @filename:	Full path of the file to check if it is writable.
- *
- * Return: 1 if the file is writable, 0 if it cannot be written.
- */
 int file_writable(const char * const filename)
 {
 	return access(filename, W_OK) == 0;
 }
 
-/**
- * mkpath() - Create a directory and its parents if they do not exist
- *
- * @dir:	Full path of the directory to create.
- * @mode:	Permissions to use.
- *
- * Return: 0 if success, -1 otherwise.
- */
 int mkpath(char *dir, mode_t mode)
 {
 	struct stat sb;
@@ -125,15 +116,6 @@ int mkpath(char *dir, mode_t mode)
 	return 0;
 }
 
-/**
- * read_file() - Read the given file and returns its contents
- *
- * @path:		Absolute path of the file to read.
- * @buffer:		Buffer to store the contents of the file.
- * @file_size:	The number of bytes to read.
- *
- * Return: The number of read bytes.
- */
 long read_file(const char *path, char *buffer, long file_size)
 {
 	FILE *fd = NULL;
@@ -158,15 +140,6 @@ done:
 	return read_size;
 }
 
-/**
- * read_file_line() - Read the first line of the file and return its contents
- *
- * @path:			Absolute path of the file to read.
- * @buffer:			Buffer to store the contents of the file.
- * @bytes_to_read:	The number of bytes to read.
- *
- * Return: 0 on success, -1 on error.
- */
 int read_file_line(const char * const path, char *buffer, int bytes_to_read)
 {
 	FILE *fd = NULL;
@@ -189,14 +162,6 @@ int read_file_line(const char * const path, char *buffer, int bytes_to_read)
 	return error;
 }
 
-/**
- * write_to_file() - Write data to a file
- *
- * @path:		Absolute path of the file to be written.
- * @format:		String that contains the text to be written to the file.
- *
- * Return: 0 if the file was written successfully, -1 otherwise.
- */
 int write_to_file(const char * const path, const char * const format, ...)
 {
 	va_list args;
@@ -228,14 +193,6 @@ done:
 	return error;
 }
 
-/**
- * crc32file() - Calculate the CRC32 hash of a file
- *
- * @path:	Full path of the file to calculate its CRC32 hash.
- * @crc:	CRC32 hash calculated.
- *
- * Returns: 0 if success, -1 otherwise.
- */
 int crc32file(char const *const path, uint32_t *crc)
 {
 	Bytef buff[1024];
@@ -254,15 +211,6 @@ int crc32file(char const *const path, uint32_t *crc)
 	return read_bytes == 0 ? 0 : -1;
 }
 
-/*
- * delete_quotes() - Delete quotes from the given string.
- *
- * @str:	String to delete quotes from.
- *
- * This function modifies the original string.
- *
- * Return: The original string without the quotes.
- */
 char *delete_quotes(char *str)
 {
 	int len = 0;
@@ -283,15 +231,6 @@ char *delete_quotes(char *str)
 	return str;
 }
 
-/*
- * delete_leading_spaces() - Delete leading spaces from the given string.
- *
- * @str:	String to delete leading spaces from.
- *
- * This function modifies the original string.
- *
- * Return: The original string without leading white spaces.
- */
 char *delete_leading_spaces(char *str)
 {
 	int len = 0;
@@ -310,17 +249,6 @@ char *delete_leading_spaces(char *str)
 	return str;
 }
 
-/*
- * delete_trailing_spaces() - Delete trailing spaces from the given string.
- *
- * Trailing spaces also include new line '\n' and carriage return '\r' chars.
- *
- * @str:	String to delete trailing spaces from.
- *
- * This function modifies the original string.
- *
- * Return: The original string without trailing white spaces.
- */
 char *delete_trailing_spaces(char *str)
 {
 	char *p = NULL;
@@ -338,32 +266,11 @@ char *delete_trailing_spaces(char *str)
 	return str;
 }
 
-/*
- * trim() - Trim the given string removing leading and trailing spaces.
- *
- * Trailing spaces also include new line '\n' and carriage return '\r' chars.
- *
- * @str:	String to delete leading and trailing spaces from.
- *
- * This function modifies the original string.
- *
- * Return: The original string without leading nor trailing white spaces.
- */
 char *trim(char *str)
 {
 	return delete_leading_spaces(delete_trailing_spaces(str));
 }
 
-/*
- * delete_newline_character() - Remove new line character '\n' from the end of
- *                              the given string.
- *
- * @str:	String to delete ending new line character '\n' from.
- *
- * This function modifies the original string.
- *
- * Return: The original string without the final new line.
- */
 char *delete_newline_character(char *str)
 {
 	int len = 0;

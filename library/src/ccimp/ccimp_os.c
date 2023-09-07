@@ -28,16 +28,13 @@
 #include "ccimp/ccimp_os.h"
 #include "cc_logging.h"
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 #if (defined UNIT_TEST)
-#define ccimp_os_malloc				ccimp_os_malloc_real
-#define ccimp_os_free				ccimp_os_free_real
-#define ccimp_os_realloc			ccimp_os_realloc_real
+#define ccimp_os_malloc			ccimp_os_malloc_real
+#define ccimp_os_free			ccimp_os_free_real
+#define ccimp_os_realloc		ccimp_os_realloc_real
 #define ccimp_os_create_thread		ccimp_os_create_thread_real
 #define ccimp_os_get_system_time	ccimp_os_get_system_time_real
-#define ccimp_os_yield				ccimp_os_yield_real
+#define ccimp_os_yield			ccimp_os_yield_real
 #define ccimp_os_lock_create		ccimp_os_lock_create_real
 #define ccimp_os_lock_acquire		ccimp_os_lock_acquire_real
 #define ccimp_os_lock_release		ccimp_os_lock_release_real
@@ -45,32 +42,15 @@
 
 #define ccapi_logging_line_info(message) /* TODO */
 
-/*------------------------------------------------------------------------------
-                 D A T A    T Y P E S    D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 typedef struct thread_info {
 	pthread_t thread;
 	struct thread_info *next;
 } thread_info_t;
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
-static void *thread_wrapper(void *argument);
-#if (defined UNIT_TEST)
-static void add_thread_info(pthread_t thread);
-#endif /* UNIT_TEST */
-
-/*------------------------------------------------------------------------------
-                         G L O B A L  V A R I A B L E S
-------------------------------------------------------------------------------*/
 #if (defined UNIT_TEST)
 static thread_info_t * thread_info_list = NULL;
 #endif /* UNIT_TEST */
 
-/*------------------------------------------------------------------------------
-                     F U N C T I O N  D E F I N I T I O N S
-------------------------------------------------------------------------------*/
 ccimp_status_t ccimp_os_malloc(ccimp_os_malloc_t *const malloc_info)
 {
 	malloc_info->ptr = malloc(malloc_info->size);
@@ -104,6 +84,26 @@ void wait_for_ccimp_threads(void)
 		free(thread_info_list);
 		thread_info_list = next;
 	}
+}
+#endif /* UNIT_TEST */
+
+static void *thread_wrapper(void *argument)
+{
+	ccimp_os_create_thread_info_t *create_thread_info = (ccimp_os_create_thread_info_t *) argument;
+
+	create_thread_info->start(create_thread_info->argument);
+
+	return NULL;
+}
+
+#if (defined UNIT_TEST)
+static void add_thread_info(pthread_t thread)
+{
+	thread_info_t *const new_thread_info = malloc(sizeof *new_thread_info);
+
+	new_thread_info->thread = thread;
+	new_thread_info->next = thread_info_list;
+	thread_info_list = new_thread_info;
 }
 #endif /* UNIT_TEST */
 
@@ -338,23 +338,3 @@ ccimp_status_t ccimp_os_lock_destroy(ccimp_os_lock_destroy_t *const data)
 
 	return CCIMP_STATUS_OK;
 }
-
-static void *thread_wrapper(void *argument)
-{
-	ccimp_os_create_thread_info_t *create_thread_info = (ccimp_os_create_thread_info_t *) argument;
-
-	create_thread_info->start(create_thread_info->argument);
-
-	return NULL;
-}
-
-#if (defined UNIT_TEST)
-static void add_thread_info(pthread_t thread)
-{
-	thread_info_t *const new_thread_info = malloc(sizeof *new_thread_info);
-
-	new_thread_info->thread = thread;
-	new_thread_info->next = thread_info_list;
-	thread_info_list = new_thread_info;
-}
-#endif /* UNIT_TEST */

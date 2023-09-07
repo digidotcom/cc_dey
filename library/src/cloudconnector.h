@@ -20,12 +20,6 @@
 #ifndef CLOUDCONNECTOR_H_
 #define CLOUDCONNECTOR_H_
 
-#include "cc_config.h"
-#include "cc_init.h"
-#include "cc_logging.h"
-#include "cc_system_monitor.h"
-#include "utils.h"
-
 #include <ccimp/ccimp_types.h>
 
 #include <ccapi/ccapi_transport.h>
@@ -40,5 +34,12 @@
 #include <ccapi/ccapi_sm.h>
 #include <ccapi/ccapi_rci.h>
 #include <ccapi/ccapi_init.h>
+
+#include "cc_config.h"
+#include "cc_init.h"
+#include "cc_logging.h"
+#include "cc_system_monitor.h"
+#include "cc_utils.h"
+#include "utils.h"
 
 #endif /* CLOUDCONNECTOR_H_ */

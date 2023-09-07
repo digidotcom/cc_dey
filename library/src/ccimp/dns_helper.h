@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -20,9 +20,6 @@
 #ifndef _NETWORK_DNS_H
 #define _NETWORK_DNS_H
 
-/*------------------------------------------------------------------------------
-                    F U N C T I O N  D E C L A R A T I O N S
-------------------------------------------------------------------------------*/
 int dns_resolve(char const *const domain_name, in_addr_t *const ip_addr);
 void dns_set_redirected(int const state);
 void dns_cache_invalidate(void);

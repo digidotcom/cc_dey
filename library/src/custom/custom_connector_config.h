@@ -72,4 +72,7 @@
 #define APP_SSL
 #define APP_SSL_CA_CERT_PATH   "/etc/ssl/certs/Digi_Int-ca-cert-public.crt"
 
+/* Flag codes */
+#define CONNECTOR_STREAMING_CLI_CAPABILITIES_EXECUTE
+
 #endif /* _CUSTOM_CONNECTOR_CONFIG_H_ */

@@ -22,14 +22,6 @@
 
 #include <syslog.h>
 
-/*------------------------------------------------------------------------------
-                             D E F I N I T I O N S
-------------------------------------------------------------------------------*/
-#define DAEMON_NAME			"CONNECTOR"
-
-/*------------------------------------------------------------------------------
-                                  M A C R O S
-------------------------------------------------------------------------------*/
 #ifndef UNUSED_ARGUMENT
 #define UNUSED_ARGUMENT(a)		(void)(a)
 #endif
@@ -38,19 +30,22 @@
  * init_logger() - Initialize the logger with the given log level
  *
  * @level:	Log level.
+ * @options:	Flags to open log.
+ * @name:	Name to log. If NULL, 'CONNECTOR' is used.
  */
-#define init_logger(level, options)								\
-	do {														\
-		openlog(DAEMON_NAME, options, LOG_USER);				\
-		setlogmask(LOG_UPTO(level));							\
-	} while (0)
+int init_logger(int level, int options, char *name);
+
+/**
+ * deinit_logger() - Close the logger
+ */
+void deinit_logger(void);
 
 /**
  * set_log_level() - Set the new log level
  *
  * @level:	New log level.
  */
-#define set_log_level(level)									\
+#define set_log_level(level)					\
 	setlogmask(LOG_UPTO(level))
 
 /**
@@ -59,8 +54,8 @@
  * @format:	Error message to log.
  * @args:	Additional arguments.
  */
-#define log_error(format, ...)										\
-	syslog(LOG_ERR, format, __VA_ARGS__)
+#define log_error(format, ...)					\
+	syslog(LOG_ERR, "[ERROR] " format, __VA_ARGS__)
 
 /**
  * log_warning() - Log the given message as warning
@@ -68,8 +63,8 @@
  * @format:	Info message to log.
  * @args:	Additional arguments.
  */
-#define log_warning(format, ...)									\
-	syslog(LOG_WARNING, format, __VA_ARGS__)
+#define log_warning(format, ...)				\
+	syslog(LOG_WARNING, "[WARN] " format, __VA_ARGS__)
 
 
 /**
@@ -78,8 +73,8 @@
  * @format:	Info message to log.
  * @args:	Additional arguments.
  */
-#define log_info(format, ...)										\
-	syslog(LOG_INFO, format, __VA_ARGS__)
+#define log_info(format, ...)					\
+	syslog(LOG_INFO, "[INFO] " format, __VA_ARGS__)
 
 /**
  * log_debug() - Log the given message as debug
@@ -87,7 +82,7 @@
  * @format:	Debug message to log.
  * @args:	Additional arguments.
  */
-#define log_debug(format, ...)										\
-	syslog(LOG_DEBUG, format, __VA_ARGS__)
+#define log_debug(format, ...)					\
+	syslog(LOG_DEBUG, "[DEBUG] " format, __VA_ARGS__)
 
 #endif /* CC_LOGGING_H_ */
