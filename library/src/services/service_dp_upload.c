@@ -92,8 +92,10 @@ static ccapi_dp_b_error_t upload_binary_datapoint(uint32_t type,
 #undef TIMEOUT
 }
 
-int handle_datapoint_file_upload(int fd)
+int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 {
+	UNUSED_ARGUMENT(cc_cfg);
+
 	while (1) {
 		int ret;
 		uint32_t type;

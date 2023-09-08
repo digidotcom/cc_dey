@@ -20,7 +20,9 @@
 #ifndef SERVICES_H
 #define SERVICES_H
 
-void start_listening_for_local_requests(void);
+#include "cc_config.h"
+
+void start_listening_for_local_requests(const cc_cfg_t *const cc_cfg);
 void stop_listening_for_local_requests(void);
 
 #endif /* SERVICES_H */

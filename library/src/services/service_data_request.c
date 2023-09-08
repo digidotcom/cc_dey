@@ -440,9 +440,11 @@ _handle_unregister(int fd, request_data_t *req, bool expect_to_read_ip, int expe
 	return 0;
 }
 
-int handle_register_data_request(int fd)
+int handle_register_data_request(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* This registration command assumes localhost IPv4 */
 	req_data.recipient.sin_family = AF_INET;
@@ -451,17 +453,21 @@ int handle_register_data_request(int fd)
 	return _handle_register(fd, &req_data, false, 0);
 }
 
-int handle_register_data_request_ipv4(int fd)
+int handle_register_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* Registration request payload is expected to include an IPv4 string */
 	return _handle_register(fd, &req_data, true, AF_INET);
 }
 
-int handle_unregister_data_request(int fd)
+int handle_unregister_data_request(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* This un-registration command assumes localhost IPv4.
 	   NOTE: Technically unregister_target doesn't even look at these;
@@ -472,9 +478,11 @@ int handle_unregister_data_request(int fd)
 	return _handle_unregister(fd, &req_data, false, 0);
 }
 
-int handle_unregister_data_request_ipv4(int fd)
+int handle_unregister_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* Unregistration request payload is expected to include an IPv4 string.
 	   NOTE: Technically unregister_target doesn't even look at the address;

@@ -20,12 +20,13 @@
 #ifndef SERVICE_DATA_REQUEST_H
 #define SERVICE_DATA_REQUEST_H
 
+#include "cc_config.h"
 #include "service_common.h"
 
-int handle_register_data_request(int fd);
-int handle_unregister_data_request(int fd);
-int handle_register_data_request_ipv4(int fd);
-int handle_unregister_data_request_ipv4(int fd);
+int handle_register_data_request(int fd, const cc_cfg_t *const cc_cfg);
+int handle_unregister_data_request(int fd, const cc_cfg_t *const cc_cfg);
+int handle_register_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg);
+int handle_unregister_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg);
 
 /*
  * register_builtin_requests() - Register built-in data requests

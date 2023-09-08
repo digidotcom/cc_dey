@@ -20,8 +20,9 @@
 #ifndef SERVICE_DP_UPLOAD_H
 #define SERVICE_DP_UPLOAD_H
 
+#include "cc_config.h"
 #include "service_common.h"
 
-int handle_datapoint_file_upload(int fd);
+int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg);
 
 #endif /* SERVICE_DP_UPLOAD_H */

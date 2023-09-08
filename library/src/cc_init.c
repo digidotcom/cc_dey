@@ -725,7 +725,7 @@ cc_start_error_t start_cloud_connection(void)
 	if (start_system_monitor(cc_cfg) != CC_SYS_MON_ERROR_NONE)
 		return CC_START_ERROR_SYSTEM_MONITOR;
 
-	start_listening_for_local_requests();
+	start_listening_for_local_requests(cc_cfg);
 
 	log_info("%s", "Cloud connection started");
 

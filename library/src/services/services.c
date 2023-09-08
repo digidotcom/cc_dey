@@ -36,7 +36,7 @@ static pthread_t listen_thread;
 static bool listen_thread_valid;
 static volatile bool stop_listening = false;
 
-typedef int (*request_handler_t)(int socket_fd);
+typedef int (*request_handler_t)(int socket_fd, const cc_cfg_t *const cc_cfg);
 
 struct handler_t {
 	const char *request_tag;
@@ -64,7 +64,7 @@ struct handler_t {
 	}
 };
 
-static void handle_requests(int fd)
+static void handle_requests(int fd, const cc_cfg_t *const cc_cfg)
 {
 	int request_sock;
 
@@ -103,7 +103,7 @@ static void handle_requests(int fd)
 			const struct handler_t *handler = &request_handlers[i];
 
 			if (!strcmp(request_tag, handler->request_tag)) {
-				if (handler->request_handler(request_sock))
+				if (handler->request_handler(request_sock, cc_cfg))
 					log_error("Error handling request tagged with: '%s'", request_tag);
 
 				handled = true;
@@ -124,13 +124,11 @@ static void handle_requests(int fd)
 	}
 }
 
-static void *listen_threaded(void *unused)
+static void *listen_threaded(void *cc_cfg_arg)
 {
 	struct sockaddr_in addr;
 	int fd;
 	int n_options = 1;
-
-	UNUSED_ARGUMENT(unused);
 
 	fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd == -1)
@@ -149,7 +147,7 @@ static void *listen_threaded(void *unused)
 		goto done;
 	}
 
-	handle_requests(fd);
+	handle_requests(fd, (const cc_cfg_t *)cc_cfg_arg);
 
 done:
 	close(fd);
@@ -159,7 +157,7 @@ done:
 	return NULL;
 }
 
-void start_listening_for_local_requests(void)
+void start_listening_for_local_requests(const cc_cfg_t *const cc_cfg)
 {
 	pthread_attr_t attr;
 
@@ -169,7 +167,7 @@ void start_listening_for_local_requests(void)
 		return;
 	}
 
-	listen_thread_valid = (pthread_create(&listen_thread, &attr, listen_threaded, NULL) == 0);
+	listen_thread_valid = (pthread_create(&listen_thread, &attr, listen_threaded, (void *)cc_cfg) == 0);
 	if (!listen_thread_valid)
 		log_error("Unable to start sending response (%d)", listen_thread_valid);
 
