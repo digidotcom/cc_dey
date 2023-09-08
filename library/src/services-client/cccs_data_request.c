@@ -32,7 +32,7 @@
 #include "_cccs_utils.h"
 #include "cccs_services.h"
 #include "cccs_receive.h"
-#include "service_data_request.h"
+#include "service_common.h"
 #include "services_util.h"
 
 #define DATA_REQUEST_TAG		"DREQ:"

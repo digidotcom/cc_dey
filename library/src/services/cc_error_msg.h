@@ -16,7 +16,11 @@
  * Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
  * ===========================================================================
  */
+#ifndef CC_ERROR_MSG_H
+#define CC_ERROR_MSG_H
 
 #include "ccapi/ccapi.h"
 
 const char *to_send_error_msg(ccapi_send_error_t error);
+
+# endif /* CC_ERROR_MSG_H */

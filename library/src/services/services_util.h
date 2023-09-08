@@ -52,4 +52,4 @@ int send_ok(int fd);
 int send_error(int fd, const char *msg);
 int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue);
 
-#endif
+#endif /* SERVICES_UTIL_H */

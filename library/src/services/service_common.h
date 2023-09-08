@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Digi International Inc.
+ * Copyright (c) 2023 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -17,21 +17,28 @@
  * ===========================================================================
  */
 
-#ifndef SERVICE_DATA_REQUEST_H
-#define SERVICE_DATA_REQUEST_H
+#ifndef SERVICE_COMMON_H
+#define SERVICE_COMMON_H
 
-#include "service_common.h"
+#define CONNECTOR_REQUEST_PORT		977
 
-int handle_register_data_request(int fd);
-int handle_unregister_data_request(int fd);
-int handle_register_data_request_ipv4(int fd);
-int handle_unregister_data_request_ipv4(int fd);
+#define REQ_TAG_DP_FILE_REQUEST		"upload_1_dp"
+#define REQ_TAG_REGISTER_DR		"register_devicerequest"
+#define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
+#define REQ_TAG_REGISTER_DR_IPV4	"register_devicerequest_ipv4"
+#define REQ_TAG_UNREGISTER_DR_IPV4	"unregister_devicerequest_ipv4"
 
-/*
- * register_builtin_requests() - Register built-in data requests
- *
- * Return: Error code after registering the built-in data requests.
- */
-ccapi_receive_error_t register_builtin_requests(void);
+#define REQ_TYPE_REQUEST_CB		"request"
+#define REQ_TYPE_STATUS_CB		"status"
 
-#endif /* SERVICE_DATA_REQUEST_H */
+typedef enum {
+	upload_datapoint_file_terminate,
+	upload_datapoint_file_metrics,
+	upload_datapoint_file_events,
+	upload_datapoint_file_path_metrics,
+	upload_datapoint_file_path_binary,
+	upload_datapoint_file_metrics_binary,
+	upload_datapoint_file_count
+} upload_datapoint_file_t;
+
+#endif /* SERVICE_COMMON_H */

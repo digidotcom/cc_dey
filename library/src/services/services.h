@@ -20,9 +20,7 @@
 #ifndef SERVICES_H
 #define SERVICES_H
 
-#define CONNECTOR_REQUEST_PORT	977
-
 void start_listening_for_local_requests(void);
 void stop_listening_for_local_requests(void);
 
-#endif
+#endif /* SERVICES_H */

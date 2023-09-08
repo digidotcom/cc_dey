@@ -34,7 +34,7 @@
 
 #include "_cccs_utils.h"
 #include "cc_logging.h"
-#include "services.h"
+#include "service_common.h"
 #include "services_util.h"
 
 #define CCCSD_TAG	"CCCSD:"
