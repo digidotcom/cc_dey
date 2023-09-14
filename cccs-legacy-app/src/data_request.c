@@ -143,7 +143,7 @@ static int read_dey_version(char *version)
 	FILE *in = NULL;
 	char line[128] = {0};
 
-	if (!file_readable(BUILD_FILE))
+	if (access(BUILD_FILE, R_OK) != 0)
 		goto error;
 
 	in = fopen(BUILD_FILE, "rb");
@@ -714,9 +714,9 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		long total_st = 0;
 
 		/* Check first emmc, because '/proc/mtd' may exists although empty */
-		if (file_readable(EMMC_SIZE_FILE))
+		if (access(EMMC_SIZE_FILE, R_OK) == 0)
 			total_st = get_emmc_size();
-		else if (file_readable(NAND_SIZE_FILE))
+		else if (access(NAND_SIZE_FILE, R_OK) == 0)
 			total_st = get_nand_size();
 		else
 			log_dr_error("Error getting storage size: %s", "File not readable");
@@ -747,14 +747,14 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		char resolution[MAX_RESPONSE_SIZE] = {0};
 		char *resolution_file = "";
 
-		if (file_readable(RESOLUTION_FILE))
+		if (access(RESOLUTION_FILE, R_OK) == 0)
 			resolution_file = RESOLUTION_FILE;
-		else if (file_readable(RESOLUTION_FILE_CCMP))
+		else if (access(RESOLUTION_FILE_CCMP, R_OK) == 0)
 			resolution_file = RESOLUTION_FILE_CCMP;
-		else if (file_readable(RESOLUTION_FILE_CCMP_HDMI))
+		else if (access(RESOLUTION_FILE_CCMP_HDMI, R_OK) == 0)
 			resolution_file = RESOLUTION_FILE_CCMP_HDMI;
 
-		if (!file_readable(resolution_file))
+		if (access(resolution_file, R_OK) != 0)
 			log_dr_error("Error getting video resolution: %s", "File not readable");
 		else if (read_file(resolution_file, data, MAX_RESPONSE_SIZE) <= 0)
 			log_dr_error("%s", "Error getting video resolution");
