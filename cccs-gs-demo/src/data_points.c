@@ -87,7 +87,7 @@ static gpio_t *get_user_button(void)
 {
 	if (cb_data.button != NULL)
 		return cb_data.button;
-	cb_data.button = ldx_gpio_request_by_alias(USER_BUTTON_ALIAS, 
+	cb_data.button = ldx_gpio_request_by_alias(USER_BUTTON_ALIAS,
 		GPIO_IRQ_EDGE_BOTH, REQUEST_SHARED);
 	if (cb_data.button == NULL)
 		return NULL;

@@ -166,7 +166,7 @@ error:
 }
 
 /**
- * get_emmc_size() - Returns the total eMMC storage size.
+ * get_emmc_size() - Returns the total eMMC storage size
  *
  * Return: total size read.
  */
@@ -176,15 +176,15 @@ static long get_emmc_size(void)
 	long total_size = 0;
 
 	if (read_file(EMMC_SIZE_FILE, data, MAX_RESPONSE_SIZE) <= 0)
-		log_dr_error("%s", "Error getting storage size: Could not read file");
+		log_dr_error("Error getting storage size: %s", "Could not read file");
 	if (sscanf(data, "%ld", &total_size) < 1)
-		log_dr_error("%s", "Error getting storage size: Invalid file contents");
+		log_dr_error("Error getting storage size: %s", "Invalid file contents");
 
 	return total_size * 512 / 1024; /* kB */
 }
 
 /**
- * get_nand_size() - Returns the total NAND storage size.
+ * get_nand_size() - Returns the total NAND storage size
  *
  * Return: total size read.
  */
@@ -196,12 +196,12 @@ static long get_nand_size(void)
 
 	fd = fopen(NAND_SIZE_FILE, "r");
 	if (!fd) {
-		log_dr_error("%s", "Error getting storage size: Could not open file");
+		log_dr_error("Error getting storage size: %s", "Could not open file");
 		return total_size;
 	}
 	/* Ignore first line */
 	if (fgets(buffer, sizeof(buffer), fd) == NULL) {
-		log_dr_error("%s", "Error getting storage size: Could not read file");
+		log_dr_error("Error getting storage size: %s", "Could not read file");
 		fclose(fd);
 		return total_size;
 	}
@@ -224,19 +224,19 @@ static long get_nand_size(void)
 		total_size = total_size + size;
 	}
 	if (ferror(fd))
-		log_dr_error("%s", "Error getting storage size: File read error");
+		log_dr_error("Error getting storage size: %s", "File read error");
 	fclose(fd);
 
 	return total_size / 1024; /* kB */
 }
 
 /*
- * add_json_element() - Creates and adds a new json element with the provided name
+ * add_json_element() - Creates and adds a new JSON element with the provided name
  *
- * @name:	Name of the new json object.
- * @root:	Json object to add the created object.
+ * @name:	Name of the new JSON object.
+ * @root:	JSON object to add the created object.
  *
- * Return: The created json object.
+ * Return: The created JSON object.
  */
 static json_object *add_json_element(const char *name, json_object **root)
 {
@@ -339,12 +339,12 @@ static int add_net_state_json(net_state_t i_state, json_object **iface_item, boo
 }
 
 /*
- * get_net_iface_json() - Returns a JSON object with the info of the network interface.
+ * get_net_iface_json() - Returns a JSON object with the info of the network interface
  *
  * @name:	Network interface name.
  * @complete:	True to include status, type, gateway, netmask, dns1, and dns2.
  *
- * Return: The JSON object.
+ * Return: The json object.
  */
 static json_object *get_net_iface_json(const char *iface_name, bool complete)
 {
@@ -410,12 +410,12 @@ static ccapi_receive_error_t add_net_ifaces_json(json_object **root, bool comple
 }
 
 /*
- * get_wifi_iface_json() - Returns a JSON object with the info of the WiFi interface.
+ * get_wifi_iface_json() - Returns a JSON object with the info of the WiFi interface
  *
  * @name:	Network interface name.
  * @complete:	True to include status, type, ssid, security mode, gateway, netmask, dns1, and dns2.
  *
- * Return: The JSON object.
+ * Return: The json object.
  */
 static json_object *get_wifi_iface_json(const char *iface_name, bool complete)
 {
@@ -491,23 +491,25 @@ static ccapi_receive_error_t add_wifi_ifaces_json(json_object **root, bool compl
 /*
  * device_info_cb() - Data callback for 'device_info' data requests
  *
- * @target:			Target ID of the data request (device_info).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (device_info).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t device_info_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
 	json_object *root = NULL;
 	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
 
-	UNUSED_ARGUMENT(request_buffer_info);
+	UNUSED_ARGUMENT(req_buffer);
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
@@ -717,7 +719,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 		else if (file_readable(NAND_SIZE_FILE))
 			total_st = get_nand_size();
 		else
-			log_dr_error("%s", "Error getting storage size: File not readable");
+			log_dr_error("Error getting storage size: %s", "File not readable");
 
 		if (json_object_object_add(root, "total_st", json_object_new_int64(total_st)) < 0) {
 			status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
@@ -753,7 +755,7 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 			resolution_file = RESOLUTION_FILE_CCMP_HDMI;
 
 		if (!file_readable(resolution_file))
-			log_dr_error("%s", "Error getting video resolution: File not readable");
+			log_dr_error("Error getting video resolution: %s", "File not readable");
 		else if (read_file(resolution_file, data, MAX_RESPONSE_SIZE) <= 0)
 			log_dr_error("%s", "Error getting video resolution");
 		else if (sscanf(data, "U:%s", resolution) < 1) {
@@ -779,16 +781,16 @@ static ccapi_receive_error_t device_info_cb(char const *const target,
 	if (status != CCAPI_RECEIVE_ERROR_NONE)
 		goto error;
 
-	response_buffer_info->buffer = strdup(json_object_to_json_string(root));
-	if (response_buffer_info->buffer == NULL) {
+	resp_buffer->buffer = strdup(json_object_to_json_string(root));
+	if (resp_buffer->buffer == NULL) {
 		status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto error;
 	}
 
-	response_buffer_info->length = strlen(response_buffer_info->buffer);
+	resp_buffer->length = strlen(resp_buffer->buffer);
 
 	log_dr_debug("%s: response: %s (len: %zu)", __func__,
-		(char *)response_buffer_info->buffer, response_buffer_info->length);
+		(char *)resp_buffer->buffer, resp_buffer->length);
 
 	goto done;
 
@@ -805,20 +807,22 @@ done:
 /*
  * get_config_cb() - Data callback for 'get_config' data requests
  *
- * @target:			Target ID of the data request (get_config).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (get_config).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t get_config_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
-	char *request = request_buffer_info->buffer;
+	char *request = req_buffer->buffer;
 	json_object *req = NULL, *json_element = NULL, *resp = NULL;
 	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
 	bool eth_cfg = false, wifi_cfg = false, bt_cfg = false, c_cfg = false;
@@ -827,71 +831,71 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
 	/*
-		target "get_config"
+	target "get_config"
 
-		Request:
-		{
-			"element": ["ethernet", "wifi"]
-		}
-		Empty request returns all elements.
-		Valid elements: ethernet, wifi, bluetooth, connector, sys-monitor
+	Request:
+	{
+		"element": ["ethernet", "wifi"]
+	}
+	Empty request returns all elements.
+	Valid elements: ethernet, wifi, bluetooth, connector, sys-monitor
 
-		Response:
-		{
-			"ethernet": {
-				 "eth0":{
-					"mac":"00:40:9d:ee:b6:96",
-					"ip":"192.168.1.44",
-					"enable":true,
-					"type":0,
-					"netmask":"255.255.255.0",
-					"gateway":"192.168.1.1",
-					"dns1":"80.58.61.250",
-					"dns2":"80.58.61.254"
-				},
-				...
-				"ethN": {
-					...
-				}
-			},
-			"wifi": {
-				"wlan0":{
-					"mac":"00:40:9d:dd:bd:13",
-					"ip":"192.168.1.48",
-					"enable":true,
-					"type":0,
-					"netmask":"255.255.255.0",
-					"gateway":"192.168.1.1",
-					"dns1":"80.58.61.250",
-					"dns2":"80.58.61.254",
-					"ssid":"MOVISTAR_6EA8",
-					"sec_mode":2
-				},
-				...
-				"wlanN": {
-					...
-				}
-			},
-			"bluetooth": {
-				"bt-mac":"00:40:9d:7d:1b:8f",
+	Response:
+	{
+		"ethernet": {
+			 "eth0":{
+				"mac":"00:40:9d:ee:b6:96",
+				"ip":"192.168.1.44",
 				"enable":true,
-				"name":"ccimx8mm-dvk"
+				"type":0,
+				"netmask":"255.255.255.0",
+				"gateway":"192.168.1.1",
+				"dns1":"80.58.61.250",
+				"dns2":"80.58.61.254"
 			},
-			"connector": {
-				"enable": true
-			},
-			"sys-monitor": {
-				"enable": true,
-				"sample_rate": 30,
-				"n_dp_upload": 2
+			...
+			"ethN": {
+				...
 			}
+		},
+		"wifi": {
+			"wlan0":{
+				"mac":"00:40:9d:dd:bd:13",
+				"ip":"192.168.1.48",
+				"enable":true,
+				"type":0,
+				"netmask":"255.255.255.0",
+				"gateway":"192.168.1.1",
+				"dns1":"80.58.61.250",
+				"dns2":"80.58.61.254",
+				"ssid":"MOVISTAR_6EA8",
+				"sec_mode":2
+			},
+			...
+			"wlanN": {
+				...
+			}
+		},
+		"bluetooth": {
+			"bt-mac":"00:40:9d:7d:1b:8f",
+			"enable":true,
+			"name":"ccimx8mm-dvk"
+		},
+		"connector": {
+			"enable": true
+		},
+		"sys-monitor": {
+			"enable": true,
+			"sample_rate": 30,
+			"n_dp_upload": 2
 		}
-		Only the requested elements.
-		type: 1 (DHCP), 0 (Static)
-		sec_mode: -1 (error), Open (0), WPA (1), WPA2 (2), WPA3 (3)
+	}
+	Only the requested elements.
+	type: 1 (DHCP), 0 (Static)
+	sec_mode: -1 (error), Open (0), WPA (1), WPA2 (2), WPA3 (3)
 	*/
 
-	if (request_buffer_info->length == 0) {
+	if (req_buffer->length == 0) {
 		eth_cfg = true;
 		wifi_cfg = true;
 		bt_cfg = true;
@@ -900,8 +904,8 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 	} else {
 		int len, i;
 
-		/* Parse request_buffer_info */
-		request[request_buffer_info->length] = '\0';
+		/* Parse req_buffer */
+		request[req_buffer->length] = '\0';
 		req = json_tokener_parse(request);
 		if (!req)
 			goto bad_format;
@@ -989,15 +993,15 @@ static ccapi_receive_error_t get_config_cb(char const *const target,
 			goto error;
 	}
 
-	response_buffer_info->buffer = strdup(json_object_to_json_string(resp));
-	if (response_buffer_info->buffer == NULL)
+	resp_buffer->buffer = strdup(json_object_to_json_string(resp));
+	if (resp_buffer->buffer == NULL)
 		goto error;
 
 	goto done;
 
 bad_format:
-	response_buffer_info->buffer = strdup("Invalid format");
-	status = response_buffer_info->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+	resp_buffer->buffer = strdup("Invalid format");
+	status = resp_buffer->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 	log_dr_error("Cannot parse request for target '%s': Invalid format", target);
 	goto done;
 
@@ -1006,11 +1010,11 @@ error:
 	log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 
 done:
-	if (response_buffer_info->buffer != NULL) {
-		response_buffer_info->length = strlen(response_buffer_info->buffer);
+	if (resp_buffer->buffer != NULL) {
+		resp_buffer->length = strlen(resp_buffer->buffer);
 
 		log_dr_debug("%s: response: %s (len: %zu)", __func__,
-			(char *)response_buffer_info->buffer, response_buffer_info->length);
+			(char *)resp_buffer->buffer, resp_buffer->length);
 	}
 
 	if (resp)
@@ -1470,20 +1474,22 @@ static int set_system_monitor_config(sys_mon_cfg_t sm_cfg)
 /*
  * set_config_cb() - Data callback for 'set_config' data requests
  *
- * @target:			Target ID of the data request (set_config).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (set_config).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t set_config_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
-	char *request = request_buffer_info->buffer;
+	char *request = req_buffer->buffer;
 	json_object *req = NULL, *json_element = NULL, *resp = NULL;
 	ccapi_receive_error_t status = CCAPI_RECEIVE_ERROR_NONE;
 	int valid_fields = 0, bt_devs = 0, n_eth_ifaces = 0, n_wifi_ifaces = 0, i;
@@ -1503,73 +1509,73 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
-	response_buffer_info->buffer  = NULL;
+	resp_buffer->buffer  = NULL;
 
-		/*
-		target "set_config"
+	/*
+	target "set_config"
 
-		Request:
-		{
-			"ethernet": {
-				 "eth0":{
-					"ip":"192.168.1.44",
-					"enable":true,
-					"type":1,
-					"netmask":"255.255.255.0",
-					"gateway":"192.168.1.1",
-					"dns1":"80.58.61.250",
-					"dns2":"80.58.61.254"
-				},
-				...
-				"ethN": {
-					...
-				}
-			},
-			"wifi": {
-				"wlan0":{
-					"ip":"192.168.1.48",
-					"enable":true,
-					"type":0,
-					"ssid":"MOVISTAR_6EA8"
-					"sec_mode":3,
-					"psk":"password",
-				},
-				...
-				"wlanN": {
-					...
-				}
-			},
-			"bluetooth": {
+	Request:
+	{
+		"ethernet": {
+			 "eth0":{
+				"ip":"192.168.1.44",
 				"enable":true,
-				"name":"ccimx8mm-dvk"
+				"type":1,
+				"netmask":"255.255.255.0",
+				"gateway":"192.168.1.1",
+				"dns1":"80.58.61.250",
+				"dns2":"80.58.61.254"
 			},
-			"connector": {
-				"enable": true
-			},
-			"sys-monitor": {
-				"enable": true,
-				"sample_rate": 30,
-				"n_dp_upload": 2
+			...
+			"ethN": {
+				...
 			}
+		},
+		"wifi": {
+			"wlan0":{
+				"ip":"192.168.1.48",
+				"enable":true,
+				"type":0,
+				"ssid":"MOVISTAR_6EA8"
+				"sec_mode":3,
+				"psk":"password",
+			},
+			...
+			"wlanN": {
+				...
+			}
+		},
+		"bluetooth": {
+			"enable":true,
+			"name":"ccimx8mm-dvk"
+		},
+		"connector": {
+			"enable": true
+		},
+		"sys-monitor": {
+			"enable": true,
+			"sample_rate": 30,
+			"n_dp_upload": 2
 		}
-		Valid elements: ethernet, wifi, bluetooth, connector, sys-monitor
-		type: 1 (DHCP), 0 (Static)
-		sec_mode: 0 (open), 1 (wpa), 2 (wpa2), 3 (wpa3)
+	}
+	Valid elements: ethernet, wifi, bluetooth, connector, sys-monitor
+	type: 1 (DHCP), 0 (Static)
+	sec_mode: 0 (open), 1 (wpa), 2 (wpa2), 3 (wpa3)
 
-		Response:
-		{
-			"ethernet": {
-				"eth0": {
-					"status": 0
-				}
+	Response:
+	{
+		"ethernet": {
+			"eth0": {
+				"status": 0
 			}
 		}
+	}
 	*/
 
-	if (request_buffer_info->length == 0)
+	if (req_buffer->length == 0)
 		goto bad_format;
 
-	request[request_buffer_info->length] = '\0';
+	request[req_buffer->length] = '\0';
 	req = json_tokener_parse(request);
 	if (!req || json_object_get_type(req) != json_type_object
 		|| json_object_object_length(req) == 0)
@@ -1695,48 +1701,48 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 			goto bad_format; /* Should not occur */
 
 		if (err == 1)
-			response_buffer_info->buffer = strdup("Unable to start system monitor");
+			resp_buffer->buffer = strdup("Unable to start system monitor");
 		else if (err == -1)
-			response_buffer_info->buffer = strdup("Unable to save configuration");
+			resp_buffer->buffer = strdup("Unable to save configuration");
 
 		if (err != 0) {
 			status = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
-			log_dr_error("Cannot process request for target '%s': %s", target, (char *)response_buffer_info->buffer);
+			log_dr_error("Cannot process request for target '%s': %s", target, (char *)resp_buffer->buffer);
 		}
 
 		if (json_object_object_add(sm_item, CFG_FIELD_STATUS, json_object_new_int(err)) < 0
 			|| json_object_object_add(sm_item, CFG_FIELD_DESC,
-				json_object_new_string(err == 0 ? "No error" : response_buffer_info->buffer)) < 0)
+				json_object_new_string(err == 0 ? "No error" : resp_buffer->buffer)) < 0)
 			goto error;
 	}
 
-	response_buffer_info->buffer = strdup(json_object_to_json_string(resp));
-	if (response_buffer_info->buffer == NULL)
+	resp_buffer->buffer = strdup(json_object_to_json_string(resp));
+	if (resp_buffer->buffer == NULL)
 		goto error;
 
 	goto done;
 
 bad_format:
-	if (response_buffer_info->buffer != NULL)
-		free(response_buffer_info->buffer);
-	response_buffer_info->buffer = strdup("Invalid format");
-	status = response_buffer_info->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
+	if (resp_buffer->buffer != NULL)
+		free(resp_buffer->buffer);
+	resp_buffer->buffer = strdup("Invalid format");
+	status = resp_buffer->buffer == NULL ? CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY : CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 	log_dr_error("Cannot parse request for target '%s': Invalid format", target);
 	goto done;
 
 error:
-	if (response_buffer_info->buffer != NULL)
-		free(response_buffer_info->buffer);
-	response_buffer_info->buffer = strdup("Out of memory");
+	if (resp_buffer->buffer != NULL)
+		free(resp_buffer->buffer);
+	resp_buffer->buffer = strdup("Out of memory");
 	status = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	log_dr_error("Cannot process request for target '%s': Out of memory", target);
 
 done:
-	if (response_buffer_info->buffer != NULL) {
-		response_buffer_info->length = strlen(response_buffer_info->buffer);
+	if (resp_buffer->buffer != NULL) {
+		resp_buffer->length = strlen(resp_buffer->buffer);
 
 		log_dr_debug("%s: response: %s (len: %zu)", __func__,
-			(char *)response_buffer_info->buffer, response_buffer_info->length);
+			(char *)resp_buffer->buffer, resp_buffer->length);
 	}
 
 	free(net_cfgs);
@@ -1758,31 +1764,33 @@ done:
 /*
  * get_time_cb() - Data callback for 'get_time' data requests
  *
- * @target:			Target ID of the data request (get_time).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (get_time).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t get_time_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
-	UNUSED_ARGUMENT(request_buffer_info);
+	UNUSED_ARGUMENT(req_buffer);
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
-	response_buffer_info->buffer = calloc(MAX_RESPONSE_SIZE + 1, sizeof(char));
-	if (response_buffer_info->buffer == NULL) {
+	resp_buffer->buffer = calloc(MAX_RESPONSE_SIZE + 1, sizeof(char));
+	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	}
 
 	time_t t = time(NULL);
-	response_buffer_info->length = snprintf(response_buffer_info->buffer,
+	resp_buffer->length = snprintf(resp_buffer->buffer,
 			MAX_RESPONSE_SIZE, "Time: %s", ctime(&t));
 
 	return CCAPI_RECEIVE_ERROR_NONE;
@@ -1791,31 +1799,33 @@ static ccapi_receive_error_t get_time_cb(char const *const target,
 /*
  * stop_cb() - Data callback for 'stop_cc' data requests
  *
- * @target:			Target ID of the data request (stop_cc).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (stop_cc).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t stop_cb(char const *const target, ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
 	static char const stop_response[] = "I'll stop";
 
-	UNUSED_ARGUMENT(request_buffer_info);
+	UNUSED_ARGUMENT(req_buffer);
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
-	response_buffer_info->buffer = calloc(MAX_RESPONSE_SIZE + 1, sizeof(char));
-	if (response_buffer_info->buffer == NULL) {
+	resp_buffer->buffer = calloc(MAX_RESPONSE_SIZE + 1, sizeof(char));
+	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		return CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 	}
 
-	response_buffer_info->length = snprintf(response_buffer_info->buffer,
+	resp_buffer->length = snprintf(resp_buffer->buffer,
 			strlen(stop_response) + 1, "%s", stop_response);
 
 	return CCAPI_RECEIVE_ERROR_NONE;
@@ -1824,18 +1834,20 @@ static ccapi_receive_error_t stop_cb(char const *const target, ccapi_transport_t
 /*
  * update_user_led_cb() - Data callback for 'user_led' data requests
  *
- * @target:			Target ID of the data request (user_led).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (user_led).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t update_user_led_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
 	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
 	char *val = NULL, *error_msg = NULL;
@@ -1844,14 +1856,14 @@ static ccapi_receive_error_t update_user_led_cb(char const *const target,
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
-	val = calloc(request_buffer_info->length + 1, sizeof(char));
+	val = calloc(req_buffer->length + 1, sizeof(char));
 	if (val == NULL) {
 		error_msg = "Out of memory";
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
 
-	strncpy(val, request_buffer_info->buffer, request_buffer_info->length);
+	strncpy(val, req_buffer->buffer, req_buffer->length);
 	log_dr_debug("%s=%s", target, val);
 
 	if (strcmp(val, "true") == 0 || strcmp(val, "on") == 0 || strcmp(val, "1") == 0) {
@@ -1879,24 +1891,24 @@ static ccapi_receive_error_t update_user_led_cb(char const *const target,
 	}
 
 done:
-	response_buffer_info->length = 2; /* 'OK' length */
+	resp_buffer->length = 2; /* 'OK' length */
 	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
-		response_buffer_info->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
+		resp_buffer->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
-	if (response_buffer_info->buffer == NULL) {
+	resp_buffer->buffer = calloc(resp_buffer->length + 1, sizeof(char));
+	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto exit;
 	}
 
 	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
-		response_buffer_info->length = sprintf(response_buffer_info->buffer, "ERROR: %s", error_msg);
+		resp_buffer->length = sprintf(resp_buffer->buffer, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	} else {
-		response_buffer_info->length = sprintf(response_buffer_info->buffer, "OK");
+		resp_buffer->length = sprintf(resp_buffer->buffer, "OK");
 	}
 
 exit:
@@ -1909,30 +1921,32 @@ exit:
 /*
  * play_music_cb() - Data callback for 'play_music' data requests
  *
- * @target:			Target ID of the data request (play_music).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (play_music).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t play_music_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
-	char *request = request_buffer_info->buffer, *error_msg = NULL, *resp = NULL, *music_file = NULL;
+	char *request = req_buffer->buffer, *error_msg = NULL, *resp = NULL, *music_file = NULL;
 	json_object *req = NULL, *json_element = NULL;
 	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
 	bool play = false;
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
-	if (request_buffer_info->length == 0)
+	if (req_buffer->length == 0)
 		goto bad_format;
 
-	request[request_buffer_info->length] = '\0';
+	request[req_buffer->length] = '\0';
 	req = json_tokener_parse(request);
 	if (!req)
 		goto bad_format;
@@ -1993,24 +2007,24 @@ bad_format:
 	log_dr_error("Cannot parse request for target '%s': Invalid request format", target);
 
 done:
-	response_buffer_info->length = 2; /* 'OK' length */
+	resp_buffer->length = 2; /* 'OK' length */
 	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
-		response_buffer_info->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
+		resp_buffer->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
-	if (response_buffer_info->buffer == NULL) {
+	resp_buffer->buffer = calloc(resp_buffer->length + 1, sizeof(char));
+	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto exit;
 	}
 
 	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
-		response_buffer_info->length = sprintf(response_buffer_info->buffer, "ERROR: %s", error_msg);
+		resp_buffer->length = sprintf(resp_buffer->buffer, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	} else {
-		response_buffer_info->length = sprintf(response_buffer_info->buffer, "OK");
+		resp_buffer->length = sprintf(resp_buffer->buffer, "OK");
 	}
 
 exit:
@@ -2025,18 +2039,20 @@ exit:
 /*
  * set_volume_cb() - Data callback for 'set_audio_volume' data requests
  *
- * @target:			Target ID of the data request (set_audio_volume).
- * @transport:			Communication transport used by the data request.
- * @request_buffer_info:	Buffer containing the data request.
- * @response_buffer_info:	Buffer to store the answer of the request.
+ * @target:		Target ID of the data request (set_audio_volume).
+ * @transport:		Communication transport used by the data request.
+ * @req_buffer:		Buffer containing the data request.
+ * @resp_buffer:	Buffer to store the answer of the request.
  *
  * Logs information about the received request and executes the corresponding
  * command.
+ *
+ * Return: CCAPI_RECEIVE_ERROR_NONE if success, any other code otherwise.
  */
 static ccapi_receive_error_t set_volume_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t const *const request_buffer_info,
-		ccapi_buffer_info_t *const response_buffer_info)
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer)
 {
 	ccapi_receive_error_t ret = CCAPI_RECEIVE_ERROR_NONE;
 	char *cmd = NULL, *error_msg = NULL, *resp = NULL, *val = NULL;
@@ -2044,13 +2060,13 @@ static ccapi_receive_error_t set_volume_cb(char const *const target,
 
 	log_dr_debug("%s: target='%s' - transport='%d'", __func__, target, transport);
 
-	val = calloc(request_buffer_info->length + 1, sizeof(char));
+	val = calloc(req_buffer->length + 1, sizeof(char));
 	if (val == NULL) {
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
 
-	strncpy(val, request_buffer_info->buffer, request_buffer_info->length);
+	strncpy(val, req_buffer->buffer, req_buffer->length);
 	log_dr_debug("%s=%s", target, val);
 
 	/* Verify value is an integer. */
@@ -2082,24 +2098,24 @@ static ccapi_receive_error_t set_volume_cb(char const *const target,
 	}
 
 done:
-	response_buffer_info->length = 2; /* 'OK' length */
+	resp_buffer->length = 2; /* 'OK' length */
 	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
-		response_buffer_info->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
+		resp_buffer->length = snprintf(NULL, 0, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	}
 
-	response_buffer_info->buffer = calloc(response_buffer_info->length + 1, sizeof(char));
-	if (response_buffer_info->buffer == NULL) {
+	resp_buffer->buffer = calloc(resp_buffer->length + 1, sizeof(char));
+	if (resp_buffer->buffer == NULL) {
 		log_dr_error("Cannot generate response for target '%s': Out of memory", target);
 		ret = CCAPI_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto exit;
 	}
 
 	if (ret != CCAPI_RECEIVE_ERROR_NONE) {
-		response_buffer_info->length = sprintf(response_buffer_info->buffer, "ERROR: %s", error_msg);
+		resp_buffer->length = sprintf(resp_buffer->buffer, "ERROR: %s", error_msg);
 		log_dr_error("Cannot process request for target '%s': %s", target, error_msg);
 	} else {
-		response_buffer_info->length = sprintf(response_buffer_info->buffer, "OK");
+		resp_buffer->length = sprintf(resp_buffer->buffer, "OK");
 	}
 
 exit:
@@ -2113,10 +2129,10 @@ exit:
 /*
  * request_status_cb() - Status callback for application data requests
  *
- * @target:			Target ID of the data request.
- * @transport:			Communication transport used by the data request.
- * @response_buffer_info:	Buffer containing the response data.
- * @receive_error:		The error status of the receive process.
+ * @target:		Target ID of the data request.
+ * @transport:		Communication transport used by the data request.
+ * @resp_buffer:	Buffer containing the response data.
+ * @rcv_error:		The error status of the receive process.
  *
  * This callback is executed when the receive process has finished. It doesn't
  * matter if everything worked or there was an error during the process.
@@ -2125,21 +2141,21 @@ exit:
  */
 static void request_status_cb(char const *const target,
 		ccapi_transport_t const transport,
-		ccapi_buffer_info_t *const response_buffer_info,
-		ccapi_receive_error_t receive_error)
+		ccapi_buffer_info_t *const resp_buffer,
+		ccapi_receive_error_t rcv_error)
 {
 	log_dr_debug(
 			"%s: target='%s' - transport='%d' - error='%d'", __func__, target,
-			transport, receive_error);
+			transport, rcv_error);
 
 	/* Free the response buffer */
-	if (response_buffer_info != NULL)
-		free(response_buffer_info->buffer);
+	if (resp_buffer != NULL)
+		free(resp_buffer->buffer);
 
-	if (receive_error == CCAPI_RECEIVE_ERROR_NONE && strcmp(TARGET_STOP_CC, target) == 0)
+	if (rcv_error == CCAPI_RECEIVE_ERROR_NONE && strcmp(TARGET_STOP_CC, target) == 0)
 		kill(getpid(), SIGINT);
 
-	if (receive_error == CCAPI_RECEIVE_ERROR_NONE
+	if (rcv_error == CCAPI_RECEIVE_ERROR_NONE
 		&& strcmp(TARGET_SET_CONFIG, target) == 0 && !future_connector_enable)
 		kill(getpid(), SIGINT);
 }

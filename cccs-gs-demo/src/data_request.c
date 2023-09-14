@@ -133,12 +133,6 @@
 #define log_dr_error(format, ...)				\
 	log_error("%s " format, DREQ_TAG, __VA_ARGS__)
 
-typedef struct {
-	bool enable;
-	uint32_t sample_rate;
-	uint32_t n_samples_upload;
-} sys_mon_cfg_t;
-
 struct handler_t {
 	const char *target;
 	cccs_request_data_cb_t data_cb;
