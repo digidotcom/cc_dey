@@ -142,6 +142,8 @@ static int start_connector(const char *config_file)
 
 	stop_monitoring();
 
+	unregister_custom_data_requests();
+
 	stop_cloud_connection();
 
 	return EXIT_SUCCESS;

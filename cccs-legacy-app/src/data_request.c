@@ -2279,3 +2279,17 @@ ccapi_receive_error_t register_custom_data_requests(void)
 
 	return ret;
 }
+
+void unregister_custom_data_requests(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(request_handlers); i++) {
+		const struct handler_t *handler = &request_handlers[i];
+		ccapi_receive_error_t ret = ccapi_receive_remove_target(handler->target);
+
+		if (ret != CCAPI_RECEIVE_ERROR_NONE)
+			log_dr_error("Cannot unregister target '%s': Error %d",
+				handler->target, ret);
+	}
+}
