@@ -66,6 +66,7 @@ CFLAGS += -g -O -DDEBUG
 
 CFLAGS += $(shell PKG_CONFIG_PATH=../library:$${PKG_CONFIG_PATH} pkg-config --cflags cloudconnector)
 CFLAGS += $(shell pkg-config --cflags libdigiapix)
+CFLAGS += $(shell pkg-config --cflags json-c)
 
 # Target output to generate.
 SRCS = $(wildcard $(SRC)/*.c)

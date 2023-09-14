@@ -18,9 +18,9 @@
  */
 
 #include <errno.h>
-#include <json-c/json_object_iterator.h>
-#include <json-c/json_object.h>
-#include <json-c/json_tokener.h>
+#include <json_object_iterator.h>
+#include <json_object.h>
+#include <json_tokener.h>
 #include <libdigiapix/bluetooth.h>
 #include <libdigiapix/gpio.h>
 #include <libdigiapix/process.h>
