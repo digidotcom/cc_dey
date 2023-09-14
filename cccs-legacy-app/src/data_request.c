@@ -95,6 +95,10 @@
 #define UNUSED_ARGUMENT(a)	(void)(a)
 #endif
 
+#if !(defined ARRAY_SIZE)
+#define ARRAY_SIZE(array)	(sizeof(array) / sizeof(array[0]))
+#endif
+
 /*
  * log_dr_debug() - Log the given message as debug
  *
@@ -121,6 +125,101 @@
  */
 #define log_dr_error(format, ...)				\
 	log_error("%s " format, DREQ_TAG, __VA_ARGS__)
+
+struct handler_t {
+	const char *target;
+	size_t max_req_size;
+	ccapi_receive_data_cb_t data_cb;
+	ccapi_receive_status_cb_t status_cb;
+};
+
+static void request_status_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t *const resp_buffer,
+		ccapi_receive_error_t rcv_error);
+static ccapi_receive_error_t device_info_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t get_config_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t set_config_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t get_time_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t stop_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t update_user_led_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t play_music_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+static ccapi_receive_error_t set_volume_cb(char const *const target,
+		ccapi_transport_t const transport,
+		ccapi_buffer_info_t const *const req_buffer,
+		ccapi_buffer_info_t *const resp_buffer);
+
+static struct handler_t request_handlers[] = {
+	{
+		TARGET_DEVICE_INFO,
+		0,
+		device_info_cb,
+		request_status_cb
+	},
+	{
+		TARGET_GET_CONFIG,
+		CCAPI_RECEIVE_NO_LIMIT,
+		get_config_cb,
+		request_status_cb
+	},
+	{
+		TARGET_SET_CONFIG,
+		CCAPI_RECEIVE_NO_LIMIT,
+		set_config_cb,
+		request_status_cb
+	},
+	{
+		TARGET_GET_TIME,
+		0,
+		get_time_cb,
+		request_status_cb
+	},
+	{
+		TARGET_STOP_CC,
+		0,
+		stop_cb,
+		request_status_cb
+	},
+	{
+		TARGET_USER_LED,
+		5,		/* Max size of possible values (on, off, 0, 1, true, false): 5 */
+		update_user_led_cb,
+		request_status_cb
+	},
+	{
+		TARGET_PLAY_MUSIC,
+		255,
+		play_music_cb,
+		request_status_cb
+	},
+	{
+		TARGET_SET_VOLUME,
+		3,		/* Max size of possible values (0-100): 3 */
+		set_volume_cb,
+		request_status_cb
+	}
+};
 
 typedef struct {
 	bool enable;
@@ -2162,54 +2261,21 @@ static void request_status_cb(char const *const target,
 
 ccapi_receive_error_t register_custom_data_requests(void)
 {
-	char *target = TARGET_DEVICE_INFO;
-	ccapi_receive_error_t error = ccapi_receive_add_target(target,
-			device_info_cb, request_status_cb, 0);
+	unsigned int i;
+	ccapi_receive_error_t ret;
 
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
+	for (i = 0; i < ARRAY_SIZE(request_handlers); i++) {
+		const struct handler_t *handler = &request_handlers[i];
 
-	target = TARGET_GET_CONFIG;
-	error = ccapi_receive_add_target(target, get_config_cb, request_status_cb,
-			CCAPI_RECEIVE_NO_LIMIT);
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
+		ret = ccapi_receive_add_target(handler->target,
+			handler->data_cb, handler->status_cb, handler->max_req_size);
 
-	target = TARGET_SET_CONFIG;
-	error = ccapi_receive_add_target(target, set_config_cb, request_status_cb,
-			CCAPI_RECEIVE_NO_LIMIT);
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
+		if (ret != CCAPI_RECEIVE_ERROR_NONE) {
+			log_dr_error("Cannot register target '%s': Error %d",
+				handler->target, ret);
+			break;
+		}
+	}
 
-	target = TARGET_GET_TIME;
-	error = ccapi_receive_add_target(target, get_time_cb, request_status_cb, 0);
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
-
-	target = TARGET_STOP_CC;
-	error = ccapi_receive_add_target(target, stop_cb, request_status_cb, 0);
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
-
-	target = TARGET_USER_LED;
-	error = ccapi_receive_add_target(target, update_user_led_cb,
-			request_status_cb, 5); /* Max size of possible values (on, off, 0, 1, true, false): 5 */
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
-
-	target = TARGET_PLAY_MUSIC;
-	error = ccapi_receive_add_target(target, play_music_cb,
-			request_status_cb, 255);
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		goto done;
-
-	target = TARGET_SET_VOLUME;
-	error = ccapi_receive_add_target(target, set_volume_cb,
-			request_status_cb, 3); /* Max size of possible values (0-100): 3 */
-
-done:
-	if (error != CCAPI_RECEIVE_ERROR_NONE)
-		log_dr_error("Cannot register target '%s', error %d", target, error);
-
-	return error;
+	return ret;
 }
