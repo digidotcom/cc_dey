@@ -198,7 +198,7 @@ int start_monitoring(void)
 	cb_data.num_samples_upload = 2;
 
 	if (ldx_gpio_start_wait_interrupt(cb_data.button, &button_interrupt_cb, &cb_data) != EXIT_SUCCESS) {
-		log_mon_error("Error initializing app monitor: Unable to capture %s interrupts", USER_BUTTON_ALIAS);
+		log_mon_error("Error initializing demo monitor: Unable to capture %s interrupts", USER_BUTTON_ALIAS);
 		goto error;
 	}
 

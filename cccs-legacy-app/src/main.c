@@ -46,7 +46,17 @@
 	"  -h  --help                Print help and exit\n" \
 	"\n"
 
-static volatile bool stop = false;
+static volatile bool stop_requested = false;
+
+/**
+ * usage() - Print usage information
+ *
+ * @name:	Name of the daemon.
+ */
+static void usage(char const *const name)
+{
+	printf(USAGE, VERSION, name);
+}
 
 /**
  * signal_handler() - Manage signal received.
@@ -55,8 +65,8 @@ static volatile bool stop = false;
  */
 static void signal_handler(int sig_num)
 {
-	log_debug("%s: Received signal %d to close Cloud connection.", __func__, sig_num);
-	stop = true;
+	log_debug("Signal %d to stop ConnectCore Cloud Services legacy client", sig_num);
+	stop_requested = true;
 }
 
 /*
@@ -128,23 +138,15 @@ static int start_connector(const char *config_file)
 
 	do {
 		sleep(2);
-	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && stop == CCAPI_FALSE);
+	} while (get_cloud_connection_status() != CC_STATUS_DISCONNECTED && stop_requested == CCAPI_FALSE);
 
 	stop_monitoring();
+
+	unregister_custom_data_requests();
 
 	stop_cloud_connection();
 
 	return EXIT_SUCCESS;
-}
-
-/**
- * usage() - Print usage information
- *
- * @name:	Name of the daemon.
- */
-static void usage(char const *const name)
-{
-	printf(USAGE, VERSION, name);
 }
 
 int main(int argc, char *argv[])
@@ -163,7 +165,7 @@ int main(int argc, char *argv[])
 			{NULL, 0, NULL, 0}
 	};
 
-	/* Initialize the logging interface. */
+	/* Initialize the logging interface */
 	init_logger(LOG_DEBUG, log_options, name);
 
 	while (1) {
@@ -189,7 +191,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* Daemonize if requested. */
+	/* Daemonize if requested */
 	if (create_daemon) {
 		if (start_daemon(name) != 0) {
 			result = EXIT_FAILURE;

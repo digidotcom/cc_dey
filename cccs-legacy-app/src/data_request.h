@@ -29,4 +29,9 @@
  */
 ccapi_receive_error_t register_custom_data_requests(void);
 
+/*
+ * unregister_custom_data_requests() - Unregister custom data requests
+ */
+void unregister_custom_data_requests(void);
+
 #endif /* DATA_REQUEST_H_ */

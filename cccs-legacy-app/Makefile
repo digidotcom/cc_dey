@@ -1,5 +1,5 @@
 # ***************************************************************************
-# Copyright (c) 2017-2022 Digi International Inc.
+# Copyright (c) 2017-2023 Digi International Inc.
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -49,7 +49,7 @@ CFLAGS += $(DFLAGS)
 # Enable Compiler Warnings
 CFLAGS += -Winit-self -Wbad-function-cast -Wpointer-arith
 CFLAGS += -Wmissing-parameter-type -Wstrict-prototypes -Wformat-security
-CFLAGS += -Wformat-y2k -Wold-style-definition -Wcast-align -Wformat-nonliteral 
+CFLAGS += -Wformat-y2k -Wold-style-definition -Wcast-align -Wformat-nonliteral
 CFLAGS += -Wredundant-decls -Wvariadic-macros
 CFLAGS += -Wall -Werror -Wextra -pedantic
 CFLAGS += -Wno-error=padded -Wno-error=format-nonliteral -Wno-unused-function -Wno-missing-field-initializers
@@ -64,13 +64,12 @@ CFLAGS += -DGIT_REVISION=\"$(if $(GIT_REVISION),-g$(GIT_REVISION))\"
 
 CFLAGS += -g -O -DDEBUG
 
-CFLAGS += $(shell pkg-config --cflags libdigiapix)
 CFLAGS += $(shell PKG_CONFIG_PATH=../library:$${PKG_CONFIG_PATH} pkg-config --cflags cloudconnector)
+CFLAGS += $(shell pkg-config --cflags libdigiapix)
+CFLAGS += $(shell pkg-config --cflags json-c)
 
 # Target output to generate.
-APP_SRCS = $(wildcard $(SRC)/*.c)
-
-SRCS = $(APP_SRCS)
+SRCS = $(wildcard $(SRC)/*.c)
 
 # Libraries to Link
 LIBS += $(shell PKG_CONFIG_PATH=../library:$${PKG_CONFIG_PATH} pkg-config --libs --static cloudconnector)

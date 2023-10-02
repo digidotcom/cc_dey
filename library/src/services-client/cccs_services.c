@@ -161,12 +161,15 @@ int connect_cccsd(void)
 	if (s == -1) {
 		log_cccsd_debug("Failed to connect to CCCSD: %s (%d)",
 			strerror(errno), errno);
+
 		return -1;
 	}
 
 	if (connect(s, (const struct sockaddr *)&sa, sizeof sa) == -1) {
 		log_cccsd_debug("Failed to connect to CCCSD (s=%d): %s (%d)",
 			s, strerror(errno), errno);
+		close(s);
+
 		return -1;
 	}
 

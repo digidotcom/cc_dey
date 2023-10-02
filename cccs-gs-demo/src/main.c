@@ -17,6 +17,7 @@
  * ===========================================================================
  */
 
+#include <cccs_services.h>
 #include <errno.h>
 #include <getopt.h>
 #include <libgen.h>
@@ -28,7 +29,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "cccs_services.h"
 #include "data_points.h"
 #include "data_request.h"
 
