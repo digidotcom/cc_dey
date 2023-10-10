@@ -295,7 +295,7 @@ int read_uint32(int fd, uint32_t * const result, struct timeval *timeout)
 			return 0;
 	}
 
-	return -1;
+	return length == -ETIMEDOUT ? length : -1;
 }
 
 int write_uint32(int fd, const uint32_t value)
@@ -327,35 +327,47 @@ static int recv_blob(int fd, char type, void **data, size_t *data_length, struct
 {
 	char rxtype[12];
 	uint32_t length = 0;
-	uint8_t *buffer;
+	uint8_t *buffer = NULL;
+	int ret;
 
 	if (data_length)
 		*data_length = 0;
 
 	*data = NULL;	/* Ensure that in caller's space it is safe to free(data) even if recv_blob() fails */
 	rxtype[2] = '\0';
-	if (read_amt(fd, rxtype, 2, timeout) == 0				/* Read the type */
-		&& rxtype[0] == type						/* & confirm against expected */
-		&& rxtype[1] == ':'
-		&& read_uint32(fd, &length, timeout) == 0) {			/* Read the payload length */
-		buffer = malloc(length + 1);
-		if (buffer) {
-			if (read_amt(fd, buffer, length+1, timeout) == 0	/* Read the payload + terminator */
-				&& (char)buffer[length] == TERMINATOR) {	/* Verify terminator where expected */
-				buffer[length] = 0;				/* Replace terminator... for type 's:'tring */
-				if (data_length)
-					*data_length = length;			/* & report the length to the caller if needed */
-				*data = buffer;
+	ret = read_amt(fd, rxtype, 2, timeout);				/* Read the type */
+	if (ret != 0)
+		goto error;
 
-				return 0;
-			}
-			free(buffer);
-		} else {
+	if (rxtype[0] == type && rxtype[1] == ':') {			/* & confirm against expected */
+		ret = read_uint32(fd, &length, timeout);		/* Read the payload length */
+		if (ret != 0)
+			goto error;
+
+		buffer = calloc(length + 1, sizeof(*buffer));
+		if (!buffer)
 			return -ENOMEM;
+
+		ret = read_amt(fd, buffer, length + 1, timeout);	/* Read the payload + terminator */
+		if (ret != 0)
+			goto error;
+
+		if ((char)buffer[length] == TERMINATOR) {		/* Verify terminator where expected */
+			buffer[length] = 0;				/* Replace terminator... for type 's:'tring */
+			if (data_length)
+				*data_length = length;			/* & report the length to the caller if needed */
+			*data = buffer;
+
+			return 0;
 		}
 	}
 
-	return -1;
+	ret = -1;
+
+error:
+	free(buffer);
+
+	return ret == -ETIMEDOUT ? ret : -1;
 }
 
 int write_string(int fd, const char *string)

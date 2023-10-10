@@ -184,21 +184,28 @@ cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long 
 	void *msg = NULL;
 	size_t msg_len = 0;
 	struct timeval timeout_val;
+	int ret;
 
 	resp->hint = NULL;
 
 	timeout_val.tv_sec = timeout;
 	timeout_val.tv_usec = 0;
 
-	if (read_uint32(fd, &code, timeout > 0 ? &timeout_val : NULL) < 0) {
+	ret = read_uint32(fd, &code, timeout > 0 ? &timeout_val : NULL);
+	if (ret == -ETIMEDOUT) {
+		resp->code = CCCS_SEND_ERROR_READ_TIMEOUT;
+		log_cccsd_error("Bad response: %s",
+				"Timeout reading data type from CCCSD");
+	} else if (ret) {
 		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
 		log_cccsd_error("Bad response: %s",
 				"Failed to read data type from CCCSD");
-
-		return resp->code;
 	}
 
-	switch(code) {
+	if (ret)
+		return resp->code;
+
+	switch (code) {
 		case RESP_END_OF_MESSAGE:
 			resp->code = 0;
 			log_cccsd_debug("%s", "Success from CCCSD");
@@ -206,13 +213,18 @@ cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long 
 			return CCCS_SEND_ERROR_NONE;
 		case RESP_ERRORCODE:
 			/* Read error code first */
-			if (read_uint32(fd, (uint32_t *) &resp->code, timeout > 0 ? &timeout_val : NULL) < 0) {
+			ret = read_uint32(fd, (uint32_t *) &resp->code, timeout > 0 ? &timeout_val : NULL);
+			if (ret == -ETIMEDOUT) {
+				resp->code = CCCS_SEND_ERROR_READ_TIMEOUT;
+				log_cccsd_error("Bad response: %s",
+						"Timeout reading data type from CCCSD");
+			} else if (ret) {
 				resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
 				log_cccsd_error("Bad response: %s",
 						"Failed to read error code from CCCSD");
-
-				return resp->code;
 			}
+			if (ret)
+				return resp->code;
 			break;
 		case RESP_ERROR:
 			resp->code = 255;
@@ -225,12 +237,20 @@ cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long 
 	}
 
 	/* Read the error message */
-	if (read_blob(fd, &msg, &msg_len, timeout > 0 ? &timeout_val : NULL) < 0) {
-		log_cccsd_error("Failed to read response: %s (%d)", strerror(errno), errno);
+	ret = read_blob(fd, &msg, &msg_len, timeout > 0 ? &timeout_val : NULL);
+	if (ret == -ETIMEDOUT) {
+		resp->code = CCCS_SEND_ERROR_READ_TIMEOUT;
+		log_cccsd_error("Failed to read response: %s", "Timeout");
+	} else if (ret == -ENOMEM) {
 		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
-
-		return resp->code;
+		log_cccsd_error("Failed to read response: %s", "Out of memory");
+	} else if (ret) {
+		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
+		log_cccsd_error("Failed to read response: %s (%d)", strerror(errno), errno);
 	}
+
+	if (ret)
+		return resp->code;
 
 	resp->hint = (char *)msg;
 

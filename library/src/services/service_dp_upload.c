@@ -18,6 +18,7 @@
  */
 
 #include <stdio.h>
+#include <errno.h>
 
 #include "ccapi/ccapi.h"
 #include "cc_logging.h"
@@ -113,10 +114,14 @@ int handle_datapoint_file_upload(int fd)
 		hint_string_info.string = hint;
 
 		/* Read the record type from the client message */
-		if (read_uint32(fd, &type, &timeout)) {
+		ret = read_uint32(fd, &type, &timeout);
+		if (ret == -ETIMEDOUT)
+			send_error(fd, "Timeout reading data type");
+		else if (ret)
 			send_error(fd, "Failed to read data type");
+
+		if (ret)
 			return 1;
-		}
 
 		if (type == upload_datapoint_file_terminate)
 			break;
@@ -136,20 +141,34 @@ int handle_datapoint_file_upload(int fd)
 			case upload_datapoint_file_path_metrics:
 			case upload_datapoint_file_path_binary:
 				/* Read data point(s) file path */
-				if (read_string(fd, &file_path, NULL, &timeout) < 0) {
+				ret = read_string(fd, &file_path, NULL, &timeout);
+				if (ret == -ETIMEDOUT)
+					send_error(fd, "Timeout reading data point file path");
+				else if (ret == -ENOMEM)
+					send_error(fd, "Failed to read data point file path: Out of memory");
+				else if (ret)
 					send_error(fd, "Failed to read data point file path");
+
+				if (ret)
 					return 1;
-				}
+
 				break;
 			case upload_datapoint_file_events:
 			case upload_datapoint_file_metrics:
 			case upload_datapoint_file_metrics_binary:
 			default:
 				/* Read the data point(s) blob of data from the client process */
-				if (read_blob(fd, &blob, &size, &timeout)) {
+				ret = read_blob(fd, &blob, &size, &timeout);
+				if (ret == -ETIMEDOUT)
+					send_error(fd, "Timeout reading data point data");
+				else if (ret == -ENOMEM)
+					send_error(fd, "Failed to read data point data: Out of memory");
+				else if (ret)
 					send_error(fd, "Failed to read data point data");
+
+				if (ret)
 					return 1;
-				}
+
 				break;
 		}
 
@@ -161,8 +180,15 @@ int handle_datapoint_file_upload(int fd)
 			case upload_datapoint_file_metrics_binary:
 			case upload_datapoint_file_path_binary:
 				/* Read the data stream name */
-				if (read_string(fd, &stream_id, NULL, &timeout) < 0) {
+				ret = read_string(fd, &stream_id, NULL, &timeout);
+				if (ret == -ETIMEDOUT)
+					send_error(fd, "Timeout reading data point stream id");
+				else if (ret == -ENOMEM)
+					send_error(fd, "Failed to read data point stream id: Out of memory");
+				else if (ret)
 					send_error(fd, "Failed to read data point stream id");
+
+				if (ret) {
 					free(blob);
 					free(file_path);
 					return 1;

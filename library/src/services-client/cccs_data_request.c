@@ -338,13 +338,25 @@ static void *listen_threaded(void *server_sock)
 		timeout.tv_sec = SOCKET_READ_TIMEOUT_SEC;
 
 		/* Read request type and target */
-		if (read_string(request_sock, &cb_type, NULL, &timeout)			/* The request type */
-			|| read_string(request_sock, &target, NULL, &timeout)) {	/* Target */
+		ret = read_string(request_sock, &cb_type, NULL, &timeout);		/* The request type */
+		if (ret == 0)
+			ret = read_string(request_sock, &target, NULL, &timeout);	/* Target */
+
+		if (ret == -ETIMEDOUT) {
+			log_dr_error("%s", "Timeout reading request from CCCSD");
+			send_error(request_sock, "Timeout reading request code");
+		} else if (ret == -ENOMEM) {
+			log_dr_error("Error reading request from CCCSD: %s",
+				"Out of memory");
+			send_error(request_sock, "Failed to read request code: Out of memory");
+		} else if (ret) {
 			log_dr_error("Error reading request from CCCSD: %s (%d)",
 				strerror(errno), errno);
 			send_error(request_sock, "Failed to read request code");
-			goto loop_done;
 		}
+
+		if (ret)
+			goto loop_done;
 
 		if (lock_acquire(active_requests.lock) != 0) {
 			log_dr_error("Error processing '%s' request: Unable to lock, data request service busy",
@@ -368,9 +380,19 @@ static void *listen_threaded(void *server_sock)
 			cccs_buffer_info_t *resp_buffer = &registered_req->resp_buffer;
 			cccs_receive_error_t error;
 
-			if (read_blob(request_sock, &req_buffer->buffer, &req_buffer->length, &timeout)) {
+			ret = read_blob(request_sock, &req_buffer->buffer, &req_buffer->length, &timeout);
+			if (ret == -ETIMEDOUT) {
+				log_dr_error("Timeout getting '%s' request data from CCCSD", target);
+				resp_buffer->buffer = strdup("Timeout getting request data");
+			} else if (ret == -ENOMEM) {
+				log_dr_error("Unable to get '%s' request data from CCCSD: Out of memory", target);
+				goto loop_done;
+			} else if (ret) {
 				log_dr_error("Unable to get '%s' request data from CCCSD", target);
 				resp_buffer->buffer = strdup("Error getting request data");
+			}
+
+			if (ret) {
 				if (!resp_buffer->buffer) {
 					log_dr_error("Cannot generate error response for target '%s': Out of memory", target);
 					goto loop_done;
@@ -401,17 +423,28 @@ static void *listen_threaded(void *server_sock)
 			cccs_buffer_info_t *resp_buffer = &registered_req->resp_buffer;
 			uint32_t error;
 			char *error_str = NULL;
+			int ret = read_uint32(request_sock, &error, &timeout);
 
-			if (read_uint32(request_sock, &error, &timeout)
-				|| read_string(request_sock, &error_str, NULL, &timeout)) {
-				log_dr_error("Unable to get '%s' request status from CCCSD", target);
+			if (ret == 0)
+				ret = read_string(request_sock, &error_str, NULL, &timeout);
+			else
 				error = -1;
+
+			if (ret == -ETIMEDOUT) {
+				log_dr_error("Timeout getting '%s' request status from CCCSD", target);
+				error_str = "Timeout getting request status from CCCSD";
+			} else if (ret == -ENOMEM) {
+				log_dr_error("Unable to get '%s' request status from CCCSD: Out of memory", target);
+				error_str = "Unable to get request status from CCCSD: Out of memory";
+			} else if (ret) {
+				log_dr_error("Unable to get '%s' request status from CCCSD", target);
 				error_str = "Unable to get request status from CCCSD";
 			}
 
 			registered_req->status_cb(target, resp_buffer, error, error_str);
 
-			free(error_str);
+			if (ret == 0)
+				free(error_str);
 		/* Unknown callback type */
 		} else {
 			log_dr_error("Got strange callback type from CCCSD '%s'",

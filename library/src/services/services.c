@@ -76,10 +76,22 @@ static void handle_requests(int fd)
 			.tv_sec = 20,
 			.tv_usec = 0
 		};
+		int ret;
+
 		/* Read request tag (to select handler for this request) */
-		if (read_string(request_sock, &request_tag, NULL, &timeout) < 0) {
+		ret = read_string(request_sock, &request_tag, NULL, &timeout);
+		if (ret == -ETIMEDOUT) {
+			send_error(request_sock, "Timeout reading request code");
+			log_error("%s", "Timeout reading request tag");
+		} else if (ret == -ENOMEM) {
+			send_error(request_sock, "Failed to read request code: Out of memory");
+			log_error("Error reading request tag: %s", "Out of memory");
+		} else if (ret) {
 			send_error(request_sock, "Failed to read request code");
 			log_error("Error reading request tag: %s (%d)", strerror(errno), errno);
+		}
+
+		if (ret) {
 			close(request_sock);
 			continue;
 		}
