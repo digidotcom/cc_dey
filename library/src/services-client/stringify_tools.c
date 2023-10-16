@@ -66,6 +66,7 @@ bool put_character(char const character, buffer_info_t * const buffer_info)
 			return false;
 		}
 		buffer_info->buffer = tmp;
+		buffer_info->bytes_available += 1;
 	}
 
 	if (buffer_info->buffer != NULL)
