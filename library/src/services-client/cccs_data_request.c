@@ -364,41 +364,41 @@ static void *listen_threaded(void *server_sock)
 
 		/* Execute data callback */
 		if (!strcmp(cb_type, REQ_TYPE_REQUEST_CB)) {
-			cccs_buffer_info_t req_buffer = registered_req->req_buffer;
-			cccs_buffer_info_t resp_buffer = registered_req->resp_buffer;
+			cccs_buffer_info_t *req_buffer = &registered_req->req_buffer;
+			cccs_buffer_info_t *resp_buffer = &registered_req->resp_buffer;
 			cccs_receive_error_t error;
 
-			if (read_blob(request_sock, &req_buffer.buffer, &req_buffer.length, &timeout)) {
+			if (read_blob(request_sock, &req_buffer->buffer, &req_buffer->length, &timeout)) {
 				log_dr_error("Unable to get '%s' request data from CCCSD", target);
-				resp_buffer.buffer = strdup("Error getting request data");
-				if (!resp_buffer.buffer) {
+				resp_buffer->buffer = strdup("Error getting request data");
+				if (!resp_buffer->buffer) {
 					log_dr_error("Cannot generate error response for target '%s': Out of memory", target);
 					goto loop_done;
 				}
 				error = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
-				resp_buffer.length = strlen(resp_buffer.buffer);
+				resp_buffer->length = strlen(resp_buffer->buffer);
 			} else {
-				error = registered_req->data_cb(target, &req_buffer, &resp_buffer);
+				error = registered_req->data_cb(target, req_buffer, resp_buffer);
 
-				free(req_buffer.buffer);
-				req_buffer.buffer = NULL;
-				req_buffer.length = 0;
+				free(req_buffer->buffer);
+				req_buffer->buffer = NULL;
+				req_buffer->length = 0;
 
 				if (error != CCCS_RECEIVE_ERROR_NONE)
 					log_dr_error("Error executing '%s' request: %d", target, error);
 			}
 
 			if (write_uint32(request_sock, error)
-				|| write_blob(request_sock, resp_buffer.buffer, resp_buffer.length)) {
+				|| write_blob(request_sock, resp_buffer->buffer, resp_buffer->length)) {
 				log_dr_error("Unable to send '%s' request response to CCCSD", target);
-				free(resp_buffer.buffer);
-				resp_buffer.buffer = NULL;
-				resp_buffer.length = 0;
+				free(resp_buffer->buffer);
+				resp_buffer->buffer = NULL;
+				resp_buffer->length = 0;
 				goto loop_done;
 			}
 		/* Execute status callback */
 		} else if (!strcmp(cb_type, REQ_TYPE_STATUS_CB)) {
-			cccs_buffer_info_t resp_buffer = registered_req->resp_buffer;
+			cccs_buffer_info_t *resp_buffer = &registered_req->resp_buffer;
 			uint32_t error;
 			char *error_str = NULL;
 
@@ -409,7 +409,7 @@ static void *listen_threaded(void *server_sock)
 				error_str = "Unable to get request status from CCCSD";
 			}
 
-			registered_req->status_cb(target, &resp_buffer, error, error_str);
+			registered_req->status_cb(target, resp_buffer, error, error_str);
 
 			free(error_str);
 		/* Unknown callback type */
