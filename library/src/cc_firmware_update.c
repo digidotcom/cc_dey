@@ -231,7 +231,7 @@ static size_t get_available_space(const char* path)
 	if (statvfs(path, &stat) != 0)
 		return 0;
 
-	return stat.f_bsize * stat.f_bavail;
+	return stat.f_bsize * stat.f_bfree;
 }
 
 /*
@@ -1238,7 +1238,9 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 			goto done;
 		}
 		if (available_space < total_size) {
-			log_fw_error("Not enough space to download '%s' firmware file (target '%d')", filename, target);
+			log_fw_error(
+				"Not enough space in '%s' to download firmware (target '%d'), needed %zu have %zu",
+				cc_cfg->fw_download_path, target, total_size, available_space);
 			error = CCAPI_FW_REQUEST_ERROR_DOWNLOAD_INVALID_SIZE;
 			goto done;
 		}
