@@ -66,6 +66,7 @@
 #define CMD_PLAY_MUSIC			"setsid mpg123 %s"
 #define CMD_STOP_MUSIC			"pkill -KILL -f mpg123"
 #define CMD_SET_VOLUME			"amixer set 'Speaker' %d%% && amixer set 'Headphone' %d%%"
+#define CMD_SET_VOLUME_CC6		"amixer set 'Master' %d%%"
 
 #define CFG_ELEMENT_ETHERNET		"ethernet"
 #define CFG_ELEMENT_WIFI		"wifi"
@@ -97,6 +98,9 @@
 #define IP_FORMAT			"%d.%d.%d.%d"
 #define MAC_STR_LENGTH			(3 * MAC_GROUPS)
 #define MAC_FORMAT			"%02x:%02x:%02x:%02x:%02x:%02x"
+
+#define PLATFORM_CCIMX6SBC		"ccimx6sbc"
+#define PLATFORM_CCIMX6QPSBC		"ccimx6qpsbc"
 
 #if !(defined UNUSED_ARGUMENT)
 #define UNUSED_ARGUMENT(a)	(void)(a)
@@ -264,6 +268,27 @@ static int read_file_line(const char * const path, char *buffer, int bytes_to_re
 	fclose(fd);
 
 	return error;
+}
+
+/**
+ * is_cc6() - Return whether the current platform is a CC6 or not
+ *
+ * Return: True if the current platform is a CC6, false otherwise.
+ */
+static bool is_cc6(void)
+{
+	char platform[PARAM_LENGTH];
+
+	if (read_file_line("/proc/device-tree/digi,machine,name", platform, PARAM_LENGTH) != 0) {
+		return false;
+	}
+
+	if (strncmp(platform, PLATFORM_CCIMX6SBC, strlen(platform)) == 0 ||
+		strncmp(platform, PLATFORM_CCIMX6QPSBC, strlen(platform)) == 0) {
+		return true;
+	}
+
+	return false;
 }
 
 /**
@@ -1982,7 +2007,11 @@ static cccs_receive_error_t set_volume_cb(char const *const target,
 	}
 
 	/* Execute command. */
-	cmd_len = snprintf(NULL, 0, CMD_SET_VOLUME, volume, volume);
+	if (is_cc6())
+		cmd_len = snprintf(NULL, 0, CMD_SET_VOLUME_CC6, volume);
+	else
+		cmd_len = snprintf(NULL, 0, CMD_SET_VOLUME, volume, volume);
+
 	cmd = calloc(cmd_len + 1, sizeof(char));
 	if (cmd == NULL) {
 		error_msg = "Out of memory";
@@ -1990,7 +2019,11 @@ static cccs_receive_error_t set_volume_cb(char const *const target,
 		ret = CCCS_RECEIVE_ERROR_INSUFFICIENT_MEMORY;
 		goto done;
 	}
-	sprintf(cmd, CMD_SET_VOLUME, volume, volume);
+	if (is_cc6())
+		sprintf(cmd, CMD_SET_VOLUME_CC6, volume);
+	else
+		sprintf(cmd, CMD_SET_VOLUME, volume, volume);
+
 	if (ldx_process_execute_cmd(cmd, &resp, 2) != 0 || resp == NULL) {
 		error_msg = "Error setting audio volume";
 		ret = CCCS_RECEIVE_ERROR_INVALID_DATA_CB;
