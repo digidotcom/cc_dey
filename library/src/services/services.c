@@ -86,6 +86,8 @@ static void handle_requests(int fd)
 		} else if (ret == -ENOMEM) {
 			send_error(request_sock, "Failed to read request code: Out of memory");
 			log_error("Error reading request tag: %s", "Out of memory");
+		} else if (ret == -EPIPE) {
+			log_error("Error reading request tag: %s", "Socket closed");
 		} else if (ret) {
 			send_error(request_sock, "Failed to read request code");
 			log_error("Error reading request tag: %s (%d)", strerror(errno), errno);

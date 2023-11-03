@@ -166,6 +166,8 @@ static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeou
 		if (nr <= 0) {
 			if (errno == EINTR)
 				continue;
+			if (nr == 0)
+				return -EPIPE;
 			break;
 		}
 
@@ -413,7 +415,7 @@ static int recv_blob(int fd, char type, void **data, size_t *data_length, struct
 error:
 	free(buffer);
 
-	return ret == -ETIMEDOUT ? ret : -1;
+	return ret;
 }
 
 int write_string(int fd, const char *string)

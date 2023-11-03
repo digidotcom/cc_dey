@@ -244,6 +244,9 @@ cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long 
 	} else if (ret == -ENOMEM) {
 		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
 		log_cccsd_error("Failed to read response: %s", "Out of memory");
+	} else if (ret == -EPIPE) {
+		resp->code = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
+		log_cccsd_error("Failed to read response: %s", "Socket closed");
 	} else if (ret) {
 		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
 		log_cccsd_error("Failed to read response: %s (%d)", strerror(errno), errno);

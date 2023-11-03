@@ -146,6 +146,9 @@ int handle_datapoint_file_upload(int fd)
 					send_error(fd, "Timeout reading data point file path");
 				else if (ret == -ENOMEM)
 					send_error(fd, "Failed to read data point file path: Out of memory");
+				else if (ret == -EPIPE)
+					/* Do not send anything */
+					;
 				else if (ret)
 					send_error(fd, "Failed to read data point file path");
 
@@ -185,6 +188,9 @@ int handle_datapoint_file_upload(int fd)
 					send_error(fd, "Timeout reading data point stream id");
 				else if (ret == -ENOMEM)
 					send_error(fd, "Failed to read data point stream id: Out of memory");
+				else if (ret == -EPIPE)
+					/* Do not send anything */
+					;
 				else if (ret)
 					send_error(fd, "Failed to read data point stream id");
 

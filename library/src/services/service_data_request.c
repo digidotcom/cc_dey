@@ -219,6 +219,8 @@ static ccapi_receive_error_t data_request(const char *target,
 		log_dr_error("Could not receive request data: %s", "Timeout");
 	else if (ret == -ENOMEM)
 		log_dr_error("Could not receive request data: %s", "Out of memory");
+	else if (ret == -EPIPE)
+		log_dr_error("Could not receive request data: %s", "Socket closed");
 	else if (ret)
 		log_dr_error("Could not receive request data: %s (%d)", strerror(errno), errno);
 
@@ -288,6 +290,9 @@ static int read_request(int fd, request_data_t *out, bool expect_ip, int expecte
 			send_error(fd, "Timeout reading IP");
 		else if (ret == -ENOMEM)
 			send_error(fd, "Failed to read IP: Out of memory");
+		else if (ret == -EPIPE)
+			/* Do not send anything */
+			;
 		else if (ret)
 			send_error(fd, "Failed to read IP");
 
@@ -322,6 +327,9 @@ static int read_request(int fd, request_data_t *out, bool expect_ip, int expecte
 		send_error(fd, "Timeout reading target");
 	else if (ret == -ENOMEM)
 		send_error(fd, "Failed to read target: Out of memory");
+	else if (ret == -EPIPE)
+		/* Do not send anything */
+		;
 	else if (ret)
 		send_error(fd, "Failed to read target");
 

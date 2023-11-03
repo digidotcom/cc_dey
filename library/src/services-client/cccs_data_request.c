@@ -349,6 +349,9 @@ static void *listen_threaded(void *server_sock)
 			log_dr_error("Error reading request from CCCSD: %s",
 				"Out of memory");
 			send_error(request_sock, "Failed to read request code: Out of memory");
+		} else if (ret == -EPIPE) {
+			log_dr_error("Error reading request from CCCSD: %s",
+				"Socket closed");
 		} else if (ret) {
 			log_dr_error("Error reading request from CCCSD: %s (%d)",
 				strerror(errno), errno);
@@ -386,6 +389,9 @@ static void *listen_threaded(void *server_sock)
 				resp_buffer->buffer = strdup("Timeout getting request data");
 			} else if (ret == -ENOMEM) {
 				log_dr_error("Unable to get '%s' request data from CCCSD: Out of memory", target);
+				goto loop_done;
+			} else if (ret == -EPIPE) {
+				log_dr_error("Error reading request from CCCSD: %s", "Socket closed");
 				goto loop_done;
 			} else if (ret) {
 				log_dr_error("Unable to get '%s' request data from CCCSD", target);
@@ -436,6 +442,9 @@ static void *listen_threaded(void *server_sock)
 			} else if (ret == -ENOMEM) {
 				log_dr_error("Unable to get '%s' request status from CCCSD: Out of memory", target);
 				error_str = "Unable to get request status from CCCSD: Out of memory";
+			} else if (ret == -EPIPE) {
+				log_dr_error("Unable to get '%s' request status from CCCSD: Socket closed", target);
+				error_str = "Unable to get request status from CCCSD: Socket closed";
 			} else if (ret) {
 				log_dr_error("Unable to get '%s' request status from CCCSD", target);
 				error_str = "Unable to get request status from CCCSD";
