@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <libdigiapix/network.h>
+#include <libdigiapix/wifi.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -577,6 +578,8 @@ static int create_ccapi_tcp_start_info_struct(const cc_cfg_t *const cc_cfg, ccap
 		tcp_info->connection.info.wan.phone_number = "*99#";
 	} else {
 		tcp_info->connection.type = CCAPI_CONNECTION_LAN;
+		if (ldx_wifi_iface_exists(active_interface.name))
+			tcp_info->connection.type = CCAPI_CONNECTION_WIFI;
 		memcpy(tcp_info->connection.info.lan.mac_address,
 				active_interface.mac,
 				sizeof(tcp_info->connection.info.lan.mac_address));
