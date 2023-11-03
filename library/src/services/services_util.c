@@ -126,16 +126,38 @@
 
 static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeout)
 {
-	int ret;
-	fd_set socket_set;
-	ssize_t nr = 0;
+	struct timeval now, timeout_limit;
 
-	FD_ZERO(&socket_set);
-	FD_SET(sock_fd, &socket_set);
+	if (timeout) {
+		gettimeofday(&now, NULL);
+		timeout_limit.tv_sec = now.tv_sec + timeout->tv_sec;
+		timeout_limit.tv_usec = now.tv_usec + timeout->tv_usec;
+	}
 
 	while (count > 0) {
+		ssize_t nr = 0;
+
 		if (timeout) {
-			ret = select(sock_fd + 1, &socket_set, NULL, NULL, timeout);
+			fd_set socket_set;
+			int ret;
+			struct timeval t = {
+				.tv_sec = 0,
+				.tv_usec = 0
+			};
+
+			gettimeofday(&now, NULL);
+			if (timeout_limit.tv_sec > now.tv_sec)
+				t.tv_sec = timeout_limit.tv_sec - now.tv_sec;
+			if (timeout_limit.tv_usec > now.tv_usec)
+				t.tv_usec = timeout_limit.tv_usec - now.tv_usec;
+
+			if (t.tv_sec == 0 && t.tv_usec == 0)
+				return -ETIMEDOUT;
+
+			FD_ZERO(&socket_set);
+			FD_SET(sock_fd, &socket_set);
+
+			ret = select(sock_fd + 1, &socket_set, NULL, NULL, &t);
 			if (ret != 1)
 				return ret == 0 ? -ETIMEDOUT : ret;
 		}
@@ -150,17 +172,15 @@ static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeou
 		count -= nr;
 		buf = ((char *) buf) + nr;
 	}
+
 	return (count > 0) ? -1 : 0;
 }
 
 static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timeval *timeout)
 {
-	ssize_t bytes_read;
 	size_t total_read = 0, remaining = capacity;
-	char *buf = buffer, *end;
-	char ch;
-	int result;
-	fd_set socket_set;
+	char *buf = buffer;
+	struct timeval now, timeout_limit;
 
 	if (capacity == 0 || buffer == NULL) {
 		errno = EINVAL;
@@ -169,25 +189,49 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 
 	total_read = 0;
 
-	FD_ZERO(&socket_set);
-	FD_SET(socket, &socket_set);
+	if (timeout) {
+		gettimeofday(&now, NULL);
+		timeout_limit.tv_sec = now.tv_sec + timeout->tv_sec;
+		timeout_limit.tv_usec = now.tv_usec + timeout->tv_usec;
+	}
 
 	for (;;) {
+		ssize_t bytes_read;
+
 		if (timeout) {
-			result = select(socket + 1, &socket_set, NULL, NULL, timeout);
+			fd_set socket_set;
+			int result;
+			struct timeval t = {
+				.tv_sec = 0,
+				.tv_usec = 0
+			};
+
+			gettimeofday(&now, NULL);
+			if (timeout_limit.tv_sec > now.tv_sec)
+				t.tv_sec = timeout_limit.tv_sec - now.tv_sec;
+			if (timeout_limit.tv_usec > now.tv_usec)
+				t.tv_usec = timeout_limit.tv_usec - now.tv_usec;
+
+			if (t.tv_sec == 0 && t.tv_usec == 0)
+				return -ETIMEDOUT;
+
+			FD_ZERO(&socket_set);
+			FD_SET(socket, &socket_set);
+
+			result = select(socket + 1, &socket_set, NULL, NULL, &t);
 			if (result != 1)
 				return result == 0 ? -ETIMEDOUT : result;
 		}
 		if (remaining) {
+			char *end = NULL;
 
 			/*
-			 * Minimise the number of system calls by reading in largest
+			 * Minimize the number of system calls by reading in largest
 			 * possible chunks.
 			 * More complex than simply reading char by char but typically only
 			 * requires one pass and two context switches rather than one
 			 * context switch per char received when reading one char at a time.
 			 */
-
 			bytes_read = recv(socket, buf, remaining, MSG_PEEK);
 			if (bytes_read < 0) {
 				if (errno == EINTR)
@@ -209,6 +253,8 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 			remaining -= bytes_read;
 			buf += bytes_read;
 		} else {
+			char ch;
+
 			/* Only get here if 'capacity' exhausted before seeing a terminator */
 			/* Slowly read char by char until terminator found */
 			bytes_read = recv(socket, &ch, 1, 0);
@@ -218,12 +264,12 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 				return -1;
 			}
 			if (bytes_read == 0) {
-				errno = EPIPE;			/* overrun and broken socket */
+				errno = EPIPE;			/* Overrun and broken socket */
 				return -1;
 			}
 			if (ch == TERMINATOR) {
 				buf[-1] = '\0';			/* Terminate what was read */
-				return total_read-1;		/* Return line length excluding terminator */
+				return total_read - 1;		/* Return line length excluding terminator */
 			}
 		}
 	}
