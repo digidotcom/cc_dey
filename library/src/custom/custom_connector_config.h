@@ -65,6 +65,8 @@
 
 #define MSG_RECV_WINDOW_SIZE 65536
 
+#define DP_MAX_NUMBER_PER_REQUEST 250
+
 /* Client Secure Connection */
 #define CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED
 
