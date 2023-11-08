@@ -81,6 +81,7 @@ typedef struct {
 	} data;
 } csv_process_data_t;
 
-size_t generate_dp_csv(csv_process_data_t * const csv_process_data, buffer_info_t * const buffer_info);
+size_t generate_dp_csv(csv_process_data_t * const csv_process_data,
+	buffer_info_t * const buffer_info, unsigned int max_dp, unsigned int *n_included);
 
 #endif /* _DP_CSV_GENERATOR_H_ */

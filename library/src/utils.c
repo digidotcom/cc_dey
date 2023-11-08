@@ -18,6 +18,7 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -191,6 +192,160 @@ done:
 	va_end(args);
 
 	return error;
+}
+
+int write_buffer_to_file(char const * const path, char const * const buff, size_t size)
+{
+	FILE *f = NULL;
+	size_t n_written;
+
+	if (!buff || !size || !path || path[0] == '\0')
+		return 0;
+
+	f = fopen(path, "wb+");
+	if (!f) {
+		log_error("Unable to open file '%s' to write: %s (%d)", path, strerror(errno), errno);
+		return 1;
+	}
+
+	n_written = fwrite(buff, sizeof(*buff), size, f);
+	if (n_written < size)
+		log_error("Unable to write to file '%s': %s (%d)", path, strerror(errno), errno);
+
+	fclose(f);
+
+	return n_written != size;
+}
+
+int cp_file(char const * const in_path, char const * const out_path)
+{
+	int fd_in = -1, fd_out = -1;
+	char buffer[1024 * 2];
+	struct stat stat;
+	ssize_t len, n_read, n_write;
+	int ret;
+
+	if (!in_path || in_path[0] == '\0' || !out_path || out_path[0] == '\0')
+		return 0;
+
+	fd_in = open(in_path, O_RDONLY);
+	if (fd_in == -1) {
+		log_error("Unable to copy file '%s', cannot open file: %s (%d)",
+			in_path, strerror(errno), errno);
+		return 1;
+	}
+
+	fd_out = open(out_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+	if (fd_out == -1) {
+		log_error("Unable to copy file '%s', cannot create destination file: %s (%d)",
+			in_path, strerror(errno), errno);
+		ret = 1;
+		goto done;
+	}
+
+	if (fstat(fd_in, &stat)) {
+		log_error("Unable to copy file '%s', cannot get size: %s (%d)",
+			in_path, strerror(errno), errno);
+		ret = 1;
+		goto done;
+	}
+
+	len = stat.st_size;
+
+	while (len > 0) {
+		n_read = read(fd_in, buffer, sizeof(buffer) / sizeof(buffer[0]));
+		if (n_read == -1) {
+			log_error("Unable to copy file '%s', cannot read: %s (%d)",
+				in_path, strerror(errno), errno);
+			ret = 1;
+			goto done;
+		}
+
+		n_write = 0;
+		while (n_write < n_read) {
+			int n_w = write(fd_out, buffer, n_read - n_write);
+
+			if (n_w == -1) {
+				log_error("Unable to copy file '%s', cannot write to destination: %s (%d)",
+					in_path, strerror(errno), errno);
+				ret = 1;
+				goto done;
+			}
+
+			n_write += n_w;
+		}
+
+		len -= n_write;
+	}
+
+	ret = 0;
+done:
+	close(fd_in);
+	close(fd_out);
+
+	if (ret)
+		remove(out_path);
+
+	return ret;
+}
+
+int get_directory_size(const char * const dir_path, unsigned long long *dir_size)
+{
+	struct dirent *p_dirent = NULL;
+	DIR *dirp = NULL;
+	char buf[PATH_MAX];
+	int ret = 0;
+
+	*dir_size = 0L;
+
+	if (!dir_path || !strlen(dir_path))
+		return 0;
+
+	strcpy(buf, dir_path);
+	strcat(buf, "/");
+
+	dirp = opendir(dir_path);
+	if (!dirp) {
+		if (errno == ENOENT)
+			return -1;
+		return 1;
+	}
+
+	while ((p_dirent = readdir(dirp))) {
+		struct stat st;
+
+		if (strcmp(p_dirent->d_name, "..") == 0
+			|| strcmp(p_dirent->d_name, ".") == 0)
+			continue;
+
+		buf[strlen(dir_path) + 1] = '\0';
+		strcat(buf, p_dirent->d_name);
+
+		if (stat(buf, &st)) {
+			log_error("Unable to get size of '%s' in directory '%s': %s (%d)",
+				buf, dir_path, strerror(errno), errno);
+			ret = 1;
+			break;
+		}
+
+		if (S_ISREG(st.st_mode)) {
+			*dir_size += st.st_size;
+		} else {
+			unsigned long long s;
+
+			if (get_directory_size(buf, &s) != 0) {
+				ret = 1;
+				break;
+			}
+			*dir_size += s;
+		}
+	}
+	closedir(dirp);
+
+	if (ret)
+		*dir_size = 0L;
+
+	return ret;
 }
 
 int crc32file(char const *const path, uint32_t *crc)

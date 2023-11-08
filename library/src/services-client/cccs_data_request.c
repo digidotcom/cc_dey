@@ -240,8 +240,12 @@ static cccs_comm_error_t send_data_request_data(dreq_action_type_t type, int por
 	cccs_comm_error_t ret;
 	int fd = -1;
 	char *type_tag = NULL;
-
-	resp->hint = NULL;
+	cccs_srv_resp_t cccs_resp = {
+		.srv_err = 0,
+		.ccapi_err = 0,
+		.cccs_err = 0,
+		.hint = NULL
+	};
 
 	switch (type) {
 		case REQ_KEY_REGISTER_DR:
@@ -253,9 +257,7 @@ static cccs_comm_error_t send_data_request_data(dreq_action_type_t type, int por
 		default:
 			log_dr_error("Unknown data request action '%d'", type);
 			ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-			resp->code = ret;
-
-			return ret;
+			goto done;
 	}
 
 	type_tag = req_action_type_tags[type];
@@ -264,9 +266,7 @@ static cccs_comm_error_t send_data_request_data(dreq_action_type_t type, int por
 	if (fd < 0) {
 		log_dr_error("%s", "Unable to connect to CCCS daemon");
 		ret = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
-		resp->code = ret;
-
-		return ret;
+		goto done;
 	}
 
 	if (write_string(fd, type_tag)		/* The request type */
@@ -278,12 +278,14 @@ static cccs_comm_error_t send_data_request_data(dreq_action_type_t type, int por
 			target, strerror(errno), errno);
 		ret = CCCS_SEND_ERROR_BAD_RESPONSE;
 		resp->code = ret;
-		goto done;
+	} else {
+		ret = parse_cccsd_response(fd, &cccs_resp, timeout);
 	}
 
-	ret = parse_cccsd_response(fd, resp, timeout);
-done:
 	close(fd);
+done:
+	resp->code = cccs_resp.cccs_err;
+	resp->hint = cccs_resp.hint;
 
 	return ret;
 }

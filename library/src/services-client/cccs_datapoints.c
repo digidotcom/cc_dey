@@ -30,11 +30,11 @@
 #include "ccapi/ccapi_datapoints.h"
 
 #include "_cccs_utils.h"
+#include "_cc_datapoints.h"
 #include "cc_logging.h"
 #include "cc_utils.h"
 #include "cccs_datapoints.h"
 #include "cccs_services.h"
-#include "dp_csv_generator.h"
 #include "service_common.h"
 #include "services_util.h"
 #include "_utils.h"
@@ -72,37 +72,6 @@
  */
 #define log_dp_error(format, ...)					\
 	log_error("%s " format, SERVICE_TAG, __VA_ARGS__)
-
-typedef enum {
-	CCCS_DP_ARG_DATA_INT32,
-	CCCS_DP_ARG_DATA_INT64,
-	CCCS_DP_ARG_DATA_FLOAT,
-	CCCS_DP_ARG_DATA_DOUBLE,
-	CCCS_DP_ARG_DATA_STRING,
-	CCCS_DP_ARG_DATA_JSON,
-	CCCS_DP_ARG_DATA_GEOJSON,
-	CCCS_DP_ARG_TS_EPOCH,
-	CCCS_DP_ARG_TS_EPOCH_MS,
-	CCCS_DP_ARG_TS_ISO8601,
-	CCCS_DP_ARG_LOCATION,
-	CCCS_DP_ARG_QUALITY,
-	CCCS_DP_ARG_INVALID
-} cccs_dp_argument_t;
-
-typedef struct cccs_dp_data_stream {
-	connector_data_stream_t *ccfsm_data_stream;
-	struct {
-		cccs_dp_argument_t *list;
-		unsigned int count;
-	} arguments;
-	struct cccs_dp_data_stream *next;
-} cccs_dp_data_stream_t;
-
-typedef struct ccapi_dp_collection {
-	cccs_dp_data_stream_t *cccs_data_stream_list;
-	uint32_t dp_count;
-	void * lock;
-} cccs_dp_collection_t;
 
 typedef union {
 	struct {
@@ -187,6 +156,12 @@ static cccs_comm_error_t send_dp_data(upload_datapoint_file_t type, cccs_dp_data
 {
 	cccs_comm_error_t ret = CCCS_SEND_ERROR_NONE;
 	int fd = -1;
+	cccs_srv_resp_t cccs_resp = {
+		.srv_err = 0,
+		.ccapi_err = 0,
+		.cccs_err = 0,
+		.hint = NULL
+	};
 
 	if (type != upload_datapoint_file_metrics
 		&& type != upload_datapoint_file_path_metrics
@@ -194,12 +169,11 @@ static cccs_comm_error_t send_dp_data(upload_datapoint_file_t type, cccs_dp_data
 		&& type != upload_datapoint_file_metrics_binary) {
 		log_dp_error("%s", "Invalid upload type");
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-		resp->code = ret;
-
-		return ret;
+		goto done;
 	}
 
 	switch (type) {
+		/* CSV buffer */
 		case upload_datapoint_file_metrics:
 			if (!data.blob.data)
 				log_dp_error("%s", "Unable to upload NULL");
@@ -207,33 +181,29 @@ static cccs_comm_error_t send_dp_data(upload_datapoint_file_t type, cccs_dp_data
 				log_dp_error("%s", "Number of bytes to upload must be greater than 0");
 			if (!data.blob.data || !data.blob.length) {
 				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-				resp->code = ret;
-
-				return ret;
+				goto done;
 			}
 			break;
+		/* CSV file */
 		case upload_datapoint_file_path_metrics:
-			if (!data.file.path) {
+			if (!data.file.path || *data.file.path == '\0') {
 				log_dp_error("%s", "File path must be defined");
-
 				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-				resp->code = ret;
-
-				return ret;
+				goto done;
 			}
 			break;
+		/* File contents as binary data */
 		case upload_datapoint_file_path_binary:
-			if (!data.file.path)
+			if (!data.file.path || *data.file.path == '\0')
 				log_dp_error("%s", "File path must be defined");
 			if (!data.file.stream_id)
 				log_dp_error("%s", "Destination stream id must be defined");
 			if (!data.file.path || !data.file.stream_id) {
 				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-				resp->code = ret;
-
-				return ret;
+				goto done;
 			}
 			break;
+		/* Buffer as binary data point */
 		case upload_datapoint_file_metrics_binary:
 			if (!data.blob.data)
 				log_dp_error("%s", "Unable to upload NULL");
@@ -243,9 +213,7 @@ static cccs_comm_error_t send_dp_data(upload_datapoint_file_t type, cccs_dp_data
 				log_dp_error("%s", "Destination stream id must be defined");
 			if (!data.blob.data || !data.blob.length || !data.blob.stream_id) {
 				ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
-				resp->code = ret;
-
-				return ret;
+				goto done;
 			}
 			break;
 		default:
@@ -258,21 +226,34 @@ static cccs_comm_error_t send_dp_data(upload_datapoint_file_t type, cccs_dp_data
 	fd = connect_cccsd();
 	if (fd < 0) {
 		ret = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
-		resp->code = ret;
-
-		return ret;
-	}
-
-	ret = send_dp_data_type(fd, type, data);
-	if (ret != CCCS_SEND_ERROR_NONE) {
-		resp->code = ret;
 		goto done;
 	}
 
-	ret = parse_cccsd_response(fd, resp, timeout);
+	ret = send_dp_data_type(fd, type, data);
+	if (ret == CCCS_SEND_ERROR_NONE)
+		ret = parse_cccsd_response(fd, &cccs_resp, timeout);
 
-done:
 	close(fd);
+done:
+	resp->hint = cccs_resp.hint;
+	resp->code = 0;
+
+	/* cccs_resp.cccs_err   ---> Error while reading command or storing data points */
+	switch (cccs_resp.cccs_err) {
+		case CCCS_SEND_ERROR_NONE:
+			break;
+		/* cccs_resp.ccapi_err  ---> Error while sending data points/error from DRM */
+		case CCCS_SEND_ERROR_CCAPI_ERROR:
+			resp->code = cccs_resp.ccapi_err;
+			break;
+		/* cccs_resp.srv_err    ---> Error from DRM */
+		case CCCS_SEND_ERROR_SRV_ERROR:
+			resp->code = cccs_resp.srv_err;
+			break;
+		default:
+			resp->code = cccs_resp.cccs_err;
+			break;
+	}
 
 	return ret;
 }
@@ -292,53 +273,6 @@ cccs_comm_error_t cccs_send_dp_csv_file(const char *path, unsigned long const ti
 		log_dp_debug("Data points in '%s' uploaded", path);
 
 	return ret;
-}
-
-/*
- * dp_generate_csv() - Generate the CSV contents in memory to send to the daemon
- *
- * @collection:	Data point collection to send.
- * @buf_info:	The buffer with the generated CSV.
- *
- * Buffer contains the result of the operation. It must be freed.
- *
- * Return: The size of the CSV buffer, -1 if error.
- */
-static size_t dp_generate_csv(cccs_dp_collection_t * const collection, buffer_info_t *buf_info)
-{
-	csv_process_data_t process_data;
-
-	process_data.current_csv_field = csv_data;
-	process_data.current_data_stream = collection->cccs_data_stream_list->ccfsm_data_stream;
-	process_data.current_data_point = collection->cccs_data_stream_list->ccfsm_data_stream->point;
-	process_data.data.init = false;
-
-	buf_info->bytes_written = 0;
-	buf_info->bytes_available = 0;
-
-	buf_info->buffer = calloc(BUFSIZ, sizeof(*buf_info->buffer));
-	if (!buf_info->buffer) {
-		log_dp_error("Unable to generate data to send to CCCSD: %s", "Out of memory");
-		return -1;
-	}
-	buf_info->bytes_available = BUFSIZ;
-
-	return generate_dp_csv(&process_data, buf_info);
-}
-
-static void chain_collection_ccfsm_data_streams(cccs_dp_collection_t * const collection)
-{
-	cccs_dp_data_stream_t *current_ds = collection->cccs_data_stream_list;
-
-	while (current_ds != NULL) {
-		connector_data_stream_t *const ccfsm_ds = current_ds->ccfsm_data_stream;
-		cccs_dp_data_stream_t *const next_ds = current_ds->next;
-
-		if (next_ds != NULL)
-			ccfsm_ds->next = next_ds->ccfsm_data_stream;
-
-		current_ds = current_ds->next;
-	}
 }
 
 /*
@@ -383,53 +317,6 @@ static void dp_free_data_point(connector_data_point_t * data_point, connector_da
 }
 
 /*
- * dp_free_data_points_in_data_stream() - Free all data points in data stream
- *
- * @data_stream:	Data stream to free.
- *
- * Return: Number of freed data points.
- */
-static unsigned int dp_free_data_points_in_data_stream(connector_data_stream_t * data_stream)
-{
-	connector_data_point_t * data_point = data_stream->point;
-	unsigned int dp_count = 0;
-
-	while (data_point != NULL) {
-		connector_data_point_t * const next_point = data_point->next;
-
-		dp_free_data_point(data_point, data_stream->type);
-
-		data_point = next_point;
-		dp_count++;
-	}
-
-	return dp_count;
-}
-
-/*
- * dp_free_data_points_from_collection() - Free data points in the provided collection
- *
- * @collection:	The data point collection with data points to free.
- */
-static void dp_free_data_points_from_collection(cccs_dp_collection_t * const collection)
-{
-	cccs_dp_data_stream_t *current_ds = collection->cccs_data_stream_list;
-
-	while (current_ds != NULL) {
-		connector_data_stream_t * const ccfsm_ds = current_ds->ccfsm_data_stream;
-		cccs_dp_data_stream_t const * const next_ds = current_ds->next;
-
-		if (next_ds != NULL)
-			ccfsm_ds->next = next_ds->ccfsm_data_stream;
-
-		dp_free_data_points_in_data_stream(ccfsm_ds);
-		ccfsm_ds->point = NULL;
-		current_ds = current_ds->next;
-	}
-	collection->dp_count = 0;
-}
-
-/*
  * dp_send_collection() - Send data point collection to CCCS daemon
  *
  * @collection:	Data point collection to send.
@@ -448,6 +335,7 @@ static cccs_comm_error_t dp_send_collection(cccs_dp_collection_t * const collect
 	cccs_comm_error_t ret = CCCS_SEND_ERROR_NONE;
 	bool collection_lock_acquired = false;
 	buffer_info_t buf_info;
+	unsigned int dp_to_rm;
 
 	resp->hint = NULL;
 
@@ -470,24 +358,22 @@ static cccs_comm_error_t dp_send_collection(cccs_dp_collection_t * const collect
 	}
 	collection_lock_acquired = true;
 
-	chain_collection_ccfsm_data_streams(collection);
-
-	if (dp_generate_csv(collection, &buf_info) > 0) {
+	if (dp_generate_csv_from_collection(collection, &buf_info, DP_MAX_NUMBER_PER_REQUEST, &dp_to_rm) > 0) {
 		cccs_dp_data_t data_to_send = {
 			.blob.data = buf_info.buffer,
 			.blob.length = buf_info.bytes_written,
 		};
 
 		ret = send_dp_data(upload_datapoint_file_metrics, data_to_send, timeout, resp);
+		if (ret == CCCS_SEND_ERROR_NONE || resp->code != CCCS_SEND_ERROR_UNABLE_TO_STORE_DP)
+			/* Remove only sent or stored data points from collection */
+			dp_remove_from_collection(collection, dp_to_rm);
 	} else {
 		ret = CCCS_SEND_ERROR_INVALID_ARGUMENT;
 		resp->code = ret;
 	}
 
 	free(buf_info.buffer);
-
-	if (ret == CCCS_SEND_ERROR_NONE)
-		dp_free_data_points_from_collection(collection);
 
 	if (collection_lock_acquired && lock_release(collection->lock) != 0) {
 		if (ret == CCCS_SEND_ERROR_NONE)

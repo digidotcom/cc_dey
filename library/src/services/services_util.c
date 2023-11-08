@@ -31,8 +31,8 @@
  * This module encapsulates the local tcp/ip communication between cc_dey and
  * processes that use DRM services via the connector.
  *
- * Messages are composed of a sequence of values that are serialised into the
- * stream and deserialised by the receiver.
+ * Messages are composed of a sequence of values that are serialized into the
+ * stream and de-serialized by the receiver.
  *
  * There are only three value basic types supported at this point in time:
  *
@@ -42,18 +42,18 @@
  *
  * The current encoding targets the following goals:
  *
- * 	* Easy for a scripted client (eg a Bash script) to compose and parse. No
+ * 	* Easy for a scripted client (e.g. a Bash script) to compose and parse. No
  * 	  endianess considerations, values terminated by new line '\n' characters.
  *
- * 	* Serialised value boundaries are verified so that loss of stream
- * 	  synchronisation is detected and doesn't cause mis-interpretation of
- * 	  serialised data.
+ * 	* Serialized value boundaries are verified so that loss of stream
+ * 	  synchronization is detected and doesn't cause miss-interpretation of
+ * 	  serialized data.
  *
- * 	* The receiver can verify that the data type of any serialised value is
+ * 	* The receiver can verify that the data type of any serialized value is
  * 	  exactly what was expected rather then relying on some implicit contract
  * 	  between sender and receiver.
  *
- * The encoding schema has a hint of the PHP serialisation format:
+ * The encoding schema has a hint of the PHP serialization format:
  *
  * 	<serised value> <=	<type><separator><value><terminator>
  * 				--	where <type> is a single character
@@ -92,7 +92,7 @@
  * provided by this module.
  */
 
-/* Serialisation Protocol constants */
+/* Serialization Protocol constants */
 
 #define	TERMINATOR	'\n'
 #define SEPARATOR	':'
@@ -286,7 +286,8 @@ static int send_amt(int sock_fd, const void *buffer, size_t length)
 	ssize_t chunk_sent;
 
 	while (length > 0) {
-		chunk_sent = send(sock_fd, p, length, 0);
+		/* Do not send SIGPIPE when the other end breaks the connection */
+		chunk_sent = send(sock_fd, p, length, MSG_NOSIGNAL);
 		if (chunk_sent <= 0) {
 			if (errno == EINTR)
 				continue;
@@ -319,10 +320,13 @@ int send_error(int fd, const char *msg)
 	return -1;
 }
 
-int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue)
+int send_error_codes(int fd, const char *msg, const uint32_t srv_error,
+	const uint32_t ccapi_error, const uint32_t cccs_error)
 {
 	if (write_uint32(fd, RESP_ERRORCODE) == 0
-		&& write_uint32(fd, errorvalue) == 0
+		&& write_uint32(fd, srv_error) == 0
+		&& write_uint32(fd, ccapi_error) == 0
+		&& write_uint32(fd, cccs_error) == 0
 		&& write_blob(fd, msg, strlen(msg)) == 0) {
 			return send_end_of_response(fd);
 	}

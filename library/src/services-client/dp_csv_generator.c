@@ -16,7 +16,6 @@
  * Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
  * ===========================================================================
  */
-
 #include "dp_csv_generator.h"
 
 static bool terminate_csv_field(csv_process_data_t * const csv_process_data, buffer_info_t * const buffer_info, csv_field_t const next_field)
@@ -270,9 +269,11 @@ static bool process_csv_time(csv_process_data_t * const csv_process_data, buffer
 	return done_processing;
 }
 
-size_t generate_dp_csv(csv_process_data_t * const csv_process_data, buffer_info_t * const buffer_info)
+size_t generate_dp_csv(csv_process_data_t * const csv_process_data, buffer_info_t * const buffer_info, unsigned int max_dp, unsigned int *n_included)
 {
-	while (csv_process_data->current_data_point != NULL) {
+	unsigned int n = 0;
+
+	while (csv_process_data->current_data_point != NULL && (max_dp == 0 /* 0 means all dp */ || n < max_dp)) {
 		connector_data_point_t const * const current_data_point = csv_process_data->current_data_point;
 		connector_data_stream_t const * const current_data_stream = csv_process_data->current_data_stream;
 
@@ -399,7 +400,9 @@ size_t generate_dp_csv(csv_process_data_t * const csv_process_data, buffer_info_
 			{
 				if (!put_character('\n', buffer_info))
 					goto error;
-				
+
+				n += 1;
+
 				csv_process_data->current_data_point = current_data_point->next;
 
 				if (csv_process_data->current_data_point == NULL) {
@@ -416,6 +419,9 @@ size_t generate_dp_csv(csv_process_data_t * const csv_process_data, buffer_info_
 		}
 	}
 
+	if (n_included)
+		*n_included = n;
+
 	return buffer_info->bytes_written;
 
 error:
@@ -423,6 +429,8 @@ error:
 	buffer_info->buffer = NULL;
 	buffer_info->bytes_available = 0;
 	buffer_info->bytes_written = -1;
+	if (n_included)
+		*n_included = 0;
 
 	return buffer_info->bytes_written;
 }

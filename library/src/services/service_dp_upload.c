@@ -17,14 +17,17 @@
  * ===========================================================================
  */
 
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
 
 #include "ccapi/ccapi.h"
+#include "_cc_datapoints.h"
 #include "cc_logging.h"
 #include "cc_error_msg.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
+#include "services-client/cccs_definitions.h"
+#include "_utils.h"
 
 static ccapi_send_error_t upload_datapoint_file(uint32_t type,
 	char const * const buff, size_t size,
@@ -45,7 +48,7 @@ static ccapi_send_error_t upload_datapoint_file(uint32_t type,
 			break;
 		case upload_datapoint_file_path_metrics:
 			send_error = ccapi_send_file_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
-				buff, cloud_path, file_type,
+				buff /* Local path */, cloud_path, file_type,
 				CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
 			break;
 		default:
@@ -94,10 +97,8 @@ static ccapi_dp_b_error_t upload_binary_datapoint(uint32_t type,
 
 int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 {
-	UNUSED_ARGUMENT(cc_cfg);
-
 	while (1) {
-		int ret;
+		int ret, cccs_err = 0;
 		uint32_t type;
 		size_t size;
 		void *blob = NULL;
@@ -109,7 +110,10 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 		};
 		char hint[256];
 		ccapi_string_info_t hint_string_info;
-		ccapi_optional_uint8_t err_from_server;
+		ccapi_optional_uint8_t err_from_server = {
+			.known = false,
+			.value = 0
+		};
 
 		hint[0] = '\0';
 		hint_string_info.length = sizeof hint;
@@ -118,9 +122,11 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 		/* Read the record type from the client message */
 		ret = read_uint32(fd, &type, &timeout);
 		if (ret == -ETIMEDOUT)
-			send_error(fd, "Timeout reading data type");
+			send_error_codes(fd, "Timeout reading data type",
+				0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
 		else if (ret)
-			send_error(fd, "Failed to read data type");
+			send_error_codes(fd, "Failed to read data type",
+				0, 0, CCCS_SEND_ERROR_READ_ERROR);
 
 		if (ret)
 			return 1;
@@ -133,7 +139,8 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 			&& type != upload_datapoint_file_path_metrics
 			&& type != upload_datapoint_file_path_binary
 			&& type != upload_datapoint_file_metrics_binary) {
-			send_error(fd, "Invalid data point type");
+			send_error_codes(fd, "Invalid data type",
+				0, 0, CCCS_SEND_ERROR_BAD_RESPONSE);
 
 			return 1;
 		}
@@ -145,14 +152,17 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 				/* Read data point(s) file path */
 				ret = read_string(fd, &file_path, NULL, &timeout);
 				if (ret == -ETIMEDOUT)
-					send_error(fd, "Timeout reading data point file path");
+					send_error_codes(fd, "Timeout reading data point file path",
+						0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
 				else if (ret == -ENOMEM)
-					send_error(fd, "Failed to read data point file path: Out of memory");
+					send_error_codes(fd, "Failed to read data point file path: Out of memory",
+						0, 0, CCCS_SEND_ERROR_OUT_OF_MEMORY);
 				else if (ret == -EPIPE)
 					/* Do not send anything */
 					;
 				else if (ret)
-					send_error(fd, "Failed to read data point file path");
+					send_error_codes(fd, "Failed to read data point file path",
+						0, 0, CCCS_SEND_ERROR_READ_ERROR);
 
 				if (ret)
 					return 1;
@@ -165,11 +175,17 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 				/* Read the data point(s) blob of data from the client process */
 				ret = read_blob(fd, &blob, &size, &timeout);
 				if (ret == -ETIMEDOUT)
-					send_error(fd, "Timeout reading data point data");
+					send_error_codes(fd, "Timeout reading data point data",
+						0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
 				else if (ret == -ENOMEM)
-					send_error(fd, "Failed to read data point data: Out of memory");
+					send_error_codes(fd, "Failed to read data point data: Out of memory",
+						0, 0, CCCS_SEND_ERROR_OUT_OF_MEMORY);
+				else if (ret == -EPIPE)
+					/* Do not send anything */
+					;
 				else if (ret)
-					send_error(fd, "Failed to read data point data");
+					send_error_codes(fd, "Failed to read data point data",
+						0, 0, CCCS_SEND_ERROR_READ_ERROR);
 
 				if (ret)
 					return 1;
@@ -187,14 +203,17 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 				/* Read the data stream name */
 				ret = read_string(fd, &stream_id, NULL, &timeout);
 				if (ret == -ETIMEDOUT)
-					send_error(fd, "Timeout reading data point stream id");
+					send_error_codes(fd, "Timeout reading data point stream id",
+						0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
 				else if (ret == -ENOMEM)
-					send_error(fd, "Failed to read data point stream id: Out of memory");
+					send_error_codes(fd, "Failed to read data point stream id: Out of memory",
+						0, 0, CCCS_SEND_ERROR_OUT_OF_MEMORY);
 				else if (ret == -EPIPE)
 					/* Do not send anything */
 					;
 				else if (ret)
-					send_error(fd, "Failed to read data point stream id");
+					send_error_codes(fd, "Failed to read data point stream id",
+						0, 0, CCCS_SEND_ERROR_READ_ERROR);
 
 				if (ret) {
 					free(blob);
@@ -213,24 +232,36 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 		switch (type) {
 			case upload_datapoint_file_path_metrics:
 				/* Upload the file to the cloud */
-				ret = upload_datapoint_file(type, file_path, 0, cloud_path, &hint_string_info, &err_from_server);
+				ret = upload_datapoint_file(type, file_path, 0,
+					cloud_path, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, file_path, 0, NULL,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
 				err_msg = to_send_error_msg(ret);
 				break;
 			case upload_datapoint_file_metrics_binary:
-				/* Upload the file to the cloud */
-				ret = upload_binary_datapoint(type, blob, size, stream_id, &hint_string_info, &err_from_server);
+				/* Upload the binary blob to the cloud */
+				ret = upload_binary_datapoint(type, blob, size,
+					stream_id, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, blob, size, stream_id,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
 				err_msg = dp_b_to_send_error_msg(ret);
 				break;
 			case upload_datapoint_file_path_binary:
-				/* Upload the file to the cloud */
-				ret = upload_binary_datapoint(type, file_path, 0, stream_id, &hint_string_info, &err_from_server);
+				/* Upload the binary file to the cloud */
+				ret = upload_binary_datapoint(type, file_path, 0,
+					stream_id, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, file_path, 0, stream_id,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
 				err_msg = dp_b_to_send_error_msg(ret);
 				break;
 			case upload_datapoint_file_events:
 			case upload_datapoint_file_metrics:
 			default:
 				/* Upload the blob to the cloud */
-				ret = upload_datapoint_file(type, blob, size, cloud_path, &hint_string_info, &err_from_server);
+				ret = upload_datapoint_file(type, blob, size,
+					cloud_path, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, blob, size, NULL,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
 				err_msg = to_send_error_msg(ret);
 				break;
 		}
@@ -239,7 +270,7 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 		free(file_path);
 		free(stream_id);
 
-		if (ret) {
+		if (ret || cccs_err) {
 			char *err_msg_with_hint = NULL;
 
 			if (!err_from_server.known) {
@@ -247,17 +278,20 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 				err_from_server.value = 255;
 			}
 
+			if (cccs_err)
+				cccs_err = CCCS_SEND_ERROR_UNABLE_TO_STORE_DP;
+
 			if ((hint[0] != '\0') && (asprintf(&err_msg_with_hint, "%s, %s", err_msg, hint) > 0)) {
-				send_error_with_code(fd, err_msg_with_hint, err_from_server.value);
+				send_error_codes(fd, err_msg_with_hint, err_from_server.value, ret, cccs_err);
 				free(err_msg_with_hint);
 			} else {
-				send_error_with_code(fd, err_msg, err_from_server.value);
+				send_error_codes(fd, err_msg, err_from_server.value, ret, cccs_err);
 			}
 		} else {
 			send_ok(fd);
 		}
 
-		if (ret != 0)
+		if (ret != 0 || cccs_err != 0)
 			return 1;
 	}
 

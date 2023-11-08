@@ -50,6 +50,7 @@ int write_blob(int fd, const void *data, size_t data_length);
 
 int send_ok(int fd);
 int send_error(int fd, const char *msg);
-int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue);
+int send_error_codes(int fd, const char *msg, const uint32_t srv_error,
+	const uint32_t ccapi_error, const uint32_t cccs_error);
 
 #endif /* SERVICES_UTIL_H */
