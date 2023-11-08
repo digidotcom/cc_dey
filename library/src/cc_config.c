@@ -68,13 +68,18 @@
 
 #define SETTING_FW_DOWNLOAD_PATH		"firmware_download_path"
 
+#define SETTING_DATA_BACKLOG_PATH		"data_backlog_path"
+#define SETTING_DATA_BACKLOG_SIZE		"data_backlog_size"
+#define SETTING_DATA_BACKLOG_SIZE_MIN		0
+#define SETTING_DATA_BACKLOG_SIZE_MAX		5000
+
 #define SETTING_SYS_MON_METRICS			"system_monitor_metrics"
 #define SETTING_SYS_MON_SAMPLE_RATE		"system_monitor_sample_rate"
 #define SETTING_SYS_MON_SAMPLE_RATE_MIN		1
 #define SETTING_SYS_MON_SAMPLE_RATE_MAX		365 * 24 * 60 * 60UL /* A year */
 #define SETTING_SYS_MON_UPLOAD_SIZE		"system_monitor_upload_samples_size"
 #define SETTING_SYS_MON_UPLOAD_SIZE_MIN		1
-#define SETTING_SYS_MON_UPLOAD_SIZE_MAX		250
+#define SETTING_SYS_MON_UPLOAD_SIZE_MAX		DP_MAX_NUMBER_PER_REQUEST
 
 #define SETTING_USE_STATIC_LOCATION		"static_location"
 #define SETTING_LATITUDE			"latitude"
@@ -459,6 +464,19 @@ static int cfg_check_wait_times(cfg_t *cfg, cfg_opt_t *opt)
 }
 
 /*
+ * cfg_check_data_backlog_size() - Check data backlog size is in range
+ *
+ * @cfg:	The section where the option is defined.
+ * @opt:	The option to check.
+ *
+ * @Return: 0 on success, any other value otherwise.
+ */
+static int cfg_check_data_backlog_size(cfg_t *cfg, cfg_opt_t *opt)
+{
+	return cfg_check_range(cfg, opt, SETTING_DATA_BACKLOG_SIZE_MIN, SETTING_DATA_BACKLOG_SIZE_MAX);
+}
+
+/*
  * cfg_check_sys_mon_sample_rate() - Check system monitor sample rate value is between 1s and a year
  *
  * @cfg:	The section where the option is defined.
@@ -472,7 +490,7 @@ static int cfg_check_sys_mon_sample_rate(cfg_t *cfg, cfg_opt_t *opt)
 }
 
 /*
- * cfg_check_sys_mon_upload_size() - Check system monitor samples to store value is between 1 and 250
+ * cfg_check_sys_mon_upload_size() - Check system monitor samples to store value is in range
  *
  * @cfg:	The section where the option is defined.
  * @opt:	The option to check.
@@ -568,14 +586,14 @@ static int cfg_check_location(cfg_t *cfg, cfg_opt_t *opt)
 }
 
 /*
- * cfg_check_fw_download_path() - Check firmware download path is an existing dir
+ * cfg_check_directory_exists() - Check a path is an existing dir
  *
  * @cfg:	The section were the option is defined.
  * @opt:	The option to check.
  *
  * @Return: 0 on success, any other value otherwise.
  */
-static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
+static int cfg_check_directory_exists(cfg_t *cfg, cfg_opt_t *opt)
 {
 	char *val = cfg_opt_getnstr(opt, 0);
 
@@ -592,6 +610,24 @@ static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
 	}
 
 	return 0;
+}
+
+/*
+ * cfg_check_directory_exists_or_empty() - Check a path is an existing dir or it is empty
+ *
+ * @cfg:	The section were the option is defined.
+ * @opt:	The option to check.
+ *
+ * @Return: 0 on success, any other value otherwise.
+ */
+static int cfg_check_directory_exists_or_empty(cfg_t *cfg, cfg_opt_t *opt)
+{
+	char *val = cfg_opt_getnstr(opt, 0);
+
+	if (val == NULL || strlen(val) == 0)
+		return 0;
+
+	return cfg_check_directory_exists(cfg, opt);
 }
 
 /**
@@ -653,7 +689,13 @@ static int check_cfg(cfg_t *cfg)
 		return -1;
 
 	/* Check services settings. */
-	if (cfg_check_fw_download_path(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
+	if (cfg_check_directory_exists(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
+		return -1;
+
+	/* Check data service settings. */
+	if (cfg_check_directory_exists_or_empty(cfg, cfg_getopt(cfg, SETTING_DATA_BACKLOG_PATH)) != 0)
+		return -1;
+	if (cfg_check_data_backlog_size(cfg, cfg_getopt(cfg, SETTING_DATA_BACKLOG_SIZE)) != 0)
 		return -1;
 
 	/* Check system monitor settings. */
@@ -827,6 +869,10 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 	/* Fill On the fly setting */
 	cc_cfg->on_the_fly = cfg_getbool(cfg, SETTING_ON_THE_FLY);
 
+	/* Fill data service settings */
+	cc_cfg->data_backlog_path = cfg_getstr(cfg, SETTING_DATA_BACKLOG_PATH);
+	cc_cfg->data_backlog_kb = cfg_getint(cfg, SETTING_DATA_BACKLOG_SIZE);
+
 	/* Fill system monitor settings. */
 	cc_cfg->sys_mon_sample_rate = cfg_getint(cfg, SETTING_SYS_MON_SAMPLE_RATE);
 	cc_cfg->sys_mon_num_samples_upload = cfg_getint(cfg, SETTING_SYS_MON_UPLOAD_SIZE);
@@ -902,6 +948,10 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		/* File system settings. */
 		CFG_SEC(	GROUP_VIRTUAL_DIRS,		virtual_dirs_opts,		CFGF_NONE),
 
+		/* Data service settings. */
+		CFG_STR(	SETTING_DATA_BACKLOG_PATH,	"/tmp",				CFGF_NONE),
+		CFG_INT(	SETTING_DATA_BACKLOG_SIZE,	1024,				CFGF_NONE),
+
 		/* System monitor settings. */
 		CFG_BOOL(	ENABLE_SYSTEM_MONITOR,		cfg_true,			CFGF_NONE),
 		CFG_INT(	SETTING_SYS_MON_SAMPLE_RATE,	5,				CFGF_NONE),
@@ -955,7 +1005,9 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_RX, cfg_check_keepalive_rx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_TX, cfg_check_keepalive_tx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_WAIT_TIMES, cfg_check_wait_times);
-	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_fw_download_path);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_directory_exists);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_PATH, cfg_check_directory_exists_or_empty);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_SIZE, cfg_check_data_backlog_size);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_SAMPLE_RATE,
 			cfg_check_sys_mon_sample_rate);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_UPLOAD_SIZE,
@@ -1018,6 +1070,9 @@ static void free_cc_cfg(cc_cfg_t *cc_cfg)
 	cc_cfg->n_vdirs = 0;
 
 	cc_cfg->fw_download_path = NULL;
+
+	cc_cfg->data_backlog_path = NULL;
+	cc_cfg->data_backlog_kb = 0;
 
 	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++)
 		cc_cfg->sys_mon_metrics[i] = NULL;
@@ -1093,6 +1148,10 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	cfg_setstr(cfg, SETTING_FW_DOWNLOAD_PATH, cc_cfg->fw_download_path);
 	/* TODO: Set virtual directories */
 
+	/* Fill data service settings. */
+	cfg_setstr(cfg, SETTING_DATA_BACKLOG_PATH, cc_cfg->data_backlog_path);
+	cfg_setint(cfg, SETTING_DATA_BACKLOG_SIZE, cc_cfg->data_backlog_kb);
+
 	/* Fill system monitor settings. */
 	cfg_setint(cfg, SETTING_SYS_MON_SAMPLE_RATE, cc_cfg->sys_mon_sample_rate);
 	cfg_setint(cfg, SETTING_SYS_MON_UPLOAD_SIZE, cc_cfg->sys_mon_num_samples_upload);
@@ -1116,7 +1175,7 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 		default:
 			cfg_setstr(cfg, SETTING_LOG_LEVEL, LOG_LEVEL_ERROR_STR);
 			break;
-		}
+	}
 	cfg_setbool(cfg, SETTING_LOG_CONSOLE, (cfg_bool_t) cc_cfg->log_console);
 
 	return 0;

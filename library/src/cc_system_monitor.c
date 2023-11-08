@@ -1120,8 +1120,11 @@ cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
 	pthread_attr_t attr;
 	int error;
 
-	if (!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
+	/* Do not continue if system monitor feature and store backlog feature are disabled */
+	if ((!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
+		&& (cc_cfg->data_backlog_kb == 0 || !cc_cfg->data_backlog_path || strlen(cc_cfg->data_backlog_path) == 0)) {
 		return CC_SYS_MON_ERROR_NONE;
+	}
 
 	if (dp_thread_valid)
 		return CC_SYS_MON_ERROR_NONE;

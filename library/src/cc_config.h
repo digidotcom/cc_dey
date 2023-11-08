@@ -65,6 +65,8 @@ typedef struct {
  * @vdirs:				List of virtual directories
  * @n_vdirs:				Number of virtual directories in the list
  * @fw_download_path			Absolute path to download firmware files
+ * @data_backlog_path:			Absolute path to store data backlog when no connection
+ * @data_backlog_kb:			Maximum size (kb) of the data backlog
  * @sys_mon_sample_rate:		Frequency at which gather system information
  * @sys_mon_num_samples_upload:		Number of samples of each channel to gather before uploading
  * @sys_mon_metrics:			List of metrics and interfaces to measure and upload to Remote Manager
@@ -103,6 +105,9 @@ typedef struct {
 	unsigned int n_vdirs;
 
 	char *fw_download_path;
+
+	char *data_backlog_path;
+	uint32_t data_backlog_kb;
 
 	uint32_t sys_mon_sample_rate;
 	uint32_t sys_mon_num_samples_upload;

@@ -324,6 +324,9 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 		goto error;
 	}
 
+	if (!cc_cfg->data_backlog_path || strlen(cc_cfg->data_backlog_path) == 0 || cc_cfg->data_backlog_kb == 0)
+		log_warning("%s", "Disabled storage of system monitor and custom data");
+
 	ccapi_error = initialize_ccapi(cc_cfg);
 	switch(ccapi_error) {
 		case CCAPI_START_ERROR_NONE:
