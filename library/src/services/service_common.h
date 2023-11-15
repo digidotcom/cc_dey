@@ -23,6 +23,7 @@
 #define CONNECTOR_REQUEST_PORT		977
 
 #define REQ_TAG_DP_FILE_REQUEST		"upload_1_dp"
+#define REQ_TAG_MNT_REQUEST		"mnt_request"
 #define REQ_TAG_REGISTER_DR		"register_devicerequest"
 #define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
 #define REQ_TAG_REGISTER_DR_IPV4	"register_devicerequest_ipv4"

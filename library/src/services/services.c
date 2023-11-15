@@ -47,6 +47,10 @@ struct handler_t {
 		handle_datapoint_file_upload
 	},
 	{
+		REQ_TAG_MNT_REQUEST,
+		handle_maintenance_request
+	},
+	{
 		REQ_TAG_REGISTER_DR,
 		handle_register_data_request
 	},

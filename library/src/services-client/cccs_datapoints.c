@@ -779,3 +779,59 @@ cccs_dp_error_t cccs_dp_remove_older_data_point_from_streams(cccs_dp_collection_
 {
 	return (cccs_dp_error_t) ccapi_dp_remove_older_data_point_from_streams(collection);
 }
+
+cccs_comm_error_t cccs_set_maintenance_status(bool status, unsigned long const timeout, cccs_resp_t *resp)
+{
+	int fd = -1;
+	char *status_str = status ? "true" : "false";
+	cccs_comm_error_t ret;
+	cccs_srv_resp_t cccs_resp = {
+		.srv_err = 0,
+		.ccapi_err = 0,
+		.cccs_err = 0,
+		.hint = NULL
+	};
+
+	log_info("MNT: Setting maintenance to '%s'", status_str);
+
+	fd = connect_cccsd();
+	if (fd < 0) {
+		ret = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
+		goto done;
+	}
+
+	if (write_string(fd, REQ_TAG_MNT_REQUEST)	/* The request type */
+		|| write_uint32(fd, status ? 1 : 0)	/* Maintenance status */
+		|| write_uint32(fd, 0)) {		/* End of message */
+		log_error("MNT: Could not set maintenance to '%s': %s (%d)",
+			status_str, strerror(errno), errno);
+
+		ret = CCCS_SEND_ERROR_BAD_RESPONSE;
+	} else {
+		ret = parse_cccsd_response(fd, &cccs_resp, timeout);
+	}
+
+	close(fd);
+done:
+	resp->hint = cccs_resp.hint;
+	resp->code = 0;
+
+	/* cccs_resp.cccs_err   ---> Error while reading command */
+	switch (cccs_resp.cccs_err) {
+		case CCCS_SEND_ERROR_NONE:
+			break;
+		/* cccs_resp.ccapi_err  ---> Error while sending data points/error from DRM */
+		case CCCS_SEND_ERROR_CCAPI_ERROR:
+			resp->code = cccs_resp.ccapi_err;
+			break;
+		/* cccs_resp.srv_err    ---> Error from DRM */
+		case CCCS_SEND_ERROR_SRV_ERROR:
+			resp->code = cccs_resp.srv_err;
+			break;
+		default:
+			resp->code = cccs_resp.cccs_err;
+			break;
+	}
+
+	return ret;
+}

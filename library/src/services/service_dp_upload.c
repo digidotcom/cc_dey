@@ -29,6 +29,9 @@
 #include "services-client/cccs_definitions.h"
 #include "_utils.h"
 
+#define MNT_TAG				"MNT: "
+#define DP_MAINTENANCE_STREAM_ID	"management/events/in_maintenance_window"
+
 static ccapi_send_error_t upload_datapoint_file(uint32_t type,
 	char const * const buff, size_t size,
 	char const cloud_path[],
@@ -296,4 +299,118 @@ int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
 	}
 
 	return 0;
+}
+
+static ccapi_send_error_t send_datapoint_maintenance(int fd, bool status)
+{
+	char *status_str = status ? "true" : "false";
+	ccapi_dp_collection_handle_t c;
+	ccapi_dp_error_t dp_error;
+	buffer_info_t buf_info;
+	char dp_value[20];
+	ccapi_send_error_t ret = CCAPI_SEND_ERROR_NONE;
+	char hint[256];
+	ccapi_string_info_t hint_string_info;
+	ccapi_optional_uint8_t err_from_server = {
+		.known = false,
+		.value = 255
+	};
+
+	hint[0] = '\0';
+	hint_string_info.length = sizeof(hint);
+	hint_string_info.string = hint;
+
+	dp_error = ccapi_dp_create_collection(&c);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		goto error;
+
+	dp_error = ccapi_dp_add_data_stream_to_collection_extra(c,
+			DP_MAINTENANCE_STREAM_ID, CCAPI_DP_KEY_DATA_JSON,
+			"list", NULL);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		goto error;
+
+	sprintf(dp_value, "{\"status\": %s}", status_str);
+
+	dp_error = ccapi_dp_add(c, DP_MAINTENANCE_STREAM_ID, dp_value);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		goto error;
+
+	if (dp_generate_csv_from_collection(c, &buf_info, DP_MAX_NUMBER_PER_REQUEST, NULL) > 0) {
+		ret = upload_datapoint_file(upload_datapoint_file_metrics,
+			buf_info.buffer, buf_info.bytes_written,
+			"DataPoint/.csv", &hint_string_info, &err_from_server);
+		if (ret != CCAPI_SEND_ERROR_NONE)
+			log_error(MNT_TAG "Error setting maintenance status to '%s': %s (%d)",
+				status_str, to_send_error_msg(ret), ret);
+	} else {
+		log_error(MNT_TAG "Error setting maintenance status to '%s': Unable to generate data to send",
+			status_str);
+		ret = CCAPI_SEND_ERROR_INSUFFICIENT_MEMORY;
+	}
+
+error:
+	if (dp_error != CCAPI_DP_ERROR_NONE) {
+		log_error(MNT_TAG "Error setting maintenance status to '%s' (%d)",
+			status_str, dp_error);
+		ret = dp_error == CCAPI_DP_ERROR_INSUFFICIENT_MEMORY ? CCAPI_SEND_ERROR_INSUFFICIENT_MEMORY : CCAPI_SEND_ERROR_LOCK_FAILED;
+	}
+
+	if (ret != CCAPI_SEND_ERROR_NONE) {
+		char const *err_msg = to_send_error_msg(ret);
+		char *err_msg_with_hint = NULL;
+
+		if (!err_from_server.known) {
+			/* Use a sentinel value of 255 to indicate something went wrong */
+			err_from_server.value = 255;
+		}
+
+		if ((hint[0] != '\0') && (asprintf(&err_msg_with_hint, "%s, %s", err_msg, hint) > 0)) {
+			send_error_codes(fd, err_msg_with_hint, err_from_server.value, ret, 0);
+			free(err_msg_with_hint);
+		} else {
+			send_error_codes(fd, err_msg, err_from_server.value, ret, 0);
+		}
+	} else {
+		send_ok(fd);
+	}
+
+	ccapi_dp_destroy_collection(c);
+
+	return ret;
+}
+
+int handle_maintenance_request(int fd, const cc_cfg_t *const cc_cfg)
+{
+	int ret;
+	uint32_t mnt_status, end;
+	struct timeval timeout = {
+		.tv_sec = SOCKET_READ_TIMEOUT_SEC,
+		.tv_usec = 0
+	};
+
+	UNUSED_ARGUMENT(cc_cfg);
+
+	/* Read the maintenance status from the client message */
+	ret = read_uint32(fd, &mnt_status, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error_codes(fd, "Timeout reading maintenance status",
+			0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+	else if (ret)
+		send_error_codes(fd, "Failed to read maintenance status",
+			0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+	/* Read message end */
+	ret = read_uint32(fd, &end, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error_codes(fd, "Timeout reading message end",
+			0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+	else if (ret || end != 0)
+		send_error_codes(fd, "Failed to read message end",
+			0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+	if (ret)
+		return 1;
+
+	return send_datapoint_maintenance(fd, mnt_status);
 }
