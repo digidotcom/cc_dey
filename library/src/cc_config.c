@@ -953,10 +953,10 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		CFG_INT(	SETTING_DATA_BACKLOG_SIZE,	1024,				CFGF_NONE),
 
 		/* System monitor settings. */
-		CFG_BOOL(	ENABLE_SYSTEM_MONITOR,		cfg_true,			CFGF_NONE),
+		CFG_BOOL(	ENABLE_SYSTEM_MONITOR,		cfg_false,			CFGF_NONE),
 		CFG_INT(	SETTING_SYS_MON_SAMPLE_RATE,	5,				CFGF_NONE),
 		CFG_INT(	SETTING_SYS_MON_UPLOAD_SIZE,	10,				CFGF_NONE),
-		CFG_STR_LIST(	SETTING_SYS_MON_METRICS,	"{*}",				CFGF_NONE),
+		CFG_STR_LIST(	SETTING_SYS_MON_METRICS,	"{\"*\"}",			CFGF_NONE),
 
 		/* Static location settings */
 		CFG_BOOL(	SETTING_USE_STATIC_LOCATION,	cfg_true,			CFGF_NONE),
@@ -986,7 +986,6 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	if (!cc_cfg->_data) {
 		log_error("Failed initializing configuration file parser: %s (%d)",
 			strerror(errno), errno);
-		//free(data);
 		return -1;
 	}
 
