@@ -171,6 +171,7 @@ static void free_ccapi_start_struct(ccapi_start_t *ccapi_start)
 static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 {
 	uint8_t mac_address[6];
+	bool fw_update_enabled = cc_cfg->fw_download_path && strlen(cc_cfg->fw_download_path) > 0;
 	ccapi_start_t *start = calloc(1, sizeof(*start));
 
 	if (start == NULL) {
@@ -221,7 +222,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	}
 
 	/* Initialize firmware service. */
-	if (init_fw_service(cc_cfg->fw_version, &start->service.firmware) != 0)
+	if (init_fw_service(fw_update_enabled, cc_cfg->fw_version, &start->service.firmware) != 0)
 		goto error;
 
 	return start;

@@ -20,16 +20,19 @@
 #ifndef CC_FIRMWARE_UPDATE_H_
 #define CC_FIRMWARE_UPDATE_H_
 
+#include <stdbool.h>
+
 #include "ccapi/ccapi.h"
 
 /*
  * init_fw_service() - Initialization of firmware service
  *
+ * @enable:	True to enable the firmware service, false otherwise.
  * @fw_version:	The current firmware version.
  * @fw_service:	Struct to store the firmware service initialization.
  *
  * Returns: 0 on success, 1 otherwise.
  */
-int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_service);
+int init_fw_service(const bool enable, const char * const fw_version, ccapi_fw_service_t **fw_service);
 
 #endif /* CC_FIRMWARE_UPDATE_H_ */

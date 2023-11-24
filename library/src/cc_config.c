@@ -689,7 +689,7 @@ static int check_cfg(cfg_t *cfg)
 		return -1;
 
 	/* Check services settings. */
-	if (cfg_check_directory_exists(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
+	if (cfg_check_directory_exists_or_empty(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
 		return -1;
 
 	/* Check data service settings. */
@@ -942,7 +942,7 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 
 		/* Services settings. */
 		CFG_BOOL(	ENABLE_FS_SERVICE,		cfg_true,			CFGF_NONE),
-		CFG_STR(	SETTING_FW_DOWNLOAD_PATH,	NULL,				CFGF_NODEFAULT),
+		CFG_STR(	SETTING_FW_DOWNLOAD_PATH,	"",				CFGF_NONE),
 		CFG_BOOL(	SETTING_ON_THE_FLY,		cfg_false,			CFGF_NONE),
 
 		/* File system settings. */
@@ -1004,7 +1004,7 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_RX, cfg_check_keepalive_rx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_TX, cfg_check_keepalive_tx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_WAIT_TIMES, cfg_check_wait_times);
-	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_directory_exists);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_directory_exists_or_empty);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_PATH, cfg_check_directory_exists_or_empty);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_SIZE, cfg_check_data_backlog_size);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_SAMPLE_RATE,

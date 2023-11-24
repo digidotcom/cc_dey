@@ -1122,6 +1122,16 @@ static void *reboot_threaded(void *unused)
 
 /******************** CC firmware update callbacks ********************/
 
+static ccapi_fw_request_error_t firmware_request_reject_all_cb(unsigned int const target,
+		char const * const filename, size_t const total_size)
+{
+	UNUSED_ARGUMENT(target);
+	UNUSED_ARGUMENT(filename);
+	UNUSED_ARGUMENT(total_size);
+
+	return CCAPI_FW_REQUEST_ERROR_DOWNLOAD_CONFIGURED_TO_REJECT;
+}
+
 /*
  * firmware_request_cb() - Incoming firmware update request callback
  *
@@ -1457,7 +1467,7 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 	}
 }
 
-int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_service)
+int init_fw_service(const bool enable, const char * const fw_version, ccapi_fw_service_t **fw_service)
 {
 #if !defined(ENABLE_RECOVERY_UPDATE) || !defined(ENABLE_ONTHEFLY_UPDATE)
 	UNUSED_ARGUMENT(fw_version);
@@ -1465,58 +1475,89 @@ int init_fw_service(const char * const fw_version, ccapi_fw_service_t **fw_servi
 
 	return 0;
 #else /* !ENABLE_RECOVERY_UPDATE || !ENABLE_ONTHEFLY_UPDATE */
-	uint8_t v[4];
+	uint8_t v[4] = {0, 0, 0, 0};
 	ccapi_firmware_target_t *fw_list = NULL;
-	int len;
+	bool fw_supported = enable;
 
-	*fw_service = NULL;
-
-	if (fw_version == NULL)
-		return 0;
-
-	len = sscanf(fw_version, "%hhu.%hhu.%hhu.%hhu", &v[0], &v[1], &v[2], &v[3]);
-	if (len <= 0) {
-		log_fw_error("Error initializing Cloud connection: Bad firmware_version string '%s', firmware update disabled",
-				fw_version);
-		return 0;
-	}
-	if (len < 4) {
-		int i;
-
-		for (i = len; i < 4; i++)
-			v[i] = 0;
-	}
-
-	fw_list = calloc(__CC_FW_TARGET_LAST, sizeof(*fw_list));
 	*fw_service = calloc(1, sizeof(**fw_service));
-	if (fw_list == NULL || *fw_service == NULL) {
+	if (*fw_service == NULL) {
 		log_fw_error("Error initializing Cloud connection: %s", "Out of memory");
-		free(fw_list);
 		return 1;
 	}
 
-	fw_list[CC_FW_TARGET_SWU].chunk_size = FW_SWU_CHUNK_SIZE;
-	fw_list[CC_FW_TARGET_SWU].description = "System";
-	fw_list[CC_FW_TARGET_SWU].filespec = ".*\\.[sS][wW][uU]";
-	fw_list[CC_FW_TARGET_SWU].maximum_size = 0;
-	fw_list[CC_FW_TARGET_SWU].version.major = v[0];
-	fw_list[CC_FW_TARGET_SWU].version.minor = v[1];
-	fw_list[CC_FW_TARGET_SWU].version.revision = v[2];
-	fw_list[CC_FW_TARGET_SWU].version.build = v[3];
+	if (fw_version && enable)
+		fw_list = calloc(__CC_FW_TARGET_LAST, sizeof(*fw_list));
+	else
+		fw_list = calloc(1, sizeof(*fw_list));
 
-	fw_list[CC_FW_TARGET_MANIFEST].chunk_size = 0;
-	fw_list[CC_FW_TARGET_MANIFEST].description = "Update manifest";
-	fw_list[CC_FW_TARGET_MANIFEST].filespec = "[mM][aA][nN][iI][fF][eE][sS][tT]\\.[tT][xX][tT]";
-	fw_list[CC_FW_TARGET_MANIFEST].maximum_size = 0;
-	fw_list[CC_FW_TARGET_MANIFEST].version.major = v[0];
-	fw_list[CC_FW_TARGET_MANIFEST].version.minor = v[1];
-	fw_list[CC_FW_TARGET_MANIFEST].version.revision = v[2];
-	fw_list[CC_FW_TARGET_MANIFEST].version.build = v[3];
+	if (!fw_list) {
+		log_fw_error("Error initializing Cloud connection: %s", "Out of memory");
+		free(*fw_service);
+		*fw_service= NULL;
+		return 1;
+	}
 
-	(*fw_service)->target.count = __CC_FW_TARGET_LAST;
+	if (fw_version) {
+		int len = sscanf(fw_version, "%hhu.%hhu.%hhu.%hhu", &v[0], &v[1], &v[2], &v[3]);
+
+		if (len < 4) {
+			int i;
+
+			if (len < 0) {
+				log_fw_error("Error initializing Cloud connection: Invalid 'firmware_version string' '%s', firmware update disabled",
+						fw_version);
+				fw_supported = false;
+				len = 0;
+			}
+
+			for (i = len; i < 4; i++)
+				v[i] = 0;
+		}
+	} else {
+		log_fw_error("Error initializing Cloud connection: %s",
+			"Invalid 'firmware_version string', firmware update disabled");
+		fw_supported = false;
+	}
+
+	if (fw_supported) {
+		fw_list[CC_FW_TARGET_SWU].chunk_size = FW_SWU_CHUNK_SIZE;
+		fw_list[CC_FW_TARGET_SWU].description = "System";
+		fw_list[CC_FW_TARGET_SWU].filespec = ".*\\.[sS][wW][uU]";
+		fw_list[CC_FW_TARGET_SWU].maximum_size = 0;
+		fw_list[CC_FW_TARGET_SWU].version.major = v[0];
+		fw_list[CC_FW_TARGET_SWU].version.minor = v[1];
+		fw_list[CC_FW_TARGET_SWU].version.revision = v[2];
+		fw_list[CC_FW_TARGET_SWU].version.build = v[3];
+
+		fw_list[CC_FW_TARGET_MANIFEST].chunk_size = 0;
+		fw_list[CC_FW_TARGET_MANIFEST].description = "Update manifest";
+		fw_list[CC_FW_TARGET_MANIFEST].filespec = "[mM][aA][nN][iI][fF][eE][sS][tT]\\.[tT][xX][tT]";
+		fw_list[CC_FW_TARGET_MANIFEST].maximum_size = 0;
+		fw_list[CC_FW_TARGET_MANIFEST].version.major = v[0];
+		fw_list[CC_FW_TARGET_MANIFEST].version.minor = v[1];
+		fw_list[CC_FW_TARGET_MANIFEST].version.revision = v[2];
+		fw_list[CC_FW_TARGET_MANIFEST].version.build = v[3];
+
+		(*fw_service)->target.count = __CC_FW_TARGET_LAST;
+		(*fw_service)->callback.request = firmware_request_cb;
+	} else {
+		log_warning("%s", "Disabled firmware update service");
+
+		fw_list[0].chunk_size = 0;
+		fw_list[0].description = "Non updateable firmware";
+		fw_list[0].filespec = ".*";
+		fw_list[0].maximum_size = 0;
+		fw_list[0].version.major = v[0];
+		fw_list[0].version.minor = v[1];
+		fw_list[0].version.revision = v[2];
+		fw_list[0].version.build = v[3];
+
+		(*fw_service)->target.count = 1;
+		(*fw_service)->callback.request = firmware_request_reject_all_cb;
+	}
+
 	(*fw_service)->target.item = fw_list;
 
-	(*fw_service)->callback.request = firmware_request_cb;
 	(*fw_service)->callback.data = firmware_data_cb;
 	(*fw_service)->callback.reset = firmware_reset_cb;
 	(*fw_service)->callback.cancel = firmware_cancel_cb;
