@@ -40,6 +40,7 @@
 
 #define SETTING_VENDOR_ID			"vendor_id"
 #define SETTING_VENDOR_ID_MAX			0xFFFFFFFFUL
+#define SETTING_VENDOR_ID_DEFAULT		"0xFE080003"
 #define SETTING_DEVICE_TYPE			"device_type"
 #define SETTING_DEVICE_TYPE_MAX			255
 #define SETTING_FW_VERSION			"firmware_version"
@@ -258,10 +259,8 @@ static int cfg_check_vendor_id(cfg_t *cfg, cfg_opt_t *opt)
 	char *endptr = NULL;
 	char *val = cfg_opt_getnstr(opt, 0);
 
-	if (val == NULL || strlen(val) == 0) {
-		cfg_error(cfg, "Invalid %s: cannot be empty", opt->name);
-		return -1;
-	}
+	if (val == NULL || strlen(val) == 0)
+		val = SETTING_VENDOR_ID_DEFAULT;
 
 	value = strtoul(val, &endptr, 16);
 	switch (errno) {
@@ -820,12 +819,14 @@ static int get_log_level(cc_cfg_t *const cc_cfg)
  *
  * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
  * 		settings parsed from the configuration will be saved.
+ * @log_msgs:	True to log messages, false otherwise.
  *
  * Return: 0 if the configuration is filled successfully, -1 otherwise.
  */
-static int fill_connector_config(cc_cfg_t *cc_cfg)
+static int fill_connector_config(cc_cfg_t *cc_cfg, bool log_msgs)
 {
 	cfg_t *cfg = cc_cfg->_data;
+	char *tmp = NULL;
 
 	if (!cfg)
 		return -1;
@@ -834,12 +835,19 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 		return -1;
 
 	/* Fill general settings. */
-	cc_cfg->vendor_id = strtoul(cfg_getstr(cfg, SETTING_VENDOR_ID), NULL, 16);
+	tmp = cfg_getstr(cfg, SETTING_VENDOR_ID);
+	if (!tmp || strlen(tmp) == 0) {
+		if (log_msgs)
+			log_warning("Vendor ID empty: using default value '%s'", SETTING_VENDOR_ID_DEFAULT);
+		tmp = SETTING_VENDOR_ID_DEFAULT;
+	}
+	cc_cfg->vendor_id = strtoul(tmp, NULL, 16);
 	cc_cfg->device_type = cfg_getstr(cfg, SETTING_DEVICE_TYPE);
 	cc_cfg->fw_version_src = cfg_getstr(cfg, SETTING_FW_VERSION);
 	free(cc_cfg->fw_version);
 	cc_cfg->fw_version = get_fw_version(cc_cfg->fw_version_src);
-	log_debug("Firmware version: %s", cc_cfg->fw_version);
+	if (log_msgs)
+		log_info("Firmware version: %s", cc_cfg->fw_version);
 
 	cc_cfg->description = cfg_getstr(cfg, SETTING_DESCRIPTION);
 	cc_cfg->contact = cfg_getstr(cfg, SETTING_CONTACT);
@@ -924,7 +932,7 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		/*|  TYPE  |         SETTING NAME         |          DEFAULT VALUE          |   FLAGS   |*/
 		/* ------------------------------------------------------------------------------------- */
 		/* General settings. */
-		CFG_STR(	SETTING_VENDOR_ID,		NULL,				CFGF_NODEFAULT),
+		CFG_STR(	SETTING_VENDOR_ID,		"",				CFGF_NONE),
 		CFG_STR(	SETTING_DEVICE_TYPE,		"DEY device",			CFGF_NONE),
 		CFG_STR(	SETTING_FW_VERSION,		FW_VERSION_FILE_PREFIX FW_VERSION_FILE_DEFAULT, CFGF_NONE),
 		CFG_STR(	SETTING_DESCRIPTION,		"",				CFGF_NONE),
@@ -1028,7 +1036,7 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 			goto parse_error;
 	}
 
-	return fill_connector_config(cc_cfg);
+	return fill_connector_config(cc_cfg, true);
 
 parse_error:
 	cfg_free(cc_cfg->_data);
@@ -1103,7 +1111,7 @@ int get_configuration(cc_cfg_t *cc_cfg)
 		return -1;
 	}
 
-	return fill_connector_config(cc_cfg);
+	return fill_connector_config(cc_cfg, false);
 }
 
 /*
@@ -1245,7 +1253,7 @@ int apply_configuration(cc_cfg_t *cc_cfg)
 
 	free_cc_cfg(cc_cfg);
 
-	if (fill_connector_config(cc_cfg) != 0)
+	if (fill_connector_config(cc_cfg, true) != 0)
 		return 1;
 
 	cfg = cc_cfg->_data;
