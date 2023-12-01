@@ -24,6 +24,7 @@
 #include <regex.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "ccapi/ccapi.h"
@@ -901,6 +902,8 @@ static int fill_connector_config(cc_cfg_t *cc_cfg, bool log_msgs)
 
 int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 {
+	struct stat st;
+
 	/* Virtual directory settings. */
 	static cfg_opt_t vdir_opts[] = {
 		/* ------------------------------------------------------------------------------------- */
@@ -980,16 +983,6 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		CFG_END()
 	};
 
-	if (!file_exists(filename)) {
-		log_error("File '%s' does not exist.", filename);
-		return -1;
-	}
-
-	if (!file_readable(filename)) {
-		log_error("File '%s' cannot be read.", filename);
-		return -1;
-	}
-
 	cc_cfg->_data = cfg_init(opts, CFGF_IGNORE_UNKNOWN);
 	if (!cc_cfg->_data) {
 		log_error("Failed initializing configuration file parser: %s (%d)",
@@ -1023,17 +1016,25 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	cfg_set_validate_func(cc_cfg->_data, SETTING_LATITUDE, cfg_check_latitude);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_LONGITUDE, cfg_check_longitude);
 
-	/* Parse the configuration file. */
-	switch (cfg_parse(cc_cfg->_data, filename)) {
-		case CFG_FILE_ERROR:
-			log_error("Configuration file '%s' could not be read: %s\n", filename,
-					strerror(errno));
-			goto parse_error;
-		case CFG_SUCCESS:
-			break;
-		case CFG_PARSE_ERROR:
-			log_error("Error parsing configuration file '%s'\n", filename);
-			goto parse_error;
+	if (stat(filename, &st) != 0) {
+		log_warning("File '%s' does not exist, using default values", filename);
+	} else if (!S_ISREG(st.st_mode)) {
+		log_warning("'%s' is not a file, using default values", filename);
+	} else if (!file_readable(filename)) {
+		log_error("File '%s' cannot be read, using default values", filename);
+	} else {
+		/* Parse the configuration file. */
+		switch (cfg_parse(cc_cfg->_data, filename)) {
+			case CFG_FILE_ERROR:
+				log_error("Configuration file '%s' could not be read: %s\n", filename,
+						strerror(errno));
+				goto parse_error;
+			case CFG_SUCCESS:
+				break;
+			case CFG_PARSE_ERROR:
+				log_error("Error parsing configuration file '%s'\n", filename);
+				goto parse_error;
+		}
 	}
 
 	return fill_connector_config(cc_cfg, true);
