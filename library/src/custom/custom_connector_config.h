@@ -75,4 +75,7 @@
 /* Flag codes */
 #define CONNECTOR_STREAMING_CLI_CAPABILITIES_EXECUTE
 
+/* Default of 1500 - 20 - 20 bytes if not defined here. Maximum of 0xFFFF */
+#define CCIMP_MSG_MAX_RECV_PACKET_SIZE	1024 * 10 /* bytes */
+
 #endif /* _CUSTOM_CONNECTOR_CONFIG_H_ */
