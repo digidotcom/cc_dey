@@ -143,6 +143,7 @@ typedef struct {
 	int n_fragments;
 } mf_fw_info_t;
 
+#ifdef ENABLE_ONTHEFLY_UPDATE
 /*
  * struct otf_info_t - On-the-fly information type
  *
@@ -168,6 +169,7 @@ typedef struct {
 	pthread_mutex_t mutex;
 	pthread_cond_t cv_end;
 } otf_info_t;
+#endif /* ENABLE_ONTHEFLY_UPDATE */
 
 extern cc_cfg_t *cc_cfg;
 static FILE *fw_fp = NULL;
