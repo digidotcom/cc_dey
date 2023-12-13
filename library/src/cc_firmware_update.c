@@ -97,6 +97,17 @@ typedef enum {
 } cc_fw_target_t;
 
 /*
+ * struct fw_info_t - Firmware download info type
+ *
+ * @path:	Absolute path to download the file
+ * @fp:		File pointer to the firmware file
+ */
+typedef struct {
+	char *path;
+	FILE *fp;
+} fw_info_t;
+
+/*
  * struct mf_fw_t - Firmware manifest type
  *
  * @fw_total_size:	Total size in bytes of the firmware package
@@ -172,8 +183,11 @@ typedef struct {
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 
 extern cc_cfg_t *cc_cfg;
-static FILE *fw_fp = NULL;
-static char *fw_downloaded_path = NULL;
+static fw_info_t fw_info = {
+	.path = NULL,
+	.fp = NULL,
+};
+
 #ifdef ENABLE_RECOVERY_UPDATE
 static pthread_t reboot_thread;
 #endif /* ENABLE_RECOVERY_UPDATE */
@@ -898,9 +912,9 @@ static int mf_generate_fw(const char *manifest_path, int target)
 		error = -1;
 		goto done;
 	}
-	free(fw_downloaded_path);
-	fw_downloaded_path = tmp;
-	strcpy(fw_downloaded_path, mf_fw_info.file_path);
+	free(fw_info.path);
+	fw_info.path = tmp;
+	strcpy(fw_info.path, mf_fw_info.file_path);
 
 done:
 	mf_free_fw_info(&mf_fw_info);
@@ -1235,8 +1249,8 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 	} else
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 	{
-		fw_downloaded_path = concatenate_path(cc_cfg->fw_download_path, filename);
-		if (fw_downloaded_path == NULL) {
+		fw_info.path = concatenate_path(cc_cfg->fw_download_path, filename);
+		if (fw_info.path == NULL) {
 			log_fw_error(
 					"Cannot allocate memory for '%s' firmware file (target '%d')",
 					filename, target);
@@ -1257,8 +1271,8 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 			goto done;
 		}
 
-		fw_fp = fopen(fw_downloaded_path, "wb+");
-		if (fw_fp == NULL) {
+		fw_info.fp = fopen(fw_info.path, "wb+");
+		if (fw_info.fp == NULL) {
 			log_fw_error("Unable to create '%s' file (target '%d')", filename, target);
 			error = CCAPI_FW_REQUEST_ERROR_ENCOUNTERED_ERROR;
 			goto done;
@@ -1267,7 +1281,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 done:
 
 	if (error != CCAPI_FW_REQUEST_ERROR_NONE)
-		free(fw_downloaded_path);
+		free(fw_info.path);
 
 	return error;
 }
@@ -1333,17 +1347,17 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 	} else
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 	{
-		retval = fwrite(data, size, 1, fw_fp);
+		retval = fwrite(data, size, 1, fw_info.fp);
 		if (retval != 1) {
 			log_fw_error("%s", "Error writing to firmware file");
 			return CCAPI_FW_DATA_ERROR_INVALID_DATA;
 		}
 
 		if (last_chunk) {
-			if (fw_fp != NULL) {
-				int fd = fileno(fw_fp);
+			if (fw_info.fp != NULL) {
+				int fd = fileno(fw_info.fp);
 
-				if (fsync(fd) != 0 || fclose(fw_fp) != 0) {
+				if (fsync(fd) != 0 || fclose(fw_info.fp) != 0) {
 					log_fw_error("Unable to close firmware file (errno %d: %s)", errno, strerror(errno));
 					return CCAPI_FW_DATA_ERROR_INVALID_DATA;
 				}
@@ -1355,26 +1369,26 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 			switch(target) {
 				/* Target for manifest.txt files. */
 				case CC_FW_TARGET_MANIFEST: {
-					if (mf_generate_fw(fw_downloaded_path, target) != 0) {
+					if (mf_generate_fw(fw_info.path, target) != 0) {
 						log_fw_error(
 								"Error generating firmware package from '%s' for target '%d'",
-								fw_downloaded_path, target);
+								fw_info.path, target);
 						error = CCAPI_FW_DATA_ERROR_INVALID_DATA;
 						break;
 					}
-					error = process_swu_package(fw_downloaded_path, target);
+					error = process_swu_package(fw_info.path, target);
 					break;
 				}
 				/* Target for *.swu files. */
 				case CC_FW_TARGET_SWU: {
-					error = process_swu_package(fw_downloaded_path, target);
+					error = process_swu_package(fw_info.path, target);
 					break;
 				}
 				default:
 					error = CCAPI_FW_DATA_ERROR_INVALID_DATA;
 			}
 
-			free(fw_downloaded_path);
+			free(fw_info.path);
 		}
 	}
 
@@ -1407,17 +1421,18 @@ static void firmware_cancel_cb(unsigned int const target, ccapi_fw_cancel_error_
 	}
 #endif /* ENABLE_ONTHEFLY_UPDATE */
 
-	if (fw_fp != NULL) {
-		int fd = fileno(fw_fp);
+	if (fw_info.fp != NULL) {
+		int fd = fileno(fw_info.fp);
 
-		if (fsync(fd) != 0 || fclose(fw_fp) != 0)
+		if (fsync(fd) != 0 || fclose(fw_info.fp) != 0)
 			log_fw_error("Unable to close firmware file (errno %d: %s)", errno, strerror(errno));
-		else if (remove(fw_downloaded_path) == -1)
+		else if (remove(fw_info.path) == -1)
 			log_fw_error("Unable to remove firmware file (errno %d: %s)",
 					errno, strerror(errno));
 	}
 
-	free(fw_downloaded_path);
+	free(fw_info.path);
+	fw_info.path = NULL;
 }
 
 /*
