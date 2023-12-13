@@ -45,6 +45,8 @@
 
 #define CCIMP_HAS_STDINT_HEADER
 
+#define CCIMP_HAVE_SEM_CLOCKWAIT
+
 /* Debugging (Logging / Halt) */
 #define CCIMP_DEBUG_ENABLED
 
