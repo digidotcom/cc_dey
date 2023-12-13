@@ -186,8 +186,8 @@ static otf_info_t otf_info = {
 	.update_successful = false,
 	.cv_end = PTHREAD_COND_INITIALIZER,
 };
-
 #endif /* ENABLE_ONTHEFLY_UPDATE */
+
 static int is_dual = -1;
 
 /*
@@ -307,23 +307,23 @@ static void mf_free_fragments(mf_fragment_t *fragments, int n_fragments)
 /*
  * mf_free_fw_info() - Release the provided firmware information
  *
- * @fw_info:	Firmware information struct (mf_fw_info_t).
+ * @mf_fw_info:	Firmware information struct (mf_fw_info_t).
  */
-static void mf_free_fw_info(mf_fw_info_t *fw_info)
+static void mf_free_fw_info(mf_fw_info_t *mf_fw_info)
 {
-	if (fw_info == NULL)
+	if (mf_fw_info == NULL)
 		return;
 
-	free(fw_info->file_path);
-	fw_info->file_path = NULL;
-	free(fw_info->file_name);
-	fw_info->file_name = NULL;
-	free(fw_info->manifest.fragment_name);
-	fw_info->manifest.fragment_name = NULL;
-	free(fw_info->manifest.fragments_dir);
-	fw_info->manifest.fragments_dir = NULL;
+	free(mf_fw_info->file_path);
+	mf_fw_info->file_path = NULL;
+	free(mf_fw_info->file_name);
+	mf_fw_info->file_name = NULL;
+	free(mf_fw_info->manifest.fragment_name);
+	mf_fw_info->manifest.fragment_name = NULL;
+	free(mf_fw_info->manifest.fragments_dir);
+	mf_fw_info->manifest.fragments_dir = NULL;
 
-	mf_free_fragments(fw_info->fragments, fw_info->n_fragments);
+	mf_free_fragments(mf_fw_info->fragments, mf_fw_info->n_fragments);
 }
 
 /*
@@ -463,7 +463,7 @@ static int check_mf_src_dir(cfg_t *mf_cfg, cfg_opt_t *opt)
  * mf_parse_file() - Load the downloaded 'manifest.txt' file
  *
  * @manifest_path:	Absolute path of the 'manifest.txt' file.
- * @fw_info:		Firmware information struct (mf_fw_info_t) where the
+ * @mf_fw_info:		Firmware information struct (mf_fw_info_t) where the
  * 			settings are saved.
  *
  * Read the provided 'manifest.txt' file and save the settings in the given
@@ -472,7 +472,7 @@ static int check_mf_src_dir(cfg_t *mf_cfg, cfg_opt_t *opt)
  *
  * Return: 0 if the file is loaded successfully, -1 otherwise.
  */
-static int mf_parse_file(const char *const manifest_path, mf_fw_info_t *fw_info)
+static int mf_parse_file(const char *const manifest_path, mf_fw_info_t *mf_fw_info)
 {
 	cfg_t *mf_cfg = NULL;
 	int error = 0;
@@ -521,16 +521,16 @@ static int mf_parse_file(const char *const manifest_path, mf_fw_info_t *fw_info)
 	}
 
 	/* Fill manifest properties. */
-	fw_info->manifest.fw_total_size = cfg_getint(mf_cfg, MANIFEST_PROP_SIZE);
-	fw_info->manifest.n_fragments = cfg_getint(mf_cfg, MANIFEST_PROP_FRAGMENTS);
-	fw_info->manifest.fw_checksum = strtoul(cfg_getstr(mf_cfg, MANIFEST_PROP_CHECKSUM), NULL, 10);
-	fw_info->manifest.fragment_name = strdup(cfg_getstr(mf_cfg, MANIFEST_PROP_NAME));
-	if (fw_info->manifest.fragment_name == NULL) {
+	mf_fw_info->manifest.fw_total_size = cfg_getint(mf_cfg, MANIFEST_PROP_SIZE);
+	mf_fw_info->manifest.n_fragments = cfg_getint(mf_cfg, MANIFEST_PROP_FRAGMENTS);
+	mf_fw_info->manifest.fw_checksum = strtoul(cfg_getstr(mf_cfg, MANIFEST_PROP_CHECKSUM), NULL, 10);
+	mf_fw_info->manifest.fragment_name = strdup(cfg_getstr(mf_cfg, MANIFEST_PROP_NAME));
+	if (mf_fw_info->manifest.fragment_name == NULL) {
 		error = -1;
 		goto done;
 	}
-	fw_info->manifest.fragments_dir = strdup(cfg_getstr(mf_cfg, MANIFEST_PROP_SRC_DIR));
-	if (fw_info->manifest.fragments_dir == NULL) {
+	mf_fw_info->manifest.fragments_dir = strdup(cfg_getstr(mf_cfg, MANIFEST_PROP_SRC_DIR));
+	if (mf_fw_info->manifest.fragments_dir == NULL) {
 		error = -1;
 		goto done;
 	}
@@ -544,30 +544,30 @@ done:
 /*
  * mf_get_fw_path() - Retrieve the absolute path of the firmware update package
  *
- * @fw_info:		Firmware information struct (mf_fw_info_t) where the
+ * @mf_fw_info:		Firmware information struct (mf_fw_info_t) where the
  * 			path is stored.
  *
  * Memory for the path is obtained with 'malloc' and can be freed with 'free'.
  *
  * Return: 0 on success, -1 otherwise.
  */
-static int mf_get_fw_path(mf_fw_info_t *fw_info)
+static int mf_get_fw_path(mf_fw_info_t *mf_fw_info)
 {
-	mf_fw_t manifest = fw_info->manifest;
+	mf_fw_t manifest = mf_fw_info->manifest;
 	int len = strlen(manifest.fragment_name) + strlen(UPDATE_PACKAGE_EXT) + 1;
 
-	fw_info->file_name = calloc(len, sizeof(char));
-	if (fw_info->file_name == NULL) {
+	mf_fw_info->file_name = calloc(len, sizeof(char));
+	if (mf_fw_info->file_name == NULL) {
 		log_fw_error("Cannot allocate memory for update package '%s%s",
 				manifest.fragment_name, UPDATE_PACKAGE_EXT);
 		return -1;
 	}
-	strcpy(fw_info->file_name, manifest.fragment_name);
-	strcat(fw_info->file_name, UPDATE_PACKAGE_EXT);
+	strcpy(mf_fw_info->file_name, manifest.fragment_name);
+	strcat(mf_fw_info->file_name, UPDATE_PACKAGE_EXT);
 
-	fw_info->file_path = concatenate_path(cc_cfg->fw_download_path,
-			fw_info->file_name);
-	if (fw_info->file_path == NULL) {
+	mf_fw_info->file_path = concatenate_path(cc_cfg->fw_download_path,
+			mf_fw_info->file_name);
+	if (mf_fw_info->file_path == NULL) {
 		log_fw_error("Cannot allocate memory for update package '%s%s",
 				manifest.fragment_name, UPDATE_PACKAGE_EXT);
 		return -1;
@@ -579,26 +579,26 @@ static int mf_get_fw_path(mf_fw_info_t *fw_info)
 /*
  * mf_get_fragments() - Retrieve all fragments information
  *
- * @fw_info:	Firmware information struct (mf_fw_info_t) where the fragments
+ * @mf_fw_info:	Firmware information struct (mf_fw_info_t) where the fragments
  * 		information is stored.
  *
  * Return: Number of total fragments, 0 if no fragment is found or if any error
  * 	   occurs.
  */
-static int mf_get_fragments(mf_fw_info_t *fw_info)
+static int mf_get_fragments(mf_fw_info_t *mf_fw_info)
 {
-	mf_fw_t manifest = fw_info->manifest;
+	mf_fw_t manifest = mf_fw_info->manifest;
 	int n_fragments = 0;
 	int i;
 
-	fw_info->fragments = calloc(manifest.n_fragments, sizeof(mf_fragment_t));
-	if (fw_info->fragments == NULL) {
+	mf_fw_info->fragments = calloc(manifest.n_fragments, sizeof(mf_fragment_t));
+	if (mf_fw_info->fragments == NULL) {
 		log_fw_error("%s", "Cannot allocate memory for firmware fragments");
 		return 0;
 	}
 
 	for (i = 0; i < manifest.n_fragments; i++) {
-		mf_fragment_t *fragment = &fw_info->fragments[i];
+		mf_fragment_t *fragment = &mf_fw_info->fragments[i];
 
 		n_fragments++;
 		fragment->index = i;
@@ -626,12 +626,12 @@ static int mf_get_fragments(mf_fw_info_t *fw_info)
 	goto done;
 
 error:
-	mf_free_fragments(fw_info->fragments, n_fragments);
-	fw_info->fragments = NULL;
+	mf_free_fragments(mf_fw_info->fragments, n_fragments);
+	mf_fw_info->fragments = NULL;
 	n_fragments = 0;
 
 done:
-	fw_info->n_fragments = n_fragments;
+	mf_fw_info->n_fragments = n_fragments;
 	return n_fragments;
 }
 
@@ -700,20 +700,20 @@ done:
 /*
  * mf_delete_fragments() - Remove all fragment files of a firmware package
  *
- * @fw_info:	Firmware information struct (mf_fw_info_t).
+ * @mf_fw_info:	Firmware information struct (mf_fw_info_t).
  */
-static void mf_delete_fragments(mf_fw_info_t *fw_info)
+static void mf_delete_fragments(mf_fw_info_t *mf_fw_info)
 {
 	int i;
 
-	for (i = 0; i < fw_info->n_fragments; i++)
-		remove(fw_info->fragments[i].path);
+	for (i = 0; i < mf_fw_info->n_fragments; i++)
+		remove(mf_fw_info->fragments[i].path);
 }
 
 /*
  * mf_assemble_fw_package() - Assemble fragments to generate the firmware package
  *
- * @fw_info:	Firmware information struct (mf_fw_info_t).
+ * @mf_fw_info:	Firmware information struct (mf_fw_info_t).
  *
  * The generation of the firmware package follow these steps:
  * 		1. Uncompress each fragment and assemble to the final package.
@@ -725,29 +725,29 @@ static void mf_delete_fragments(mf_fw_info_t *fw_info)
  *
  * Return: 0 on success, -1 otherwise.
  */
-static int mf_assemble_fw_package(mf_fw_info_t *const fw_info)
+static int mf_assemble_fw_package(mf_fw_info_t *const mf_fw_info)
 {
 	int error = 0;
 	int i;
 	struct stat st;
 	uint32_t crc32 = 0xFFFFFFFF;
-	FILE *swu_fp = fopen(fw_info->file_path, "wb+");
+	FILE *swu_fp = fopen(mf_fw_info->file_path, "wb+");
 
 	if (swu_fp == NULL) {
 		log_fw_error("Unable to create '%s' firmware package",
-				fw_info->file_path);
-		mf_delete_fragments(fw_info);
+				mf_fw_info->file_path);
+		mf_delete_fragments(mf_fw_info);
 		return -1;
 	}
 
 	/* Assemble fragments. */
 
-	for (i = 0; i < fw_info->n_fragments; i++) {
-		mf_fragment_t fragment = fw_info->fragments[i];
+	for (i = 0; i < mf_fw_info->n_fragments; i++) {
+		mf_fragment_t fragment = mf_fw_info->fragments[i];
 
 		log_fw_debug("Processing fragment %d", i);
 
-		if (mf_assemble_fragment(&fragment, fw_info->file_name, swu_fp) != 0) {
+		if (mf_assemble_fragment(&fragment, mf_fw_info->file_name, swu_fp) != 0) {
 			error = -1;
 			break;
 		}
@@ -765,35 +765,35 @@ static int mf_assemble_fw_package(mf_fw_info_t *const fw_info)
 	}
 
 	if (error != 0) {
-		mf_delete_fragments(fw_info);
+		mf_delete_fragments(mf_fw_info);
 		error = -1;
 		goto error;
 	}
 
-	log_fw_debug("Firmware package ready, '%s'", fw_info->file_path);
+	log_fw_debug("Firmware package ready, '%s'", mf_fw_info->file_path);
 
 	/* Check file size */
 
-	stat(fw_info->file_path, &st);
-	if ((size_t) st.st_size != fw_info->manifest.fw_total_size) {
+	stat(mf_fw_info->file_path, &st);
+	if ((size_t) st.st_size != mf_fw_info->manifest.fw_total_size) {
 		log_fw_error("Bad firmware package size: %zu, expected %zu",
-			     (size_t)st.st_size, fw_info->manifest.fw_total_size);
+			     (size_t)st.st_size, mf_fw_info->manifest.fw_total_size);
 		error = -1;
 		goto error;
 	}
 
 	/* Check CRC32 of the assembled file. */
 
-	if (crc32file(fw_info->file_path, &crc32) != 0) {
+	if (crc32file(mf_fw_info->file_path, &crc32) != 0) {
 		log_fw_error("Unable to calculate CRC32 of firmware package '%s'",
-				fw_info->file_name);
+				mf_fw_info->file_name);
 		error = -1;
 		goto error;
 	}
 
-	if (crc32 != fw_info->manifest.fw_checksum) {
+	if (crc32 != mf_fw_info->manifest.fw_checksum) {
 		log_fw_error("Wrong CRC32, calculated 0x%08x, expected 0x%08x", crc32,
-				fw_info->manifest.fw_checksum);
+				mf_fw_info->manifest.fw_checksum);
 		error = -1;
 		goto error;
 	}
@@ -804,7 +804,7 @@ static int mf_assemble_fw_package(mf_fw_info_t *const fw_info)
 
 error:
 
-	if (remove(fw_info->file_path) == -1)
+	if (remove(mf_fw_info->file_path) == -1)
 		log_fw_error("Unable to remove firmware package (errno %d: %s)",
 				errno, strerror(errno));
 
@@ -840,12 +840,12 @@ static int mf_generate_fw(const char *manifest_path, int target)
 {
 	size_t available_space;
 	char *tmp = NULL;
-	mf_fw_info_t fw_info = {0};
+	mf_fw_info_t mf_fw_info = {0};
 	int error = 0;
 
 	/* Load received manifest file. */
 
-	if (mf_parse_file(manifest_path, &fw_info) != 0) {
+	if (mf_parse_file(manifest_path, &mf_fw_info) != 0) {
 		log_fw_error("Error loading firmware manifest file '%s'",
 				manifest_path);
 		error = -1;
@@ -861,47 +861,47 @@ static int mf_generate_fw(const char *manifest_path, int target)
 		goto done;
 	}
 
-	if (available_space < fw_info.manifest.fw_total_size) {
+	if (available_space < mf_fw_info.manifest.fw_total_size) {
 		log_fw_error(
 				"Not enough space in %s to update firmware (target '%d'), needed %zu have %zu",
 				cc_cfg->fw_download_path, target,
-				fw_info.manifest.fw_total_size, available_space);
+				mf_fw_info.manifest.fw_total_size, available_space);
 		error = -1;
 		goto done;
 	}
 
 	/* Check fragments. */
 
-	if (mf_get_fw_path(&fw_info) != 0 || !mf_get_fragments(&fw_info)) {
+	if (mf_get_fw_path(&mf_fw_info) != 0 || !mf_get_fragments(&mf_fw_info)) {
 		error = -1;
 		goto done;
 	}
 
 	log_fw_debug("%d fragments are ready. Begin image assembly",
-			fw_info.n_fragments);
+			mf_fw_info.n_fragments);
 
 	/* Generate firmware package from fragments. */
 
-	if (mf_assemble_fw_package(&fw_info) != 0) {
+	if (mf_assemble_fw_package(&mf_fw_info) != 0) {
 		error = -1;
 		goto done;
 	}
 
 	/* Save firmware package path */
 
-	log_fw_debug("Image was assembly in '%s'", fw_info.file_path);
-	tmp = calloc(strlen(fw_info.file_path) + 1, sizeof(*tmp));
+	log_fw_debug("Image was assembly in '%s'", mf_fw_info.file_path);
+	tmp = calloc(strlen(mf_fw_info.file_path) + 1, sizeof(*tmp));
 	if (tmp == NULL) {
-		log_fw_error("Unable to install software package %s: Out of memory", fw_info.file_path);
+		log_fw_error("Unable to install software package %s: Out of memory", mf_fw_info.file_path);
 		error = -1;
 		goto done;
 	}
 	free(fw_downloaded_path);
 	fw_downloaded_path = tmp;
-	strcpy(fw_downloaded_path, fw_info.file_path);
+	strcpy(fw_downloaded_path, mf_fw_info.file_path);
 
 done:
-	mf_free_fw_info(&fw_info);
+	mf_free_fw_info(&mf_fw_info);
 
 	return error;
 }
