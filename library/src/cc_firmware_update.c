@@ -101,10 +101,14 @@ typedef enum {
  *
  * @path:	Absolute path to download the file
  * @fp:		File pointer to the firmware file
+ * @size:	Total size of the firmware file
+ * @percent:	Last percent reported
  */
 typedef struct {
 	char *path;
 	FILE *fp;
+	size_t size;
+	size_t percent;
 } fw_info_t;
 
 /*
@@ -186,6 +190,8 @@ extern cc_cfg_t *cc_cfg;
 static fw_info_t fw_info = {
 	.path = NULL,
 	.fp = NULL,
+	.size = 0,
+	.percent = 0,
 };
 
 #ifdef ENABLE_RECOVERY_UPDATE
@@ -1168,6 +1174,9 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 
 	log_fw_info("Firmware download requested (target '%d')", target);
 
+	fw_info.size = total_size;
+	fw_info.percent = 0;
+
 	if (get_configuration(cc_cfg) != 0) {
 		log_fw_error("Cannot load configuration (target '%d')", target);
 		return CCAPI_FW_REQUEST_ERROR_ENCOUNTERED_ERROR;
@@ -1308,6 +1317,15 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 
 	log_fw_debug("Received chunk: target=%d offset=0x%x length=%zu last_chunk=%d", target, offset, size, last_chunk);
 
+	{
+		size_t p = (offset + size) * 100 / fw_info.size;
+
+		if (p != fw_info.percent && p % 5 == 0) {
+			log_fw_info("%02zu%% (%zu/%zu KB)", p, (offset + size) / 1024 , fw_info.size / 1024);
+			fw_info.percent = p;
+		}
+	}
+
 #ifdef ENABLE_ONTHEFLY_UPDATE
 	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		log_fw_debug("Get data package from Remote Manager %d", target);
@@ -1433,6 +1451,8 @@ static void firmware_cancel_cb(unsigned int const target, ccapi_fw_cancel_error_
 
 	free(fw_info.path);
 	fw_info.path = NULL;
+	fw_info.size = 0;
+	fw_info.percent = 0;
 }
 
 /*
