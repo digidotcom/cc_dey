@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2023 Digi International Inc.
+ * Copyright (c) 2017-2024 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,6 +19,7 @@
 
 #include <confuse.h>
 #include <errno.h>
+#include <libdigiapix/process.h>
 #include <libgen.h>
 #include <limits.h>
 #include <regex.h>
@@ -106,6 +107,14 @@
 #define LOG_LEVEL_DEBUG_STR			"debug"
 
 #define ALL_METRICS				"*"
+
+typedef enum {
+	CCCS_SINGLE_SYSTEM,
+	CCCS_DUAL_SYSTEM,
+	CCCS_UNKNOWN_SYSTEM,
+} cccs_boot_system_t;
+
+static cccs_boot_system_t boot_type = CCCS_UNKNOWN_SYSTEM;
 
 static char *get_fw_version(const char *const value) {
 	char data[256] = {0};
@@ -630,6 +639,55 @@ static int cfg_check_directory_exists_or_empty(cfg_t *cfg, cfg_opt_t *opt)
 	return cfg_check_directory_exists(cfg, opt);
 }
 
+/*
+ * get_boot_type() - Get the boot system type
+ *
+ * @return: The type of boot system: dual, single, or unknown.
+ */
+static cccs_boot_system_t get_boot_type(void)
+{
+	if (boot_type == CCCS_UNKNOWN_SYSTEM) {
+		char *resp = NULL;
+		boot_type = CCCS_SINGLE_SYSTEM;
+
+		if (ldx_process_execute_cmd("fw_printenv -n dualboot", &resp, 2) != 0 || resp == NULL) {
+			if (resp != NULL)
+				log_error("Error getting system info: %s", resp);
+			else
+				log_error("%s", "Error getting system info");
+
+			boot_type = CCCS_UNKNOWN_SYSTEM;
+		} else if (strncmp(resp, "yes", 3) == 0) {
+			boot_type = CCCS_DUAL_SYSTEM;
+		}
+		free(resp);
+	}
+
+	return boot_type;
+}
+
+/*
+ * cfg_check_fw_download_path() - Check firmware download path is an existing dir
+ *
+ * @cfg:	The section were the option is defined.
+ * @opt:	The option to check.
+ *
+ * Do not add this check function as 'cfg_set_validate_func()' for
+ * 'firmware_download_path' since it depends  on setting 'on_the_fly'.
+ * The value of 'on_the_fly' setting is only valid if it is already read and
+ * this only only happens if 'on_the_fly' is defined before
+ * 'firmware_download_path' in the configuration file. We cannot depend on it.
+ *
+ * @Return: 0 on success, any other value otherwise.
+ */
+static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
+{
+	if (cfg_getbool(cfg, SETTING_ON_THE_FLY) && get_boot_type() == CCCS_DUAL_SYSTEM)
+		return 0;
+
+	return cfg_check_directory_exists_or_empty(cfg, opt);
+}
+
 /**
  * conf_error_func() - Error reporting function to send error to syslog
  *
@@ -689,7 +747,7 @@ static int check_cfg(cfg_t *cfg)
 		return -1;
 
 	/* Check services settings. */
-	if (cfg_check_directory_exists_or_empty(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
+	if (cfg_check_fw_download_path(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
 		return -1;
 
 	/* Check data service settings. */
@@ -878,6 +936,8 @@ static int fill_connector_config(cc_cfg_t *cc_cfg, bool log_msgs)
 	/* Fill On the fly setting */
 	cc_cfg->on_the_fly = cfg_getbool(cfg, SETTING_ON_THE_FLY);
 
+	cc_cfg->is_dual_boot = get_boot_type() == CCCS_DUAL_SYSTEM;
+
 	/* Fill data service settings */
 	cc_cfg->data_backlog_path = cfg_getstr(cfg, SETTING_DATA_BACKLOG_PATH);
 	cc_cfg->data_backlog_kb = cfg_getint(cfg, SETTING_DATA_BACKLOG_SIZE);
@@ -1005,7 +1065,6 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_RX, cfg_check_keepalive_rx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_TX, cfg_check_keepalive_tx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_WAIT_TIMES, cfg_check_wait_times);
-	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_directory_exists_or_empty);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_PATH, cfg_check_directory_exists_or_empty);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_SIZE, cfg_check_data_backlog_size);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_SAMPLE_RATE,

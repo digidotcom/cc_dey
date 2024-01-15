@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2023 Digi International Inc.
+ * Copyright (c) 2017-2024 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -209,35 +209,6 @@ static otf_info_t otf_info = {
 	.cv_end = PTHREAD_COND_INITIALIZER,
 };
 #endif /* ENABLE_ONTHEFLY_UPDATE */
-
-static int is_dual = -1;
-
-/*
- * is_dual_boot_system() - Check if the system is dual boot
- *
- * @return: 1 if dual system capable, 0 if not, and -1 on failure
- */
-static int is_dual_boot_system(void)
-{
-	char *resp = NULL;
-
-	if (is_dual != -1)
-		return is_dual;
-
-	if (ldx_process_execute_cmd("fw_printenv -n dualboot", &resp, 2) != 0 || resp == NULL) {
-		if (resp != NULL)
-			log_fw_error("Error getting dualboot system info: %s", resp);
-		else
-			log_fw_error("%s: Error getting dualboot system info", __func__);
-
-		is_dual = -1;
-	} else {
-		is_dual = !strcmp(trim(resp), "yes");
-	}
-	free(resp);
-
-	return is_dual;
-}
 
 /*
  * get_available_space() - Retrieve the available space in bytes
@@ -1070,7 +1041,7 @@ static ccapi_fw_data_error_t process_swu_package(const char *swu_path, int targe
 {
 	ccapi_fw_data_error_t error = CCAPI_FW_DATA_ERROR_NONE;
 
-	if (is_dual_boot_system() > 0) {
+	if (cc_cfg->is_dual_boot) {
 		char cmd[CMD_BUFSIZE] = {0};
 		char line[LINE_BUFSIZE] = {0};
 		FILE *fp;
@@ -1113,7 +1084,7 @@ static ccapi_fw_data_error_t process_swu_package(const char *swu_path, int targe
  * reboot_system() - Reboot the system
  */
 static void reboot_system(void) {
-	if (is_dual_boot_system() > 0) {
+	if (cc_cfg->is_dual_boot) {
 		sync();
 		fflush(stdout);
 		sleep(REBOOT_TIMEOUT);
@@ -1183,7 +1154,7 @@ static ccapi_fw_request_error_t firmware_request_cb(unsigned int const target,
 	}
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
-	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
+	if (cc_cfg->is_dual_boot && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		char *resp = NULL;
 		int retval;
 		static struct swupdate_request req;
@@ -1327,7 +1298,7 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 	}
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
-	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
+	if (cc_cfg->is_dual_boot && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		log_fw_debug("Get data package from Remote Manager %d", target);
 		otf_info.chunk_size = size;
 		memcpy(otf_info.buffer, data, otf_info.chunk_size);
@@ -1427,7 +1398,7 @@ static void firmware_cancel_cb(unsigned int const target, ccapi_fw_cancel_error_
 			target, cancel_reason);
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
-	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
+	if (cc_cfg->is_dual_boot && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		otf_info.chunk_size = 0;
 		otf_info.chunk_ready = true;
 
@@ -1473,7 +1444,7 @@ static void firmware_reset_cb(unsigned int const target, ccapi_bool_t *system_re
 	*system_reset = CCAPI_FALSE;
 
 #ifdef ENABLE_ONTHEFLY_UPDATE
-	if (is_dual_boot_system() > 0 && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST){
+	if (cc_cfg->is_dual_boot && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST){
 		char *resp = NULL;
 
 		if (!otf_info.update_successful) {
@@ -1514,7 +1485,8 @@ int init_fw_service(const bool enable, const char * const fw_version, ccapi_fw_s
 #else /* !ENABLE_RECOVERY_UPDATE || !ENABLE_ONTHEFLY_UPDATE */
 	uint8_t v[4] = {0, 0, 0, 0};
 	ccapi_firmware_target_t *fw_list = NULL;
-	bool fw_supported = enable;
+	bool fw_supported = (cc_cfg->is_dual_boot && cc_cfg->on_the_fly)
+				|| (cc_cfg->fw_download_path && strlen(cc_cfg->fw_download_path) > 0);
 
 	*fw_service = calloc(1, sizeof(**fw_service));
 	if (*fw_service == NULL) {
@@ -1556,7 +1528,7 @@ int init_fw_service(const bool enable, const char * const fw_version, ccapi_fw_s
 		fw_supported = false;
 	}
 
-	if (fw_supported) {
+	if (enable && fw_supported) {
 		fw_list[CC_FW_TARGET_SWU].chunk_size = FW_SWU_CHUNK_SIZE;
 		fw_list[CC_FW_TARGET_SWU].description = "System";
 		fw_list[CC_FW_TARGET_SWU].filespec = ".*\\.[sS][wW][uU]";
