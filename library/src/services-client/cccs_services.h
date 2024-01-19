@@ -39,4 +39,19 @@
  */
 bool cccs_is_daemon_ready(long timeout);
 
+/*
+ * cccs_set_maintenance_status() - Enable or disable maintenance status
+ *
+ * @status:	True to enable maintenance, false otherwise.
+ * @timeout:	Number of seconds to wait for a response from the daemon.
+ * @resp:	Received response from CCCS daemon.
+ *
+ * Response may contain a string with the result of the operation (resp->hint).
+ * This string must be freed.
+ *
+ * Return: CCCS_SEND_ERROR_NONE if success, any other error if the
+ *         communication with the daemon fails.
+ */
+cccs_comm_error_t cccs_set_maintenance_status(bool status, unsigned long const timeout, cccs_resp_t *resp);
+
 #endif /* _CCCS_SERVICES_H_ */

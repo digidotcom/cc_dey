@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2022 Digi International Inc.
+ * Copyright (c) 2017-2024 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -65,6 +65,10 @@ typedef struct {
  * @vdirs:				List of virtual directories
  * @n_vdirs:				Number of virtual directories in the list
  * @fw_download_path			Absolute path to download firmware files
+ * @on_the_fly:				Enable on-the-fly firmware download support
+ * @is_dual_boot:			True for dual boot system, false otherwise
+ * @data_backlog_path:			Absolute path to store data backlog when no connection
+ * @data_backlog_kb:			Maximum size (kb) of the data backlog
  * @sys_mon_sample_rate:		Frequency at which gather system information
  * @sys_mon_num_samples_upload:		Number of samples of each channel to gather before uploading
  * @sys_mon_metrics:			List of metrics and interfaces to measure and upload to Remote Manager
@@ -76,7 +80,6 @@ typedef struct {
  * @altitude				Altitude value for static location
  * @log_level:				Level of messaging to log
  * @log_console:			Enable messages logging to the console
- * @on_the_fly:				Enable on-the-fly firmware download support
  * @_data:				Internal configuration data
  *
  */
@@ -103,6 +106,11 @@ typedef struct {
 	unsigned int n_vdirs;
 
 	char *fw_download_path;
+	bool on_the_fly;
+	bool is_dual_boot;
+
+	char *data_backlog_path;
+	uint32_t data_backlog_kb;
 
 	uint32_t sys_mon_sample_rate;
 	uint32_t sys_mon_num_samples_upload;
@@ -117,7 +125,6 @@ typedef struct {
 
 	int log_level;
 	bool log_console;
-	bool on_the_fly;
 
 	void *_data;
 } cc_cfg_t;

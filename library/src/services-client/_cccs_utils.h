@@ -23,6 +23,22 @@
 #include "cccs_services.h"
 
 /**
+ * struct cccs_srv_resp_t - Response from ConnectCore Cloud Services daemon
+ *
+ * @srv_err:	Response code from server, 0 success.
+ * @ccapi_err:	Response code from daemon, 0 success.
+ * @cccs_err:	Other error code, 0 success.
+ * @hint:	Null-terminated string with error hint, can be NULL.
+ * 		It must be freed.
+ */
+typedef struct {
+	int srv_err;
+	int ccapi_err;
+	int cccs_err;
+	char *hint;
+} cccs_srv_resp_t;
+
+/**
  * get_lock() - Create a lock
  *
  * Returns: The created lock, NULL if it fails.
@@ -78,6 +94,6 @@ int connect_cccsd(void);
  *
  * Expects the reply sequence "i:0" or "i:1 b:error-msg".
  */
-cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long timeout);
+cccs_comm_error_t parse_cccsd_response(int fd, cccs_srv_resp_t *resp, unsigned long timeout);
 
 #endif /* _CCCS_CLIENT_UTILS_H_ */

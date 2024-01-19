@@ -31,8 +31,8 @@
  * This module encapsulates the local tcp/ip communication between cc_dey and
  * processes that use DRM services via the connector.
  *
- * Messages are composed of a sequence of values that are serialised into the
- * stream and deserialised by the receiver.
+ * Messages are composed of a sequence of values that are serialized into the
+ * stream and de-serialized by the receiver.
  *
  * There are only three value basic types supported at this point in time:
  *
@@ -42,18 +42,18 @@
  *
  * The current encoding targets the following goals:
  *
- * 	* Easy for a scripted client (eg a Bash script) to compose and parse. No
+ * 	* Easy for a scripted client (e.g. a Bash script) to compose and parse. No
  * 	  endianess considerations, values terminated by new line '\n' characters.
  *
- * 	* Serialised value boundaries are verified so that loss of stream
- * 	  synchronisation is detected and doesn't cause mis-interpretation of
- * 	  serialised data.
+ * 	* Serialized value boundaries are verified so that loss of stream
+ * 	  synchronization is detected and doesn't cause miss-interpretation of
+ * 	  serialized data.
  *
- * 	* The receiver can verify that the data type of any serialised value is
+ * 	* The receiver can verify that the data type of any serialized value is
  * 	  exactly what was expected rather then relying on some implicit contract
  * 	  between sender and receiver.
  *
- * The encoding schema has a hint of the PHP serialisation format:
+ * The encoding schema has a hint of the PHP serialization format:
  *
  * 	<serised value> <=	<type><separator><value><terminator>
  * 				--	where <type> is a single character
@@ -92,7 +92,7 @@
  * provided by this module.
  */
 
-/* Serialisation Protocol constants */
+/* Serialization Protocol constants */
 
 #define	TERMINATOR	'\n'
 #define SEPARATOR	':'
@@ -126,16 +126,38 @@
 
 static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeout)
 {
-	int ret;
-	fd_set socket_set;
-	ssize_t nr = 0;
+	struct timeval now, timeout_limit;
 
-	FD_ZERO(&socket_set);
-	FD_SET(sock_fd, &socket_set);
+	if (timeout) {
+		gettimeofday(&now, NULL);
+		timeout_limit.tv_sec = now.tv_sec + timeout->tv_sec;
+		timeout_limit.tv_usec = now.tv_usec + timeout->tv_usec;
+	}
 
 	while (count > 0) {
+		ssize_t nr = 0;
+
 		if (timeout) {
-			ret = select(sock_fd + 1, &socket_set, NULL, NULL, timeout);
+			fd_set socket_set;
+			int ret;
+			struct timeval t = {
+				.tv_sec = 0,
+				.tv_usec = 0
+			};
+
+			gettimeofday(&now, NULL);
+			if (timeout_limit.tv_sec > now.tv_sec)
+				t.tv_sec = timeout_limit.tv_sec - now.tv_sec;
+			if (timeout_limit.tv_usec > now.tv_usec)
+				t.tv_usec = timeout_limit.tv_usec - now.tv_usec;
+
+			if (t.tv_sec == 0 && t.tv_usec == 0)
+				return -ETIMEDOUT;
+
+			FD_ZERO(&socket_set);
+			FD_SET(sock_fd, &socket_set);
+
+			ret = select(sock_fd + 1, &socket_set, NULL, NULL, &t);
 			if (ret != 1)
 				return ret == 0 ? -ETIMEDOUT : ret;
 		}
@@ -144,23 +166,23 @@ static int read_amt(int sock_fd, void *buf, size_t count, struct timeval *timeou
 		if (nr <= 0) {
 			if (errno == EINTR)
 				continue;
+			if (nr == 0)
+				return -EPIPE;
 			break;
 		}
 
 		count -= nr;
 		buf = ((char *) buf) + nr;
 	}
+
 	return (count > 0) ? -1 : 0;
 }
 
 static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timeval *timeout)
 {
-	ssize_t bytes_read;
 	size_t total_read = 0, remaining = capacity;
-	char *buf = buffer, *end;
-	char ch;
-	int result;
-	fd_set socket_set;
+	char *buf = buffer;
+	struct timeval now, timeout_limit;
 
 	if (capacity == 0 || buffer == NULL) {
 		errno = EINVAL;
@@ -169,25 +191,49 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 
 	total_read = 0;
 
-	FD_ZERO(&socket_set);
-	FD_SET(socket, &socket_set);
+	if (timeout) {
+		gettimeofday(&now, NULL);
+		timeout_limit.tv_sec = now.tv_sec + timeout->tv_sec;
+		timeout_limit.tv_usec = now.tv_usec + timeout->tv_usec;
+	}
 
 	for (;;) {
+		ssize_t bytes_read;
+
 		if (timeout) {
-			result = select(socket + 1, &socket_set, NULL, NULL, timeout);
+			fd_set socket_set;
+			int result;
+			struct timeval t = {
+				.tv_sec = 0,
+				.tv_usec = 0
+			};
+
+			gettimeofday(&now, NULL);
+			if (timeout_limit.tv_sec > now.tv_sec)
+				t.tv_sec = timeout_limit.tv_sec - now.tv_sec;
+			if (timeout_limit.tv_usec > now.tv_usec)
+				t.tv_usec = timeout_limit.tv_usec - now.tv_usec;
+
+			if (t.tv_sec == 0 && t.tv_usec == 0)
+				return -ETIMEDOUT;
+
+			FD_ZERO(&socket_set);
+			FD_SET(socket, &socket_set);
+
+			result = select(socket + 1, &socket_set, NULL, NULL, &t);
 			if (result != 1)
 				return result == 0 ? -ETIMEDOUT : result;
 		}
 		if (remaining) {
+			char *end = NULL;
 
 			/*
-			 * Minimise the number of system calls by reading in largest
+			 * Minimize the number of system calls by reading in largest
 			 * possible chunks.
 			 * More complex than simply reading char by char but typically only
 			 * requires one pass and two context switches rather than one
 			 * context switch per char received when reading one char at a time.
 			 */
-
 			bytes_read = recv(socket, buf, remaining, MSG_PEEK);
 			if (bytes_read < 0) {
 				if (errno == EINTR)
@@ -209,6 +255,8 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 			remaining -= bytes_read;
 			buf += bytes_read;
 		} else {
+			char ch;
+
 			/* Only get here if 'capacity' exhausted before seeing a terminator */
 			/* Slowly read char by char until terminator found */
 			bytes_read = recv(socket, &ch, 1, 0);
@@ -218,12 +266,12 @@ static ssize_t read_line(int socket, void *buffer, size_t capacity, struct timev
 				return -1;
 			}
 			if (bytes_read == 0) {
-				errno = EPIPE;			/* overrun and broken socket */
+				errno = EPIPE;			/* Overrun and broken socket */
 				return -1;
 			}
 			if (ch == TERMINATOR) {
 				buf[-1] = '\0';			/* Terminate what was read */
-				return total_read-1;		/* Return line length excluding terminator */
+				return total_read - 1;		/* Return line length excluding terminator */
 			}
 		}
 	}
@@ -238,7 +286,8 @@ static int send_amt(int sock_fd, const void *buffer, size_t length)
 	ssize_t chunk_sent;
 
 	while (length > 0) {
-		chunk_sent = send(sock_fd, p, length, 0);
+		/* Do not send SIGPIPE when the other end breaks the connection */
+		chunk_sent = send(sock_fd, p, length, MSG_NOSIGNAL);
 		if (chunk_sent <= 0) {
 			if (errno == EINTR)
 				continue;
@@ -271,10 +320,13 @@ int send_error(int fd, const char *msg)
 	return -1;
 }
 
-int send_error_with_code(int fd, const char *msg, const uint32_t errorvalue)
+int send_error_codes(int fd, const char *msg, const uint32_t srv_error,
+	const uint32_t ccapi_error, const uint32_t cccs_error)
 {
 	if (write_uint32(fd, RESP_ERRORCODE) == 0
-		&& write_uint32(fd, errorvalue) == 0
+		&& write_uint32(fd, srv_error) == 0
+		&& write_uint32(fd, ccapi_error) == 0
+		&& write_uint32(fd, cccs_error) == 0
 		&& write_blob(fd, msg, strlen(msg)) == 0) {
 			return send_end_of_response(fd);
 	}
@@ -295,7 +347,7 @@ int read_uint32(int fd, uint32_t * const result, struct timeval *timeout)
 			return 0;
 	}
 
-	return -1;
+	return length == -ETIMEDOUT ? length : -1;
 }
 
 int write_uint32(int fd, const uint32_t value)
@@ -327,35 +379,47 @@ static int recv_blob(int fd, char type, void **data, size_t *data_length, struct
 {
 	char rxtype[12];
 	uint32_t length = 0;
-	uint8_t *buffer;
+	uint8_t *buffer = NULL;
+	int ret;
 
 	if (data_length)
 		*data_length = 0;
 
 	*data = NULL;	/* Ensure that in caller's space it is safe to free(data) even if recv_blob() fails */
 	rxtype[2] = '\0';
-	if (read_amt(fd, rxtype, 2, timeout) == 0				/* Read the type */
-		&& rxtype[0] == type						/* & confirm against expected */
-		&& rxtype[1] == ':'
-		&& read_uint32(fd, &length, timeout) == 0) {			/* Read the payload length */
-		buffer = malloc(length + 1);
-		if (buffer) {
-			if (read_amt(fd, buffer, length+1, timeout) == 0	/* Read the payload + terminator */
-				&& (char)buffer[length] == TERMINATOR) {	/* Verify terminator where expected */
-				buffer[length] = 0;				/* Replace terminator... for type 's:'tring */
-				if (data_length)
-					*data_length = length;			/* & report the length to the caller if needed */
-				*data = buffer;
+	ret = read_amt(fd, rxtype, 2, timeout);				/* Read the type */
+	if (ret != 0)
+		goto error;
 
-				return 0;
-			}
-			free(buffer);
-		} else {
+	if (rxtype[0] == type && rxtype[1] == ':') {			/* & confirm against expected */
+		ret = read_uint32(fd, &length, timeout);		/* Read the payload length */
+		if (ret != 0)
+			goto error;
+
+		buffer = calloc(length + 1, sizeof(*buffer));
+		if (!buffer)
 			return -ENOMEM;
+
+		ret = read_amt(fd, buffer, length + 1, timeout);	/* Read the payload + terminator */
+		if (ret != 0)
+			goto error;
+
+		if ((char)buffer[length] == TERMINATOR) {		/* Verify terminator where expected */
+			buffer[length] = 0;				/* Replace terminator... for type 's:'tring */
+			if (data_length)
+				*data_length = length;			/* & report the length to the caller if needed */
+			*data = buffer;
+
+			return 0;
 		}
 	}
 
-	return -1;
+	ret = -1;
+
+error:
+	free(buffer);
+
+	return ret;
 }
 
 int write_string(int fd, const char *string)

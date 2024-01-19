@@ -45,6 +45,8 @@
 
 #define CCIMP_HAS_STDINT_HEADER
 
+#define CCIMP_HAVE_SEM_CLOCKWAIT
+
 /* Debugging (Logging / Halt) */
 #define CCIMP_DEBUG_ENABLED
 
@@ -64,6 +66,8 @@
 #define CONNECTOR_COMPRESSION_MEM_LEVEL 8
 
 #define MSG_RECV_WINDOW_SIZE 65536
+
+#define DP_MAX_NUMBER_PER_REQUEST 250
 
 /* Client Secure Connection */
 #define CCIMP_CLIENT_CERTIFICATE_CAP_ENABLED

@@ -17,35 +17,29 @@
  * ===========================================================================
  */
 
-#ifndef _CCCS_DEFINITIONS_H_
-#define _CCCS_DEFINITIONS_H_
+#ifndef SERVICE_COMMON_H
+#define SERVICE_COMMON_H
+
+#define CONNECTOR_REQUEST_PORT		977
+
+#define REQ_TAG_DP_FILE_REQUEST		"upload_1_dp"
+#define REQ_TAG_MNT_REQUEST		"mnt_request"
+#define REQ_TAG_REGISTER_DR		"register_devicerequest"
+#define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
+#define REQ_TAG_REGISTER_DR_IPV4	"register_devicerequest_ipv4"
+#define REQ_TAG_UNREGISTER_DR_IPV4	"unregister_devicerequest_ipv4"
+
+#define REQ_TYPE_REQUEST_CB		"request"
+#define REQ_TYPE_STATUS_CB		"status"
 
 typedef enum {
-	CCCS_SEND_ERROR_NONE,
-	CCCS_SEND_ERROR_ERROR_FROM_DAEMON,
-	CCCS_SEND_ERROR_INVALID_ARGUMENT,
-	CCCS_SEND_ERROR_OUT_OF_MEMORY,
-	CCCS_SEND_ERROR_LOCK,
-	CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON,
-	CCCS_SEND_ERROR_READ_TIMEOUT,
-	CCCS_SEND_ERROR_READ_ERROR,
-	CCCS_SEND_ERROR_BAD_RESPONSE,
-	CCCS_SEND_ERROR_FROM_CLOUD,
-	CCCS_SEND_ERROR_UNABLE_TO_STORE_DP,
-	CCCS_SEND_ERROR_CCAPI_ERROR,
-	CCCS_SEND_ERROR_SRV_ERROR,
-} cccs_comm_error_t;
+	upload_datapoint_file_terminate,
+	upload_datapoint_file_metrics,
+	upload_datapoint_file_events,
+	upload_datapoint_file_path_metrics,
+	upload_datapoint_file_path_binary,
+	upload_datapoint_file_metrics_binary,
+	upload_datapoint_file_count
+} upload_datapoint_file_t;
 
-/**
- * struct cccs_resp_t - Response from ConnectCore Cloud Services daemon
- *
- * @code:	Response code, 0 success.
- * @hint:	Null-terminated string with error hint, can be NULL.
- * 		It must be freed.
- */
-typedef struct {
-	int code;
-	char *hint;
-} cccs_resp_t;
-
-#endif /* _CCCS_DEFINITIONS_H_ */
+#endif /* SERVICE_COMMON_H */

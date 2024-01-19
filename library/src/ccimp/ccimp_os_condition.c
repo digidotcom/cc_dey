@@ -63,6 +63,8 @@ static int wait_for_condition(
 
 ccimp_status_t ccimp_os_condition_init(ccimp_os_condition_st * const cond)
 {
+	pthread_condattr_t cattr;
+
 	if (cond == NULL) {
 		log_error("%s: NULL cond", __func__);
 		return CCIMP_STATUS_ERROR;
@@ -74,12 +76,21 @@ ccimp_status_t ccimp_os_condition_init(ccimp_os_condition_st * const cond)
 	}
 	cond->mutex_init = true;
 
-	if (pthread_cond_init(&cond->cond, NULL) != 0) {
+	pthread_condattr_init(&cattr);
+	if (pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC) != 0) {
+		log_error("%s: condattr setclock failed", __func__);
+		pthread_condattr_destroy(&cattr);
+		return CCIMP_STATUS_ERROR;
+	}
+
+	if (pthread_cond_init(&cond->cond, &cattr) != 0) {
 		log_error("%s: cond init failed", __func__);
+		pthread_condattr_destroy(&cattr);
 		return CCIMP_STATUS_ERROR;
 	}
 	cond->cond_init = true;
 
+	pthread_condattr_destroy(&cattr);
 	return CCIMP_STATUS_OK;
 }
 
@@ -164,7 +175,7 @@ ccimp_status_t ccimp_os_condition_wait(
 
 	if (max_wait_millisecs != OS_CONDITION_WAIT_INFINITE) {
 		pts = &ts;
-		clock_gettime(CLOCK_REALTIME, pts);
+		clock_gettime(CLOCK_MONOTONIC, pts);
 		timespec_add_ns(pts, (uint64_t)max_wait_millisecs * ns_per_ms);
 	}
 	else {

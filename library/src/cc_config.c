@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2023 Digi International Inc.
+ * Copyright (c) 2017-2024 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,11 +19,13 @@
 
 #include <confuse.h>
 #include <errno.h>
+#include <libdigiapix/process.h>
 #include <libgen.h>
 #include <limits.h>
 #include <regex.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "ccapi/ccapi.h"
@@ -40,6 +42,7 @@
 
 #define SETTING_VENDOR_ID			"vendor_id"
 #define SETTING_VENDOR_ID_MAX			0xFFFFFFFFUL
+#define SETTING_VENDOR_ID_DEFAULT		"0xFE080003"
 #define SETTING_DEVICE_TYPE			"device_type"
 #define SETTING_DEVICE_TYPE_MAX			255
 #define SETTING_FW_VERSION			"firmware_version"
@@ -68,13 +71,18 @@
 
 #define SETTING_FW_DOWNLOAD_PATH		"firmware_download_path"
 
+#define SETTING_DATA_BACKLOG_PATH		"data_backlog_path"
+#define SETTING_DATA_BACKLOG_SIZE		"data_backlog_size"
+#define SETTING_DATA_BACKLOG_SIZE_MIN		0
+#define SETTING_DATA_BACKLOG_SIZE_MAX		5000
+
 #define SETTING_SYS_MON_METRICS			"system_monitor_metrics"
 #define SETTING_SYS_MON_SAMPLE_RATE		"system_monitor_sample_rate"
 #define SETTING_SYS_MON_SAMPLE_RATE_MIN		1
 #define SETTING_SYS_MON_SAMPLE_RATE_MAX		365 * 24 * 60 * 60UL /* A year */
 #define SETTING_SYS_MON_UPLOAD_SIZE		"system_monitor_upload_samples_size"
 #define SETTING_SYS_MON_UPLOAD_SIZE_MIN		1
-#define SETTING_SYS_MON_UPLOAD_SIZE_MAX		250
+#define SETTING_SYS_MON_UPLOAD_SIZE_MAX		DP_MAX_NUMBER_PER_REQUEST
 
 #define SETTING_USE_STATIC_LOCATION		"static_location"
 #define SETTING_LATITUDE			"latitude"
@@ -99,6 +107,14 @@
 #define LOG_LEVEL_DEBUG_STR			"debug"
 
 #define ALL_METRICS				"*"
+
+typedef enum {
+	CCCS_SINGLE_SYSTEM,
+	CCCS_DUAL_SYSTEM,
+	CCCS_UNKNOWN_SYSTEM,
+} cccs_boot_system_t;
+
+static cccs_boot_system_t boot_type = CCCS_UNKNOWN_SYSTEM;
 
 static char *get_fw_version(const char *const value) {
 	char data[256] = {0};
@@ -253,10 +269,8 @@ static int cfg_check_vendor_id(cfg_t *cfg, cfg_opt_t *opt)
 	char *endptr = NULL;
 	char *val = cfg_opt_getnstr(opt, 0);
 
-	if (val == NULL || strlen(val) == 0) {
-		cfg_error(cfg, "Invalid %s: cannot be empty", opt->name);
-		return -1;
-	}
+	if (val == NULL || strlen(val) == 0)
+		val = SETTING_VENDOR_ID_DEFAULT;
 
 	value = strtoul(val, &endptr, 16);
 	switch (errno) {
@@ -459,6 +473,19 @@ static int cfg_check_wait_times(cfg_t *cfg, cfg_opt_t *opt)
 }
 
 /*
+ * cfg_check_data_backlog_size() - Check data backlog size is in range
+ *
+ * @cfg:	The section where the option is defined.
+ * @opt:	The option to check.
+ *
+ * @Return: 0 on success, any other value otherwise.
+ */
+static int cfg_check_data_backlog_size(cfg_t *cfg, cfg_opt_t *opt)
+{
+	return cfg_check_range(cfg, opt, SETTING_DATA_BACKLOG_SIZE_MIN, SETTING_DATA_BACKLOG_SIZE_MAX);
+}
+
+/*
  * cfg_check_sys_mon_sample_rate() - Check system monitor sample rate value is between 1s and a year
  *
  * @cfg:	The section where the option is defined.
@@ -472,7 +499,7 @@ static int cfg_check_sys_mon_sample_rate(cfg_t *cfg, cfg_opt_t *opt)
 }
 
 /*
- * cfg_check_sys_mon_upload_size() - Check system monitor samples to store value is between 1 and 250
+ * cfg_check_sys_mon_upload_size() - Check system monitor samples to store value is in range
  *
  * @cfg:	The section where the option is defined.
  * @opt:	The option to check.
@@ -568,14 +595,14 @@ static int cfg_check_location(cfg_t *cfg, cfg_opt_t *opt)
 }
 
 /*
- * cfg_check_fw_download_path() - Check firmware download path is an existing dir
+ * cfg_check_directory_exists() - Check a path is an existing dir
  *
  * @cfg:	The section were the option is defined.
  * @opt:	The option to check.
  *
  * @Return: 0 on success, any other value otherwise.
  */
-static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
+static int cfg_check_directory_exists(cfg_t *cfg, cfg_opt_t *opt)
 {
 	char *val = cfg_opt_getnstr(opt, 0);
 
@@ -592,6 +619,73 @@ static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
 	}
 
 	return 0;
+}
+
+/*
+ * cfg_check_directory_exists_or_empty() - Check a path is an existing dir or it is empty
+ *
+ * @cfg:	The section were the option is defined.
+ * @opt:	The option to check.
+ *
+ * @Return: 0 on success, any other value otherwise.
+ */
+static int cfg_check_directory_exists_or_empty(cfg_t *cfg, cfg_opt_t *opt)
+{
+	char *val = cfg_opt_getnstr(opt, 0);
+
+	if (val == NULL || strlen(val) == 0)
+		return 0;
+
+	return cfg_check_directory_exists(cfg, opt);
+}
+
+/*
+ * get_boot_type() - Get the boot system type
+ *
+ * @return: The type of boot system: dual, single, or unknown.
+ */
+static cccs_boot_system_t get_boot_type(void)
+{
+	if (boot_type == CCCS_UNKNOWN_SYSTEM) {
+		char *resp = NULL;
+		boot_type = CCCS_SINGLE_SYSTEM;
+
+		if (ldx_process_execute_cmd("fw_printenv -n dualboot", &resp, 2) != 0 || resp == NULL) {
+			if (resp != NULL)
+				log_error("Error getting system info: %s", resp);
+			else
+				log_error("%s", "Error getting system info");
+
+			boot_type = CCCS_UNKNOWN_SYSTEM;
+		} else if (strncmp(resp, "yes", 3) == 0) {
+			boot_type = CCCS_DUAL_SYSTEM;
+		}
+		free(resp);
+	}
+
+	return boot_type;
+}
+
+/*
+ * cfg_check_fw_download_path() - Check firmware download path is an existing dir
+ *
+ * @cfg:	The section were the option is defined.
+ * @opt:	The option to check.
+ *
+ * Do not add this check function as 'cfg_set_validate_func()' for
+ * 'firmware_download_path' since it depends  on setting 'on_the_fly'.
+ * The value of 'on_the_fly' setting is only valid if it is already read and
+ * this only only happens if 'on_the_fly' is defined before
+ * 'firmware_download_path' in the configuration file. We cannot depend on it.
+ *
+ * @Return: 0 on success, any other value otherwise.
+ */
+static int cfg_check_fw_download_path(cfg_t *cfg, cfg_opt_t *opt)
+{
+	if (cfg_getbool(cfg, SETTING_ON_THE_FLY) && get_boot_type() == CCCS_DUAL_SYSTEM)
+		return 0;
+
+	return cfg_check_directory_exists_or_empty(cfg, opt);
 }
 
 /**
@@ -654,6 +748,12 @@ static int check_cfg(cfg_t *cfg)
 
 	/* Check services settings. */
 	if (cfg_check_fw_download_path(cfg, cfg_getopt(cfg, SETTING_FW_DOWNLOAD_PATH)) != 0)
+		return -1;
+
+	/* Check data service settings. */
+	if (cfg_check_directory_exists_or_empty(cfg, cfg_getopt(cfg, SETTING_DATA_BACKLOG_PATH)) != 0)
+		return -1;
+	if (cfg_check_data_backlog_size(cfg, cfg_getopt(cfg, SETTING_DATA_BACKLOG_SIZE)) != 0)
 		return -1;
 
 	/* Check system monitor settings. */
@@ -778,12 +878,14 @@ static int get_log_level(cc_cfg_t *const cc_cfg)
  *
  * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the
  * 		settings parsed from the configuration will be saved.
+ * @log_msgs:	True to log messages, false otherwise.
  *
  * Return: 0 if the configuration is filled successfully, -1 otherwise.
  */
-static int fill_connector_config(cc_cfg_t *cc_cfg)
+static int fill_connector_config(cc_cfg_t *cc_cfg, bool log_msgs)
 {
 	cfg_t *cfg = cc_cfg->_data;
+	char *tmp = NULL;
 
 	if (!cfg)
 		return -1;
@@ -792,12 +894,19 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 		return -1;
 
 	/* Fill general settings. */
-	cc_cfg->vendor_id = strtoul(cfg_getstr(cfg, SETTING_VENDOR_ID), NULL, 16);
+	tmp = cfg_getstr(cfg, SETTING_VENDOR_ID);
+	if (!tmp || strlen(tmp) == 0) {
+		if (log_msgs)
+			log_warning("Vendor ID empty: using default value '%s'", SETTING_VENDOR_ID_DEFAULT);
+		tmp = SETTING_VENDOR_ID_DEFAULT;
+	}
+	cc_cfg->vendor_id = strtoul(tmp, NULL, 16);
 	cc_cfg->device_type = cfg_getstr(cfg, SETTING_DEVICE_TYPE);
 	cc_cfg->fw_version_src = cfg_getstr(cfg, SETTING_FW_VERSION);
 	free(cc_cfg->fw_version);
 	cc_cfg->fw_version = get_fw_version(cc_cfg->fw_version_src);
-	log_debug("Firmware version: %s", cc_cfg->fw_version);
+	if (log_msgs)
+		log_info("Firmware version: %s", cc_cfg->fw_version);
 
 	cc_cfg->description = cfg_getstr(cfg, SETTING_DESCRIPTION);
 	cc_cfg->contact = cfg_getstr(cfg, SETTING_CONTACT);
@@ -827,6 +936,12 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 	/* Fill On the fly setting */
 	cc_cfg->on_the_fly = cfg_getbool(cfg, SETTING_ON_THE_FLY);
 
+	cc_cfg->is_dual_boot = get_boot_type() == CCCS_DUAL_SYSTEM;
+
+	/* Fill data service settings */
+	cc_cfg->data_backlog_path = cfg_getstr(cfg, SETTING_DATA_BACKLOG_PATH);
+	cc_cfg->data_backlog_kb = cfg_getint(cfg, SETTING_DATA_BACKLOG_SIZE);
+
 	/* Fill system monitor settings. */
 	cc_cfg->sys_mon_sample_rate = cfg_getint(cfg, SETTING_SYS_MON_SAMPLE_RATE);
 	cc_cfg->sys_mon_num_samples_upload = cfg_getint(cfg, SETTING_SYS_MON_UPLOAD_SIZE);
@@ -847,6 +962,8 @@ static int fill_connector_config(cc_cfg_t *cc_cfg)
 
 int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 {
+	struct stat st;
+
 	/* Virtual directory settings. */
 	static cfg_opt_t vdir_opts[] = {
 		/* ------------------------------------------------------------------------------------- */
@@ -878,7 +995,7 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		/*|  TYPE  |         SETTING NAME         |          DEFAULT VALUE          |   FLAGS   |*/
 		/* ------------------------------------------------------------------------------------- */
 		/* General settings. */
-		CFG_STR(	SETTING_VENDOR_ID,		NULL,				CFGF_NODEFAULT),
+		CFG_STR(	SETTING_VENDOR_ID,		"",				CFGF_NONE),
 		CFG_STR(	SETTING_DEVICE_TYPE,		"DEY device",			CFGF_NONE),
 		CFG_STR(	SETTING_FW_VERSION,		FW_VERSION_FILE_PREFIX FW_VERSION_FILE_DEFAULT, CFGF_NONE),
 		CFG_STR(	SETTING_DESCRIPTION,		"",				CFGF_NONE),
@@ -896,17 +1013,21 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 
 		/* Services settings. */
 		CFG_BOOL(	ENABLE_FS_SERVICE,		cfg_true,			CFGF_NONE),
-		CFG_STR(	SETTING_FW_DOWNLOAD_PATH,	NULL,				CFGF_NODEFAULT),
+		CFG_STR(	SETTING_FW_DOWNLOAD_PATH,	"",				CFGF_NONE),
 		CFG_BOOL(	SETTING_ON_THE_FLY,		cfg_false,			CFGF_NONE),
 
 		/* File system settings. */
 		CFG_SEC(	GROUP_VIRTUAL_DIRS,		virtual_dirs_opts,		CFGF_NONE),
 
+		/* Data service settings. */
+		CFG_STR(	SETTING_DATA_BACKLOG_PATH,	"/tmp",				CFGF_NONE),
+		CFG_INT(	SETTING_DATA_BACKLOG_SIZE,	1024,				CFGF_NONE),
+
 		/* System monitor settings. */
-		CFG_BOOL(	ENABLE_SYSTEM_MONITOR,		cfg_true,			CFGF_NONE),
+		CFG_BOOL(	ENABLE_SYSTEM_MONITOR,		cfg_false,			CFGF_NONE),
 		CFG_INT(	SETTING_SYS_MON_SAMPLE_RATE,	5,				CFGF_NONE),
 		CFG_INT(	SETTING_SYS_MON_UPLOAD_SIZE,	10,				CFGF_NONE),
-		CFG_STR_LIST(	SETTING_SYS_MON_METRICS,	"{*}",				CFGF_NONE),
+		CFG_STR_LIST(	SETTING_SYS_MON_METRICS,	"{\"*\"}",			CFGF_NONE),
 
 		/* Static location settings */
 		CFG_BOOL(	SETTING_USE_STATIC_LOCATION,	cfg_true,			CFGF_NONE),
@@ -922,21 +1043,10 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 		CFG_END()
 	};
 
-	if (!file_exists(filename)) {
-		log_error("File '%s' does not exist.", filename);
-		return -1;
-	}
-
-	if (!file_readable(filename)) {
-		log_error("File '%s' cannot be read.", filename);
-		return -1;
-	}
-
 	cc_cfg->_data = cfg_init(opts, CFGF_IGNORE_UNKNOWN);
 	if (!cc_cfg->_data) {
 		log_error("Failed initializing configuration file parser: %s (%d)",
 			strerror(errno), errno);
-		//free(data);
 		return -1;
 	}
 
@@ -955,7 +1065,8 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_RX, cfg_check_keepalive_rx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_KEEPALIVE_TX, cfg_check_keepalive_tx);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_WAIT_TIMES, cfg_check_wait_times);
-	cfg_set_validate_func(cc_cfg->_data, SETTING_FW_DOWNLOAD_PATH, cfg_check_fw_download_path);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_PATH, cfg_check_directory_exists_or_empty);
+	cfg_set_validate_func(cc_cfg->_data, SETTING_DATA_BACKLOG_SIZE, cfg_check_data_backlog_size);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_SAMPLE_RATE,
 			cfg_check_sys_mon_sample_rate);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_SYS_MON_UPLOAD_SIZE,
@@ -964,20 +1075,28 @@ int parse_configuration(const char *const filename, cc_cfg_t *cc_cfg)
 	cfg_set_validate_func(cc_cfg->_data, SETTING_LATITUDE, cfg_check_latitude);
 	cfg_set_validate_func(cc_cfg->_data, SETTING_LONGITUDE, cfg_check_longitude);
 
-	/* Parse the configuration file. */
-	switch (cfg_parse(cc_cfg->_data, filename)) {
-		case CFG_FILE_ERROR:
-			log_error("Configuration file '%s' could not be read: %s\n", filename,
-					strerror(errno));
-			goto parse_error;
-		case CFG_SUCCESS:
-			break;
-		case CFG_PARSE_ERROR:
-			log_error("Error parsing configuration file '%s'\n", filename);
-			goto parse_error;
+	if (stat(filename, &st) != 0) {
+		log_warning("File '%s' does not exist, using default values", filename);
+	} else if (!S_ISREG(st.st_mode)) {
+		log_warning("'%s' is not a file, using default values", filename);
+	} else if (!file_readable(filename)) {
+		log_error("File '%s' cannot be read, using default values", filename);
+	} else {
+		/* Parse the configuration file. */
+		switch (cfg_parse(cc_cfg->_data, filename)) {
+			case CFG_FILE_ERROR:
+				log_error("Configuration file '%s' could not be read: %s\n", filename,
+						strerror(errno));
+				goto parse_error;
+			case CFG_SUCCESS:
+				break;
+			case CFG_PARSE_ERROR:
+				log_error("Error parsing configuration file '%s'\n", filename);
+				goto parse_error;
+		}
 	}
 
-	return fill_connector_config(cc_cfg);
+	return fill_connector_config(cc_cfg, true);
 
 parse_error:
 	cfg_free(cc_cfg->_data);
@@ -1019,6 +1138,9 @@ static void free_cc_cfg(cc_cfg_t *cc_cfg)
 
 	cc_cfg->fw_download_path = NULL;
 
+	cc_cfg->data_backlog_path = NULL;
+	cc_cfg->data_backlog_kb = 0;
+
 	for (i = 0; i < cc_cfg->n_sys_mon_metrics; i++)
 		cc_cfg->sys_mon_metrics[i] = NULL;
 	free(cc_cfg->sys_mon_metrics);
@@ -1049,7 +1171,7 @@ int get_configuration(cc_cfg_t *cc_cfg)
 		return -1;
 	}
 
-	return fill_connector_config(cc_cfg);
+	return fill_connector_config(cc_cfg, false);
 }
 
 /*
@@ -1093,6 +1215,10 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 	cfg_setstr(cfg, SETTING_FW_DOWNLOAD_PATH, cc_cfg->fw_download_path);
 	/* TODO: Set virtual directories */
 
+	/* Fill data service settings. */
+	cfg_setstr(cfg, SETTING_DATA_BACKLOG_PATH, cc_cfg->data_backlog_path);
+	cfg_setint(cfg, SETTING_DATA_BACKLOG_SIZE, cc_cfg->data_backlog_kb);
+
 	/* Fill system monitor settings. */
 	cfg_setint(cfg, SETTING_SYS_MON_SAMPLE_RATE, cc_cfg->sys_mon_sample_rate);
 	cfg_setint(cfg, SETTING_SYS_MON_UPLOAD_SIZE, cc_cfg->sys_mon_num_samples_upload);
@@ -1116,7 +1242,7 @@ static int set_connector_config(cc_cfg_t *cc_cfg)
 		default:
 			cfg_setstr(cfg, SETTING_LOG_LEVEL, LOG_LEVEL_ERROR_STR);
 			break;
-		}
+	}
 	cfg_setbool(cfg, SETTING_LOG_CONSOLE, (cfg_bool_t) cc_cfg->log_console);
 
 	return 0;
@@ -1187,7 +1313,7 @@ int apply_configuration(cc_cfg_t *cc_cfg)
 
 	free_cc_cfg(cc_cfg);
 
-	if (fill_connector_config(cc_cfg) != 0)
+	if (fill_connector_config(cc_cfg, true) != 0)
 		return 1;
 
 	cfg = cc_cfg->_data;

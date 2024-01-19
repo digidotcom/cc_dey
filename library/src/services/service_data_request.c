@@ -211,16 +211,23 @@ static ccapi_receive_error_t data_request(const char *target,
 		goto out;
 	}
 	/* Read the blob response from the device */
-	if (read_uint32(sock_fd, &error, &timeout) ||
-		read_blob(sock_fd, &response_buffer_info->buffer, &response_buffer_info->length, &timeout)) {
+	ret = read_uint32(sock_fd, &error, &timeout);
+	if (ret == 0)
+		ret = read_blob(sock_fd, &response_buffer_info->buffer, &response_buffer_info->length, &timeout);
+
+	if (ret == -ETIMEDOUT)
+		log_dr_error("Could not receive request data: %s", "Timeout");
+	else if (ret == -ENOMEM)
+		log_dr_error("Could not receive request data: %s", "Out of memory");
+	else if (ret == -EPIPE)
+		log_dr_error("Could not receive request data: %s", "Socket closed");
+	else if (ret)
 		log_dr_error("Could not receive request data: %s (%d)", strerror(errno), errno);
+
+	if (ret) {
 		error = CCAPI_RECEIVE_ERROR_INVALID_DATA_CB;
 		goto out;
 	}
-
-	/* If we reach this point, all went well */
-	ret = 0;
-
 out:
 	if (ret)
 		/* An error occurred, send empty response to DRM */
@@ -272,15 +279,25 @@ static int read_request(int fd, request_data_t *out, bool expect_ip, int expecte
 		.tv_sec = SOCKET_READ_TIMEOUT_SEC,
 		.tv_usec = 0
 	};
+	int ret;
 
 	if (expect_ip) {
 		char *ip = NULL;
 		int valid_ip;
 
-		if (read_string(fd, &ip, NULL, &timeout)) {
+		ret = read_string(fd, &ip, NULL, &timeout);
+		if (ret == -ETIMEDOUT)
+			send_error(fd, "Timeout reading IP");
+		else if (ret == -ENOMEM)
+			send_error(fd, "Failed to read IP: Out of memory");
+		else if (ret == -EPIPE)
+			/* Do not send anything */
+			;
+		else if (ret)
 			send_error(fd, "Failed to read IP");
+
+		if (ret)
 			return -1;
-		}
 
 		/* Parse the IP address string directly into .sin_addr */
 		valid_ip = inet_pton(expected_ip_af, ip, &out->recipient.sin_addr);
@@ -294,21 +311,39 @@ static int read_request(int fd, request_data_t *out, bool expect_ip, int expecte
 		out->recipient.sin_family = expected_ip_af;
 	}
 
-	if (read_uint32(fd, &port, &timeout)) {
+	ret = read_uint32(fd, &port, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error(fd, "Timeout reading port");
+	else if (ret)
 		send_error(fd, "Failed to read port");
+
+	if (ret)
 		return -1;
-	}
+
 	out->recipient.sin_port = htons(port);
 
-	if (read_string(fd, &out->target, NULL, &timeout)) {
+	ret = read_string(fd, &out->target, NULL, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error(fd, "Timeout reading target");
+	else if (ret == -ENOMEM)
+		send_error(fd, "Failed to read target: Out of memory");
+	else if (ret == -EPIPE)
+		/* Do not send anything */
+		;
+	else if (ret)
 		send_error(fd, "Failed to read target");
-		return -1;
-	}
 
-	if (read_uint32(fd, &end, &timeout) || end != 0) {
-		send_error(fd, "Failed to read message end");
+	if (ret)
 		return -1;
-	}
+
+	ret = read_uint32(fd, &end, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error(fd, "Timeout reading message end");
+	else if (ret || end != 0)
+		send_error(fd, "Failed to read message end");
+
+	if (ret)
+		return -1;
 
 	return 0;
 }
@@ -405,9 +440,11 @@ _handle_unregister(int fd, request_data_t *req, bool expect_to_read_ip, int expe
 	return 0;
 }
 
-int handle_register_data_request(int fd)
+int handle_register_data_request(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* This registration command assumes localhost IPv4 */
 	req_data.recipient.sin_family = AF_INET;
@@ -416,17 +453,21 @@ int handle_register_data_request(int fd)
 	return _handle_register(fd, &req_data, false, 0);
 }
 
-int handle_register_data_request_ipv4(int fd)
+int handle_register_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* Registration request payload is expected to include an IPv4 string */
 	return _handle_register(fd, &req_data, true, AF_INET);
 }
 
-int handle_unregister_data_request(int fd)
+int handle_unregister_data_request(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* This un-registration command assumes localhost IPv4.
 	   NOTE: Technically unregister_target doesn't even look at these;
@@ -437,9 +478,11 @@ int handle_unregister_data_request(int fd)
 	return _handle_unregister(fd, &req_data, false, 0);
 }
 
-int handle_unregister_data_request_ipv4(int fd)
+int handle_unregister_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg)
 {
 	request_data_t req_data;
+
+	UNUSED_ARGUMENT(cc_cfg);
 
 	/* Unregistration request payload is expected to include an IPv4 string.
 	   NOTE: Technically unregister_target doesn't even look at the address;

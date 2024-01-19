@@ -36,7 +36,7 @@ static pthread_t listen_thread;
 static bool listen_thread_valid;
 static volatile bool stop_listening = false;
 
-typedef int (*request_handler_t)(int socket_fd);
+typedef int (*request_handler_t)(int socket_fd, const cc_cfg_t *const cc_cfg);
 
 struct handler_t {
 	const char *request_tag;
@@ -45,6 +45,10 @@ struct handler_t {
 	{
 		REQ_TAG_DP_FILE_REQUEST,
 		handle_datapoint_file_upload
+	},
+	{
+		REQ_TAG_MNT_REQUEST,
+		handle_maintenance_request
 	},
 	{
 		REQ_TAG_REGISTER_DR,
@@ -64,7 +68,7 @@ struct handler_t {
 	}
 };
 
-static void handle_requests(int fd)
+static void handle_requests(int fd, const cc_cfg_t *const cc_cfg)
 {
 	int request_sock;
 
@@ -76,10 +80,24 @@ static void handle_requests(int fd)
 			.tv_sec = 20,
 			.tv_usec = 0
 		};
+		int ret;
+
 		/* Read request tag (to select handler for this request) */
-		if (read_string(request_sock, &request_tag, NULL, &timeout) < 0) {
+		ret = read_string(request_sock, &request_tag, NULL, &timeout);
+		if (ret == -ETIMEDOUT) {
+			send_error(request_sock, "Timeout reading request code");
+			log_error("%s", "Timeout reading request tag");
+		} else if (ret == -ENOMEM) {
+			send_error(request_sock, "Failed to read request code: Out of memory");
+			log_error("Error reading request tag: %s", "Out of memory");
+		} else if (ret == -EPIPE) {
+			log_error("Error reading request tag: %s", "Socket closed");
+		} else if (ret) {
 			send_error(request_sock, "Failed to read request code");
 			log_error("Error reading request tag: %s (%d)", strerror(errno), errno);
+		}
+
+		if (ret) {
 			close(request_sock);
 			continue;
 		}
@@ -89,7 +107,7 @@ static void handle_requests(int fd)
 			const struct handler_t *handler = &request_handlers[i];
 
 			if (!strcmp(request_tag, handler->request_tag)) {
-				if (handler->request_handler(request_sock))
+				if (handler->request_handler(request_sock, cc_cfg))
 					log_error("Error handling request tagged with: '%s'", request_tag);
 
 				handled = true;
@@ -110,13 +128,11 @@ static void handle_requests(int fd)
 	}
 }
 
-static void *listen_threaded(void *unused)
+static void *listen_threaded(void *cc_cfg_arg)
 {
 	struct sockaddr_in addr;
 	int fd;
 	int n_options = 1;
-
-	UNUSED_ARGUMENT(unused);
 
 	fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (fd == -1)
@@ -135,7 +151,7 @@ static void *listen_threaded(void *unused)
 		goto done;
 	}
 
-	handle_requests(fd);
+	handle_requests(fd, (const cc_cfg_t *)cc_cfg_arg);
 
 done:
 	close(fd);
@@ -145,7 +161,7 @@ done:
 	return NULL;
 }
 
-void start_listening_for_local_requests(void)
+void start_listening_for_local_requests(const cc_cfg_t *const cc_cfg)
 {
 	pthread_attr_t attr;
 
@@ -155,7 +171,7 @@ void start_listening_for_local_requests(void)
 		return;
 	}
 
-	listen_thread_valid = (pthread_create(&listen_thread, &attr, listen_threaded, NULL) == 0);
+	listen_thread_valid = (pthread_create(&listen_thread, &attr, listen_threaded, (void *)cc_cfg) == 0);
 	if (!listen_thread_valid)
 		log_error("Unable to start sending response (%d)", listen_thread_valid);
 

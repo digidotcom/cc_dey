@@ -45,6 +45,37 @@
 int mkpath(char *dir, mode_t mode);
 
 /**
+ * write_buffer_to_file() - Write data buffer to a file
+ *
+ * @path:	Absolute path of the file to be written.
+ * @buff:	Data buffer to write.
+ * @size:	Data buffer size.
+ *
+ * Return: 0 if success, 1 otherwise.
+ */
+int write_buffer_to_file(char const * const path, char const * const buff, size_t size);
+
+/**
+ * cp_file() - Copy file contents to another file
+ *
+ * @in_path:	Absolute path of the file to copy.
+ * @out_path:	Absolute path of the destination file.
+ *
+ * Return: 0 if success, 1 otherwise.
+ */
+int cp_file(char const * const in_path, char const * const out_path);
+
+/**
+ * get_directory_size() - Calculates the directory size in bytes
+ *
+ * @dir_path:	Absolute path of the directory to get its size.
+ * @dir_size:	Calculated directory size.
+ *
+ * Return: 0 if success, -1 if directory does not exist, 1 if fail.
+ */
+int get_directory_size(const char * const dir_path, unsigned long long *dir_size);
+
+/**
  * crc32file() - Calculate the CRC32 hash of a file
  *
  * @path:	Full path of the file to calculate its CRC32 hash.

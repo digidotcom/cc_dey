@@ -34,7 +34,7 @@
 
 #include "_cccs_utils.h"
 #include "cc_logging.h"
-#include "services.h"
+#include "service_common.h"
 #include "services_util.h"
 
 #define CCCSD_TAG	"CCCSD:"
@@ -178,72 +178,129 @@ int connect_cccsd(void)
 	return s;
 }
 
-cccs_comm_error_t parse_cccsd_response(int fd, cccs_resp_t *resp, unsigned long timeout)
+/**
+ * read_error() - Read error code from socket
+ *
+ * @fd:		Socket to read error from.
+ * @error:	Read error from CCCS daemon.
+ * @timeout:	Number of seconds to wait for the reading.
+ * @desc:	Description to log it it fails. Cannot be NULL.
+ *
+ * Return: 0 if success, any other value otherwise.
+ */
+static int read_error(int fd, uint32_t *error, struct timeval *timeout, const char * const desc)
+{
+	int ret = read_uint32(fd, error, timeout);
+
+	if (ret == -ETIMEDOUT) {
+		ret = CCCS_SEND_ERROR_READ_TIMEOUT;
+		log_cccsd_error("Bad response, timeout reading %sfrom CCCSD", desc);
+	} else if (ret) {
+		ret = CCCS_SEND_ERROR_BAD_RESPONSE;
+		log_cccsd_error("Bad response, failed to read %sfrom CCCSD", desc);
+	}
+
+	return ret;
+}
+
+cccs_comm_error_t parse_cccsd_response(int fd, cccs_srv_resp_t *resp, unsigned long timeout)
 {
 	uint32_t code;
 	void *msg = NULL;
 	size_t msg_len = 0;
 	struct timeval timeout_val;
+	int ret;
 
+	resp->srv_err = 0;
+	resp->ccapi_err = 0;
+	resp->cccs_err = 0;
 	resp->hint = NULL;
 
 	timeout_val.tv_sec = timeout;
 	timeout_val.tv_usec = 0;
 
-	if (read_uint32(fd, &code, timeout > 0 ? &timeout_val : NULL) < 0) {
-		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
-		log_cccsd_error("Bad response: %s",
-				"Failed to read data type from CCCSD");
-
-		return resp->code;
+	ret = read_error(fd, &code, timeout > 0 ? &timeout_val : NULL, "data type ");
+	if (ret) {
+		resp->cccs_err = ret;
+		return ret;
 	}
 
-	switch(code) {
+	switch (code) {
 		case RESP_END_OF_MESSAGE:
-			resp->code = 0;
 			log_cccsd_debug("%s", "Success from CCCSD");
 
 			return CCCS_SEND_ERROR_NONE;
 		case RESP_ERRORCODE:
-			/* Read error code first */
-			if (read_uint32(fd, (uint32_t *) &resp->code, timeout > 0 ? &timeout_val : NULL) < 0) {
-				resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
-				log_cccsd_error("Bad response: %s",
-						"Failed to read error code from CCCSD");
-
-				return resp->code;
+			/* Read server error code */
+			ret = read_error(fd, (uint32_t *)&resp->srv_err, timeout > 0 ? &timeout_val : NULL, "DRM error ");
+			if (ret) {
+				resp->cccs_err = ret;
+				return ret;
 			}
+			if (resp->srv_err)
+				resp->cccs_err = CCCS_SEND_ERROR_SRV_ERROR;
+
+			/* Read ccapi error code */
+			ret = read_error(fd, (uint32_t *)&resp->ccapi_err, timeout > 0 ? &timeout_val : NULL, "CCAPI error ");
+			if (ret) {
+				resp->cccs_err = ret;
+				return ret;
+			}
+			if (resp->ccapi_err)
+				resp->cccs_err = CCCS_SEND_ERROR_CCAPI_ERROR;
+
+			/* Read cccs error code */
+			ret = read_error(fd, (uint32_t *)&resp->cccs_err, timeout > 0 ? &timeout_val : NULL, "CCCS error ");
+			if (ret) {
+				resp->cccs_err = ret;
+				return ret;
+			}
+
 			break;
 		case RESP_ERROR:
-			resp->code = 255;
+			resp->srv_err = 255;
+			resp->cccs_err = CCCS_SEND_ERROR_SRV_ERROR;
 			break;
 		default:
-			resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
-			log_cccsd_error("Bad response: Received unknown data type code %" PRIu32 "from CCCSD", code);
+			resp->cccs_err = CCCS_SEND_ERROR_BAD_RESPONSE;
+			log_cccsd_error("Bad response, received unknown data type code %" PRIu32 "from CCCSD", code);
 
-			return resp->code;
+			return resp->cccs_err;
 	}
 
 	/* Read the error message */
-	if (read_blob(fd, &msg, &msg_len, timeout > 0 ? &timeout_val : NULL) < 0) {
+	ret = read_blob(fd, &msg, &msg_len, timeout > 0 ? &timeout_val : NULL);
+	if (ret == -ETIMEDOUT) {
+		resp->cccs_err = CCCS_SEND_ERROR_READ_TIMEOUT;
+		log_cccsd_error("Failed to read response: %s", "Timeout");
+	} else if (ret == -ENOMEM) {
+		resp->cccs_err = CCCS_SEND_ERROR_BAD_RESPONSE;
+		log_cccsd_error("Failed to read response: %s", "Out of memory");
+	} else if (ret == -EPIPE) {
+		resp->cccs_err = CCCS_SEND_UNABLE_TO_CONNECT_TO_DAEMON;
+		log_cccsd_error("Failed to read response: %s", "Socket closed");
+	} else if (ret) {
+		resp->cccs_err = CCCS_SEND_ERROR_BAD_RESPONSE;
 		log_cccsd_error("Failed to read response: %s (%d)", strerror(errno), errno);
-		resp->code = CCCS_SEND_ERROR_BAD_RESPONSE;
-
-		return resp->code;
 	}
+
+	if (ret)
+		return resp->cccs_err;
 
 	resp->hint = (char *)msg;
 
 	if (resp->hint)
-		log_cccsd_debug("Error from Cloud: %s (%d)", resp->hint, resp->code);
+		log_cccsd_debug("Transaction error: %s (srv: %d, ccapi: %d, cccs: %d)",
+			resp->hint, resp->srv_err, resp->ccapi_err, resp->cccs_err);
 	else
-		log_cccsd_debug("Error from Cloud (%d)", resp->code);
+		log_cccsd_debug("Transaction error (srv: %d, ccapi: %d, cccs: %d)",
+			resp->srv_err, resp->ccapi_err, resp->cccs_err);
 
 	return CCCS_SEND_ERROR_FROM_CLOUD;
 }
 
 /**
- * signal_handler() - Manage signal received.
+ * signal_handler() - Manage signal received
  *
  * @signum:	Received signal.
  */

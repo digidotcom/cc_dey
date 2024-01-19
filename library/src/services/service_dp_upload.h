@@ -20,15 +20,10 @@
 #ifndef SERVICE_DP_UPLOAD_H
 #define SERVICE_DP_UPLOAD_H
 
-#define REQ_TAG_DP_FILE_REQUEST	"upload_1_dp"
+#include "cc_config.h"
+#include "service_common.h"
 
-typedef enum {
-	upload_datapoint_file_terminate,
-	upload_datapoint_file_metrics,
-	upload_datapoint_file_events,
-	upload_datapoint_file_count
-} upload_datapoint_file_t;
+int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg);
+int handle_maintenance_request(int fd, const cc_cfg_t *const cc_cfg);
 
-int handle_datapoint_file_upload(int fd);
-
-#endif
+#endif /* SERVICE_DP_UPLOAD_H */

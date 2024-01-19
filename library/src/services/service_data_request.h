@@ -20,28 +20,19 @@
 #ifndef SERVICE_DATA_REQUEST_H
 #define SERVICE_DATA_REQUEST_H
 
-#define REQ_TAG_REGISTER_DR		"register_devicerequest"
-#define REQ_TAG_UNREGISTER_DR		"unregister_devicerequest"
-#define REQ_TAG_REGISTER_DR_IPV4	"register_devicerequest_ipv4"
-#define REQ_TAG_UNREGISTER_DR_IPV4	"unregister_devicerequest_ipv4"
+#include "cc_config.h"
+#include "service_common.h"
 
-#define REQ_TYPE_REQUEST_CB	"request"
-#define REQ_TYPE_STATUS_CB	"status"
+int handle_register_data_request(int fd, const cc_cfg_t *const cc_cfg);
+int handle_unregister_data_request(int fd, const cc_cfg_t *const cc_cfg);
+int handle_register_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg);
+int handle_unregister_data_request_ipv4(int fd, const cc_cfg_t *const cc_cfg);
 
-int handle_register_data_request(int fd);
-int handle_unregister_data_request(int fd);
-int handle_register_data_request_ipv4(int fd);
-int handle_unregister_data_request_ipv4(int fd);
-
-/* Avoid definition of not required function in CCCS API that is using an
-internal type: 'ccapi_receive_error_t' */
-#ifndef _CCCS_RECEIVE_H_
 /*
  * register_builtin_requests() - Register built-in data requests
  *
  * Return: Error code after registering the built-in data requests.
  */
 ccapi_receive_error_t register_builtin_requests(void);
-#endif /* _CCCS_RECEIVE_H_*/
 
 #endif /* SERVICE_DATA_REQUEST_H */

@@ -17,23 +17,47 @@
  * ===========================================================================
  */
 
+#include <errno.h>
 #include <stdio.h>
 
 #include "ccapi/ccapi.h"
+#include "_cc_datapoints.h"
 #include "cc_logging.h"
 #include "cc_error_msg.h"
 #include "service_dp_upload.h"
 #include "services_util.h"
+#include "services-client/cccs_definitions.h"
+#include "_utils.h"
 
-static ccapi_send_error_t upload_datapoint_file(char const * const buff, size_t size, char const cloud_path[], ccapi_string_info_t * const hint_string_info, ccapi_optional_uint8_t *err_from_server)
+#define MNT_TAG				"MNT: "
+#define DP_MAINTENANCE_STREAM_ID	"management/events/in_maintenance_window"
+
+static ccapi_send_error_t upload_datapoint_file(uint32_t type,
+	char const * const buff, size_t size,
+	char const cloud_path[],
+	ccapi_string_info_t * const hint_string_info,
+	ccapi_optional_uint8_t *err_from_server)
 {
 #define TIMEOUT 5
-	ccapi_send_error_t send_error;
+	ccapi_send_error_t send_error = CCAPI_SEND_ERROR_NONE;
 	char const file_type[] = "text/plain";
 
-	send_error = ccapi_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
-		cloud_path, file_type, buff, size,
-		CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+	switch (type) {
+		case upload_datapoint_file_events:
+		case upload_datapoint_file_metrics:
+			send_error = ccapi_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				cloud_path, file_type, buff, size,
+				CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+			break;
+		case upload_datapoint_file_path_metrics:
+			send_error = ccapi_send_file_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				buff /* Local path */, cloud_path, file_type,
+				CCAPI_SEND_BEHAVIOR_OVERWRITE, TIMEOUT, hint_string_info, err_from_server);
+			break;
+		default:
+			/* Should not occur */
+			break;
+	}
 
 	if (send_error != CCAPI_SEND_ERROR_NONE)
 		log_error("Send error: %d Hint: %s", send_error, hint_string_info->string);
@@ -42,84 +66,351 @@ static ccapi_send_error_t upload_datapoint_file(char const * const buff, size_t 
 #undef TIMEOUT
 }
 
-int handle_datapoint_file_upload(int fd)
+static ccapi_dp_b_error_t upload_binary_datapoint(uint32_t type,
+	char const * const buff, size_t size,
+	char const stream_id[],
+	ccapi_string_info_t * const hint_string_info,
+	ccapi_optional_uint8_t *err_from_server)
 {
-	while(1) {
-		ccapi_send_error_t ret;
+#define TIMEOUT 5
+	ccapi_dp_b_error_t send_error = CCAPI_DP_B_ERROR_NONE;
+
+	switch (type) {
+		case upload_datapoint_file_metrics_binary:
+			send_error = ccapi_dp_binary_send_data_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				stream_id, buff, size,
+				TIMEOUT, hint_string_info, err_from_server);
+			break;
+		case upload_datapoint_file_path_binary:
+			send_error = ccapi_dp_binary_send_file_with_reply_and_errorcode(CCAPI_TRANSPORT_TCP,
+				buff, stream_id,
+				TIMEOUT, hint_string_info, err_from_server);
+			break;
+		default:
+			/* Should not occur */
+			break;
+	}
+
+	if (send_error != CCAPI_DP_B_ERROR_NONE)
+		log_error("Send binary error: %d Hint: %s", send_error, hint_string_info->string);
+
+	return send_error;
+#undef TIMEOUT
+}
+
+int handle_datapoint_file_upload(int fd, const cc_cfg_t *const cc_cfg)
+{
+	while (1) {
+		int ret, cccs_err = 0;
 		uint32_t type;
 		size_t size;
-		void * blob;
+		void *blob = NULL;
+		char *file_path = NULL, *stream_id = NULL, *cloud_path = NULL;
+		char const * err_msg = NULL;
 		struct timeval timeout = {
 			.tv_sec = SOCKET_READ_TIMEOUT_SEC,
 			.tv_usec = 0
 		};
 		char hint[256];
 		ccapi_string_info_t hint_string_info;
-		ccapi_optional_uint8_t err_from_server;
+		ccapi_optional_uint8_t err_from_server = {
+			.known = false,
+			.value = 0
+		};
 
 		hint[0] = '\0';
 		hint_string_info.length = sizeof hint;
 		hint_string_info.string = hint;
 
 		/* Read the record type from the client message */
-		if (read_uint32(fd, &type, &timeout)) {
-			send_error(fd, "Failed to read data type");
+		ret = read_uint32(fd, &type, &timeout);
+		if (ret == -ETIMEDOUT)
+			send_error_codes(fd, "Timeout reading data type",
+				0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+		else if (ret)
+			send_error_codes(fd, "Failed to read data type",
+				0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+		if (ret)
 			return 1;
-		}
 
 		if (type == upload_datapoint_file_terminate)
 			break;
 
-		if (type != upload_datapoint_file_metrics && type != upload_datapoint_file_events) {
-			send_error(fd, "Invalid datapoint type");
+		if (type != upload_datapoint_file_metrics
+			&& type != upload_datapoint_file_events
+			&& type != upload_datapoint_file_path_metrics
+			&& type != upload_datapoint_file_path_binary
+			&& type != upload_datapoint_file_metrics_binary) {
+			send_error_codes(fd, "Invalid data type",
+				0, 0, CCCS_SEND_ERROR_BAD_RESPONSE);
+
 			return 1;
 		}
 
-		/* Read the datapoint(s) blob of data from the client process */
-		if (read_blob(fd, &blob, &size, &timeout)) {
-			send_error(fd, "Failed to read datapoint data");
-			return 1;
+		/* Read data point(s) blob/file path */
+		switch (type) {
+			case upload_datapoint_file_path_metrics:
+			case upload_datapoint_file_path_binary:
+				/* Read data point(s) file path */
+				ret = read_string(fd, &file_path, NULL, &timeout);
+				if (ret == -ETIMEDOUT)
+					send_error_codes(fd, "Timeout reading data point file path",
+						0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+				else if (ret == -ENOMEM)
+					send_error_codes(fd, "Failed to read data point file path: Out of memory",
+						0, 0, CCCS_SEND_ERROR_OUT_OF_MEMORY);
+				else if (ret == -EPIPE)
+					/* Do not send anything */
+					;
+				else if (ret)
+					send_error_codes(fd, "Failed to read data point file path",
+						0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+				if (ret)
+					return 1;
+
+				break;
+			case upload_datapoint_file_events:
+			case upload_datapoint_file_metrics:
+			case upload_datapoint_file_metrics_binary:
+			default:
+				/* Read the data point(s) blob of data from the client process */
+				ret = read_blob(fd, &blob, &size, &timeout);
+				if (ret == -ETIMEDOUT)
+					send_error_codes(fd, "Timeout reading data point data",
+						0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+				else if (ret == -ENOMEM)
+					send_error_codes(fd, "Failed to read data point data: Out of memory",
+						0, 0, CCCS_SEND_ERROR_OUT_OF_MEMORY);
+				else if (ret == -EPIPE)
+					/* Do not send anything */
+					;
+				else if (ret)
+					send_error_codes(fd, "Failed to read data point data",
+						0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+				if (ret)
+					return 1;
+
+				break;
 		}
 
-		char* cloud_path;
-		switch(type) {
+		/* Determine cloud_path/stream_id*/
+		switch (type) {
 			case upload_datapoint_file_events:
 				cloud_path = "DeviceLog/EventLog.json";
 				break;
+			case upload_datapoint_file_metrics_binary:
+			case upload_datapoint_file_path_binary:
+				/* Read the data stream name */
+				ret = read_string(fd, &stream_id, NULL, &timeout);
+				if (ret == -ETIMEDOUT)
+					send_error_codes(fd, "Timeout reading data point stream id",
+						0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+				else if (ret == -ENOMEM)
+					send_error_codes(fd, "Failed to read data point stream id: Out of memory",
+						0, 0, CCCS_SEND_ERROR_OUT_OF_MEMORY);
+				else if (ret == -EPIPE)
+					/* Do not send anything */
+					;
+				else if (ret)
+					send_error_codes(fd, "Failed to read data point stream id",
+						0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+				if (ret) {
+					free(blob);
+					free(file_path);
+					return 1;
+				}
+				break;
 			case upload_datapoint_file_metrics:
+			case upload_datapoint_file_path_metrics:
 			default:
 				cloud_path = "DataPoint/.csv";
 				break;
 		}
 
-		/* Upload the blob to the cloud */
-		ret = upload_datapoint_file(blob, size, cloud_path, &hint_string_info, &err_from_server);
+		/* Upload data to cloud */
+		switch (type) {
+			case upload_datapoint_file_path_metrics:
+				/* Upload the file to the cloud */
+				ret = upload_datapoint_file(type, file_path, 0,
+					cloud_path, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, file_path, 0, NULL,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
+				err_msg = to_send_error_msg(ret);
+				break;
+			case upload_datapoint_file_metrics_binary:
+				/* Upload the binary blob to the cloud */
+				ret = upload_binary_datapoint(type, blob, size,
+					stream_id, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, blob, size, stream_id,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
+				err_msg = dp_b_to_send_error_msg(ret);
+				break;
+			case upload_datapoint_file_path_binary:
+				/* Upload the binary file to the cloud */
+				ret = upload_binary_datapoint(type, file_path, 0,
+					stream_id, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, file_path, 0, stream_id,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
+				err_msg = dp_b_to_send_error_msg(ret);
+				break;
+			case upload_datapoint_file_events:
+			case upload_datapoint_file_metrics:
+			default:
+				/* Upload the blob to the cloud */
+				ret = upload_datapoint_file(type, blob, size,
+					cloud_path, &hint_string_info, &err_from_server);
+				cccs_err = dp_process_send_dp_error(type, ret, blob, size, NULL,
+					cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb);
+				err_msg = to_send_error_msg(ret);
+				break;
+		}
 
 		free(blob);
+		free(file_path);
+		free(stream_id);
 
-		if (ret) {
-			char const * const err_msg = to_send_error_msg(ret);
-			char * err_msg_with_hint = NULL;
+		if (ret || cccs_err) {
+			char *err_msg_with_hint = NULL;
 
 			if (!err_from_server.known) {
 				/* Use a sentinel value of 255 to indicate something went wrong */
 				err_from_server.value = 255;
 			}
 
+			if (cccs_err)
+				cccs_err = CCCS_SEND_ERROR_UNABLE_TO_STORE_DP;
+
 			if ((hint[0] != '\0') && (asprintf(&err_msg_with_hint, "%s, %s", err_msg, hint) > 0)) {
-				send_error_with_code(fd, err_msg_with_hint, err_from_server.value);
+				send_error_codes(fd, err_msg_with_hint, err_from_server.value, ret, cccs_err);
 				free(err_msg_with_hint);
 			} else {
-				send_error_with_code(fd, err_msg, err_from_server.value);
+				send_error_codes(fd, err_msg, err_from_server.value, ret, cccs_err);
 			}
 		} else {
 			send_ok(fd);
 		}
 
-		if (ret != CCAPI_SEND_ERROR_NONE) {
+		if (ret != 0 || cccs_err != 0)
 			return 1;
-		}
 	}
 
 	return 0;
+}
+
+static ccapi_send_error_t send_datapoint_maintenance(int fd, bool status)
+{
+	char *status_str = status ? "true" : "false";
+	ccapi_dp_collection_handle_t c;
+	ccapi_dp_error_t dp_error;
+	buffer_info_t buf_info;
+	char dp_value[20];
+	ccapi_send_error_t ret = CCAPI_SEND_ERROR_NONE;
+	char hint[256];
+	ccapi_string_info_t hint_string_info;
+	ccapi_optional_uint8_t err_from_server = {
+		.known = false,
+		.value = 255
+	};
+
+	hint[0] = '\0';
+	hint_string_info.length = sizeof(hint);
+	hint_string_info.string = hint;
+
+	dp_error = ccapi_dp_create_collection(&c);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		goto error;
+
+	dp_error = ccapi_dp_add_data_stream_to_collection_extra(c,
+			DP_MAINTENANCE_STREAM_ID, CCAPI_DP_KEY_DATA_JSON,
+			"list", NULL);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		goto error;
+
+	sprintf(dp_value, "{\"status\": %s}", status_str);
+
+	dp_error = ccapi_dp_add(c, DP_MAINTENANCE_STREAM_ID, dp_value);
+	if (dp_error != CCAPI_DP_ERROR_NONE)
+		goto error;
+
+	if (dp_generate_csv_from_collection(c, &buf_info, DP_MAX_NUMBER_PER_REQUEST, NULL) > 0) {
+		ret = upload_datapoint_file(upload_datapoint_file_metrics,
+			buf_info.buffer, buf_info.bytes_written,
+			"DataPoint/.csv", &hint_string_info, &err_from_server);
+		if (ret != CCAPI_SEND_ERROR_NONE)
+			log_error(MNT_TAG "Error setting maintenance status to '%s': %s (%d)",
+				status_str, to_send_error_msg(ret), ret);
+	} else {
+		log_error(MNT_TAG "Error setting maintenance status to '%s': Unable to generate data to send",
+			status_str);
+		ret = CCAPI_SEND_ERROR_INSUFFICIENT_MEMORY;
+	}
+
+error:
+	if (dp_error != CCAPI_DP_ERROR_NONE) {
+		log_error(MNT_TAG "Error setting maintenance status to '%s' (%d)",
+			status_str, dp_error);
+		ret = dp_error == CCAPI_DP_ERROR_INSUFFICIENT_MEMORY ? CCAPI_SEND_ERROR_INSUFFICIENT_MEMORY : CCAPI_SEND_ERROR_LOCK_FAILED;
+	}
+
+	if (ret != CCAPI_SEND_ERROR_NONE) {
+		char const *err_msg = to_send_error_msg(ret);
+		char *err_msg_with_hint = NULL;
+
+		if (!err_from_server.known) {
+			/* Use a sentinel value of 255 to indicate something went wrong */
+			err_from_server.value = 255;
+		}
+
+		if ((hint[0] != '\0') && (asprintf(&err_msg_with_hint, "%s, %s", err_msg, hint) > 0)) {
+			send_error_codes(fd, err_msg_with_hint, err_from_server.value, ret, 0);
+			free(err_msg_with_hint);
+		} else {
+			send_error_codes(fd, err_msg, err_from_server.value, ret, 0);
+		}
+	} else {
+		send_ok(fd);
+	}
+
+	ccapi_dp_destroy_collection(c);
+
+	return ret;
+}
+
+int handle_maintenance_request(int fd, const cc_cfg_t *const cc_cfg)
+{
+	int ret;
+	uint32_t mnt_status, end;
+	struct timeval timeout = {
+		.tv_sec = SOCKET_READ_TIMEOUT_SEC,
+		.tv_usec = 0
+	};
+
+	UNUSED_ARGUMENT(cc_cfg);
+
+	/* Read the maintenance status from the client message */
+	ret = read_uint32(fd, &mnt_status, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error_codes(fd, "Timeout reading maintenance status",
+			0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+	else if (ret)
+		send_error_codes(fd, "Failed to read maintenance status",
+			0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+	/* Read message end */
+	ret = read_uint32(fd, &end, &timeout);
+	if (ret == -ETIMEDOUT)
+		send_error_codes(fd, "Timeout reading message end",
+			0, 0, CCCS_SEND_ERROR_READ_TIMEOUT);
+	else if (ret || end != 0)
+		send_error_codes(fd, "Failed to read message end",
+			0, 0, CCCS_SEND_ERROR_READ_ERROR);
+
+	if (ret)
+		return 1;
+
+	return send_datapoint_maintenance(fd, mnt_status);
 }

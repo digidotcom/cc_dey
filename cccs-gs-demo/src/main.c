@@ -211,6 +211,7 @@ int main(int argc, char *argv[])
 	/* Do the real work */
 	if (start_monitoring() != 0) {
 		log_error("%s", "Cannot start monitoring... exiting");
+		result = EXIT_FAILURE;
 		goto done;
 	}
 

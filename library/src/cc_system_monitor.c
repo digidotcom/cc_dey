@@ -24,28 +24,33 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/sysinfo.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "ccapi/ccapi.h"
+#include "_cc_datapoints.h"
 #include "cc_config.h"
 #include "cc_init.h"
 #include "cc_logging.h"
 #include "cc_system_monitor.h"
 #include "cc_utils.h"
+#include "service_common.h"
 #include "utils.h"
 
 #define LOOP_MS				100
 
 #define MAX_LENGTH			256
 
-#define MAX_DP_IN_COLLECTION		250
-
 #define SYSTEM_MONITOR_TAG		"SYSMON:"
 
 #ifdef ENABLE_BT
 #define BLUETOOTH_INTERFACE		"hci0"
 #endif /* ENABLE_BT */
+
+#define SM_MAX_DP_IN_COLLECTION		DP_MAX_NUMBER_PER_REQUEST * 5
+#define MIN_STORE_UPLOAD_INTERVAL	60		/* 1 minute */
+#define MAX_STORE_UPLOAD_INTERVAL	1 * 60 * 60	/* 1 hour */
 
 #define METRIC_FREE_MEMORY		"free_memory"
 #define METRIC_USED_MEMORY		"used_memory"
@@ -1025,6 +1030,139 @@ static void add_samples(void)
 }
 
 /*
+ * send_system_monitor_samples() - Uploads system monitor samples
+ *
+ * @cc_cfg:		Connector configuration struct (cc_cfg_t).
+ * @next_sample_ms:	Timestamp in ms when next samples must be added.
+ */
+static void send_system_monitor_samples(const cc_cfg_t *const cc_cfg, uint64_t *next_sample_ms)
+{
+	struct timeval now;
+	uint64_t now_ms;
+	uint32_t count;
+	uint32_t n_samples_to_send = (sys_stream_list.n_streams + net_stream_list.n_streams) * cc_cfg->sys_mon_num_samples_upload;
+#ifdef ENABLE_BT
+	n_samples_to_send += bt_stream_list.n_streams * cc_cfg->sys_mon_num_samples_upload;
+#endif /* ENABLE_BT */
+
+	if (!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0 || !n_samples_to_send) {
+		*next_sample_ms = 0;
+
+		return;
+	}
+
+	gettimeofday(&now, NULL);
+	now_ms = now.tv_sec * 1000 + now.tv_usec / 1000;
+	if (!*next_sample_ms)
+		*next_sample_ms = now_ms;
+
+	if (now_ms < *next_sample_ms)
+		return;
+
+	if (n_samples_to_send > DP_MAX_NUMBER_PER_REQUEST)
+		n_samples_to_send = DP_MAX_NUMBER_PER_REQUEST;
+
+	add_samples();
+
+	gettimeofday(&now, NULL);
+	now_ms = now.tv_sec * 1000 + now.tv_usec / 1000;
+	*next_sample_ms = now_ms + cc_cfg->sys_mon_sample_rate * 1000;
+
+	ccapi_dp_get_collection_points_count(dp_collection, &count);
+
+	if (stop_requested)
+		return;
+
+	if (count >= n_samples_to_send) {
+		unsigned int n_dp;
+		buffer_info_t buf_info;
+
+		log_sm_debug("%s", "Sending system monitor samples");
+		if (dp_generate_csv_from_collection(dp_collection, &buf_info, DP_MAX_NUMBER_PER_REQUEST, &n_dp) > 0) {
+			ccapi_send_error_t ret;
+
+			ret = ccapi_send_data(CCAPI_TRANSPORT_TCP, "DataPoint/.csv",
+				"text/plain", buf_info.buffer, buf_info.bytes_written,
+				CCAPI_SEND_BEHAVIOR_OVERWRITE);
+			if (ret == CCAPI_SEND_ERROR_NONE) {
+				dp_remove_from_collection(dp_collection, n_dp);
+			} else {
+				log_sm_error("Error sending system monitor samples, %d", ret);
+
+				/* Only store the samples when there are DP_MAX_NUMBER_PER_REQUEST data points */
+				if (count >= DP_MAX_NUMBER_PER_REQUEST
+					&& dp_process_send_dp_error(upload_datapoint_file_metrics,
+						ret, buf_info.buffer, buf_info.bytes_written, NULL,
+						cc_cfg->data_backlog_path, cc_cfg->data_backlog_kb) == 0) {
+					dp_remove_from_collection(dp_collection, n_dp);
+				}
+			}
+
+			free(buf_info.buffer);
+		}
+	}
+
+	ccapi_dp_get_collection_points_count(dp_collection, &count);
+	/* If cannot send data points nor store them, limit the size of collection */
+	while (count > SM_MAX_DP_IN_COLLECTION) {
+		log_sm_debug("%s", "Removing old system monitor samples...");
+		ccapi_dp_remove_older_data_point_from_streams(dp_collection);
+		ccapi_dp_get_collection_points_count(dp_collection, &count);
+	}
+}
+
+/*
+ * send_stored_dp() - Uploads stored data points
+ *
+ * @cc_cfg:			Connector configuration struct (cc_cfg_t).
+ * @store_upload_rate:		Interval in seconds to try to upload stored data.
+ * @next_store_upload_ms:	Timestamp in ms when next stored data must be uploaded.
+ */
+static void send_stored_dp(const cc_cfg_t *const cc_cfg, uint32_t *store_upload_rate, uint64_t *next_store_upload_ms)
+{
+	struct timeval now;
+	uint64_t now_ms;
+	int rnd_inc;
+
+	if (cc_cfg->data_backlog_kb == 0 || !cc_cfg->data_backlog_path || strlen(cc_cfg->data_backlog_path) == 0) {
+		*next_store_upload_ms = 0;
+
+		return;
+	}
+
+	gettimeofday(&now, NULL);
+	now_ms = now.tv_sec * 1000 + now.tv_usec / 1000;
+
+	if (stop_requested || now_ms < *next_store_upload_ms)
+		return;
+
+	/* When starting, do not immediately upload stored data, wait one 'rate' */
+	if (*next_store_upload_ms == 0)
+		goto done;
+
+	if (dp_send_stored_data(cc_cfg->data_backlog_path) != 0) {
+		if (*store_upload_rate < MAX_STORE_UPLOAD_INTERVAL)
+			*store_upload_rate *= 2;
+	} else {
+		*store_upload_rate = MIN_STORE_UPLOAD_INTERVAL;
+	}
+
+done:
+	/* Add a random increment */
+	do {
+		rnd_inc = rand() / (RAND_MAX / (MIN_STORE_UPLOAD_INTERVAL + 1));
+	} while (rnd_inc > MIN_STORE_UPLOAD_INTERVAL);
+
+	*store_upload_rate += rnd_inc;
+
+	log_sm_debug("Checking for stored data in %u seconds", *store_upload_rate);
+
+	gettimeofday(&now, NULL);
+	now_ms = now.tv_sec * 1000 + now.tv_usec / 1000;
+	*next_store_upload_ms = now_ms + *store_upload_rate * 1000;
+}
+
+/*
  * system_monitor_loop() - Start the system monitoring loop
  *
  * @cc_cfg:	Connector configuration struct (cc_cfg_t) where the parsed
@@ -1039,50 +1177,45 @@ static void add_samples(void)
  */
 static void system_monitor_loop(const cc_cfg_t *const cc_cfg)
 {
-	log_sm_info("%s", "Start monitoring the system");
+	uint64_t next_sample_ms = 0, next_store_upload_ms = 0;
+	uint32_t store_upload_rate = MIN_STORE_UPLOAD_INTERVAL; /* seconds */
+
+	if (cc_cfg->data_backlog_kb > 0 && cc_cfg->data_backlog_path && strlen(cc_cfg->data_backlog_path) > 0)
+		log_sm_info("%s", "Data backlog service start");
+
+	if (cc_cfg->services & SYS_MONITOR_SERVICE && cc_cfg->sys_mon_sample_rate <= 0)
+		log_sm_info("%s", "Start monitoring the system");
 
 	while (!stop_requested) {
-		uint32_t n_samples_to_send = (sys_stream_list.n_streams + net_stream_list.n_streams) * cc_cfg->sys_mon_num_samples_upload;
-#ifdef ENABLE_BT
-		n_samples_to_send += bt_stream_list.n_streams * cc_cfg->sys_mon_num_samples_upload;
-#endif /* ENABLE_BT */
-		long n_loops = cc_cfg->sys_mon_sample_rate * 1000 / LOOP_MS;
-		uint32_t count = 0;
-		long loop;
+		long n_loops, loop;
+		struct timeval now;
+		uint64_t now_ms, next_operation_ms;
 
-		add_samples();
+		send_system_monitor_samples(cc_cfg, &next_sample_ms);
 
-		ccapi_dp_get_collection_points_count(dp_collection, &count);
-		while (count > MAX_DP_IN_COLLECTION) {
-			log_sm_debug("%s", "Removing old data points...");
-			ccapi_dp_remove_older_data_point_from_streams(dp_collection);
-			ccapi_dp_get_collection_points_count(dp_collection, &count);
+		send_stored_dp(cc_cfg, &store_upload_rate, &next_store_upload_ms);
+
+		/* 0 means it is disabled */
+		if (next_sample_ms == 0 && next_store_upload_ms == 0) {
+			/* Should not happen */
+			stop_requested = true;
+			break;
 		}
 
-		if (count >= n_samples_to_send && !stop_requested) {
-			ccapi_dp_error_t dp_error;
+		if (next_sample_ms == 0)
+			next_operation_ms = next_store_upload_ms;
+		else if (next_store_upload_ms == 0)
+			next_operation_ms = next_sample_ms;
+		else if (next_store_upload_ms < next_sample_ms)
+			next_operation_ms = next_store_upload_ms;
+		else
+			next_operation_ms = next_sample_ms;
 
-			/*
-			 * TODO: If the connection is lost, this thread blocks at this point
-			 * and does not continue collecting data points.
-			 *
-			 * The expected behavior is an error after a timeout to keep the
-			 * sampling process, so all the collected data is sent when the
-			 * connection is restored.
-			 * We tried to get this by using 'ccapi_dp_send_collection_with_reply'
-			 * but it seems it does not work:
-			 *
-			 * unsigned long timeout = 2; // seconds
-			 * dp_error = ccapi_dp_send_collection_with_reply(CCAPI_TRANSPORT_TCP, dp_collection, timeout, NULL);
-			 */
-			if (get_cloud_connection_status() == CC_STATUS_CONNECTED) {
-				log_sm_debug("%s", "Sending system monitor samples");
-				dp_error = ccapi_dp_send_collection(CCAPI_TRANSPORT_TCP, dp_collection);
-				if (dp_error != CCAPI_DP_ERROR_NONE)
-					log_sm_error("Error sending system monitor samples, %d", dp_error);
-			}
-		}
-
+		gettimeofday(&now, NULL);
+		now_ms = now.tv_sec * 1000 + now.tv_usec / 1000;
+		n_loops = 1; /* At least wait one loop */
+		if (next_operation_ms > now_ms)
+			n_loops += (next_operation_ms - now_ms) / LOOP_MS;
 		for (loop = 0; loop < n_loops; loop++) {
 			struct timespec sleepValue = {0};
 
@@ -1110,6 +1243,13 @@ static void *system_monitor_threaded(void *cc_cfg)
 
 	system_monitor_loop(cc_cfg);
 
+	free_stream_list(&sys_stream_list);
+	free_stream_list(&net_stream_list);
+#ifdef ENABLE_BT
+	free_stream_list(&bt_stream_list);
+#endif /* ENABLE_BT */
+	ccapi_dp_destroy_collection(dp_collection);
+
 	pthread_exit(NULL);
 
 	return NULL;
@@ -1120,8 +1260,11 @@ cc_sys_mon_error_t start_system_monitor(const cc_cfg_t *const cc_cfg)
 	pthread_attr_t attr;
 	int error;
 
-	if (!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
+	/* Do not continue if system monitor feature and store backlog feature are disabled */
+	if ((!(cc_cfg->services & SYS_MONITOR_SERVICE) || cc_cfg->sys_mon_sample_rate <= 0)
+		&& (cc_cfg->data_backlog_kb == 0 || !cc_cfg->data_backlog_path || strlen(cc_cfg->data_backlog_path) == 0)) {
 		return CC_SYS_MON_ERROR_NONE;
+	}
 
 	if (dp_thread_valid)
 		return CC_SYS_MON_ERROR_NONE;
@@ -1155,13 +1298,6 @@ void stop_system_monitor(void)
 		pthread_cancel(dp_thread);
 		pthread_join(dp_thread, NULL);
 	}
-
-	free_stream_list(&sys_stream_list);
-	free_stream_list(&net_stream_list);
-#ifdef ENABLE_BT
-	free_stream_list(&bt_stream_list);
-#endif /* ENABLE_BT */
-	ccapi_dp_destroy_collection(dp_collection);
 
 	log_sm_info("%s", "Stop monitoring the system");
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2023 Digi International Inc.
+ * Copyright (c) 2017-2024 Digi International Inc.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -221,7 +221,7 @@ static ccapi_start_t *create_ccapi_start_struct(const cc_cfg_t *const cc_cfg)
 	}
 
 	/* Initialize firmware service. */
-	if (init_fw_service(cc_cfg->fw_version, &start->service.firmware) != 0)
+	if (init_fw_service(true, cc_cfg->fw_version, &start->service.firmware) != 0)
 		goto error;
 
 	return start;
@@ -323,6 +323,9 @@ cc_init_error_t init_cloud_connection(const char *config_file)
 		ret = CC_INIT_ERROR_UNKOWN;
 		goto error;
 	}
+
+	if (!cc_cfg->data_backlog_path || strlen(cc_cfg->data_backlog_path) == 0 || cc_cfg->data_backlog_kb == 0)
+		log_warning("%s", "Disabled storage of system monitor and custom data");
 
 	ccapi_error = initialize_ccapi(cc_cfg);
 	switch(ccapi_error) {
@@ -725,7 +728,7 @@ cc_start_error_t start_cloud_connection(void)
 	if (start_system_monitor(cc_cfg) != CC_SYS_MON_ERROR_NONE)
 		return CC_START_ERROR_SYSTEM_MONITOR;
 
-	start_listening_for_local_requests();
+	start_listening_for_local_requests(cc_cfg);
 
 	log_info("%s", "Cloud connection started");
 

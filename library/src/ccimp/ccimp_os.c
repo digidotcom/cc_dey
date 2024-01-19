@@ -264,8 +264,13 @@ ccimp_status_t ccimp_os_lock_acquire(ccimp_os_lock_acquire_t *const data)
 		ccapi_logging_line_info("ccimp_os_lock_acquire(): about to call sem_wait()\n");
 		s = sem_wait(sem);
 	} else {
+#ifdef CCIMP_HAVE_SEM_CLOCKWAIT
+#		define SEM_CLOCK CLOCK_MONOTONIC
+#else
+#		define SEM_CLOCK CLOCK_REALTIME
+#endif /* CCIMP_HAVE_SEM_CLOCKWAIT */
 		/* Calculate relative interval as current time plus number of milliseconds requested */
-		if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+		if (clock_gettime(SEM_CLOCK, &ts) == -1) {
 			ccapi_logging_line_info("ccimp_os_lock_acquire(): clock_gettime error\n");
 			return CCIMP_STATUS_ERROR;
 		}
@@ -282,7 +287,11 @@ ccimp_status_t ccimp_os_lock_acquire(ccimp_os_lock_acquire_t *const data)
 		}
 
 		ccapi_logging_line_info("ccimp_os_lock_acquire(): about to call sem_timedwait()\n");
+#ifdef CCIMP_HAVE_SEM_CLOCKWAIT
+		s = sem_clockwait(sem, SEM_CLOCK, &ts);
+#else
 		s = sem_timedwait(sem, &ts);
+#endif /* CCIMP_HAVE_SEM_CLOCKWAIT */
 	}
 
 	/* Check what happened */

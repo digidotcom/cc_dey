@@ -68,3 +68,48 @@ const char *to_send_error_msg(ccapi_send_error_t error) {
 	}
 }
 
+const char *dp_b_to_send_error_msg(ccapi_dp_b_error_t error) {
+	switch (error) {
+		case CCAPI_DP_B_ERROR_NONE:
+			return "Success";
+		case CCAPI_DP_B_ERROR_CCAPI_NOT_RUNNING:
+			return "CCAPI not running";
+		case CCAPI_DP_B_ERROR_TRANSPORT_NOT_STARTED:
+			return "Transport not started";
+		case CCAPI_DP_B_ERROR_FILESYSTEM_NOT_SUPPORTED:
+			return "Filesystem not supported";
+		case CCAPI_DP_B_ERROR_INVALID_STREAM_ID:
+			return "Invalid stream id";
+		case CCAPI_DP_B_ERROR_INVALID_DATA:
+			return "Invalid data";
+		case CCAPI_DP_B_ERROR_INVALID_LOCAL_PATH:
+			return "Invalid local path";
+		case CCAPI_DP_B_ERROR_NOT_A_FILE:
+			return "Not a file";
+		case CCAPI_DP_B_ERROR_ACCESSING_FILE:
+			return "Error accessing file";
+		case CCAPI_DP_B_ERROR_INVALID_HINT_POINTER:
+			return "Invalid hint pointer";
+		case CCAPI_DP_B_ERROR_INSUFFICIENT_MEMORY:
+			return "Out of memory";
+		case CCAPI_DP_B_ERROR_LOCK_FAILED:
+			return "Lock failed";
+		case CCAPI_DP_B_ERROR_INITIATE_ACTION_FAILED:
+			return "Initiate action failed";
+		case CCAPI_DP_B_ERROR_STATUS_CANCEL:
+			return "Cancelled";
+		case CCAPI_DP_B_ERROR_STATUS_TIMEOUT:
+			return "Timeout";
+		case CCAPI_DP_B_ERROR_STATUS_SESSION_ERROR:
+			return "Session error";
+		case CCAPI_DP_B_ERROR_RESPONSE_BAD_REQUEST:
+			return "Bad request";
+		case CCAPI_DP_B_ERROR_RESPONSE_UNAVAILABLE:
+			return "Response unavailable";
+		case CCAPI_DP_B_ERROR_RESPONSE_CLOUD_ERROR:
+			return "Cloud error";
+		default:
+			log_error("unknown internal connection error: ccapi_dp_b_error_t[%d]", error);
+			return "Internal connector error";
+	}
+}
