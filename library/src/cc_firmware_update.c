@@ -1325,8 +1325,12 @@ static ccapi_fw_data_error_t firmware_data_cb(unsigned int const target, uint32_
 		}
 
 		if (last_chunk) {
+			/* Wait until chunk is processed by swupdate (signaled by otf_read_image_cb) */
+			sem_wait(&otf_info.sem_end_chunk);
 			/* Signal end to swupdate (waiting otf_read_image_cb) */
+			sem_wait(&otf_info.sem_mutex);
 			otf_info.chunk_size = 0;
+			sem_post(&otf_info.sem_mutex);
 			sem_post(&otf_info.sem_start_chunk);
 
 			log_fw_debug("Firmware download completed for target '%d'", target);
@@ -1405,7 +1409,9 @@ static void firmware_cancel_cb(unsigned int const target, ccapi_fw_cancel_error_
 #ifdef ENABLE_ONTHEFLY_UPDATE
 	if (cc_cfg->is_dual_boot && cc_cfg->on_the_fly && target != CC_FW_TARGET_MANIFEST) {
 		/* Signal end to swupdate process (waiting otf_read_image_cb) */
+		sem_wait(&otf_info.sem_mutex);
 		otf_info.chunk_size = 0;
+		sem_post(&otf_info.sem_mutex);
 		sem_post(&otf_info.sem_start_chunk);
 		/* Signal end to DRM data process (waiting firmware_data_cb) */
 		sem_post(&otf_info.sem_end_chunk);
