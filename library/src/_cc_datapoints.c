@@ -37,7 +37,7 @@
 #include "_utils.h"
 
 #define DIR_PATH_OUTPUT_FORMAT			"%s/cccs/"
-#define DP_FILE_NAME_OUTPUT_FORMAT		"%lu%03ld_%s"
+#define DP_FILE_NAME_OUTPUT_FORMAT		"%llu%03lld_%s"
 
 static void chain_collection_ccfsm_data_streams(cccs_dp_collection_t * const collection)
 {
@@ -214,7 +214,7 @@ static char* dp_get_backlog_file_path(uint32_t type, char const stream_id[], cha
 	gettimeofday(&now, NULL);
 
 	path_len = snprintf(NULL, 0, "%s" DP_FILE_NAME_OUTPUT_FORMAT,
-		out_dir, now.tv_sec, now.tv_usec / 1000,
+		out_dir, (long long unsigned)now.tv_sec, (long long int)now.tv_usec / 1000,
 		type == upload_datapoint_file_path_binary || type == upload_datapoint_file_metrics_binary ? stream_id : "");
 	out_file = calloc(path_len + 1, sizeof(*out_file));
 	if (!out_file) {
@@ -223,7 +223,7 @@ static char* dp_get_backlog_file_path(uint32_t type, char const stream_id[], cha
 	}
 
 	sprintf(out_file, "%s" DP_FILE_NAME_OUTPUT_FORMAT,
-		out_dir, now.tv_sec, now.tv_usec / 1000,
+		out_dir, (long long unsigned)now.tv_sec, (long long int)now.tv_usec / 1000,
 		type == upload_datapoint_file_path_binary || type == upload_datapoint_file_metrics_binary ? stream_id : "");
 
 done:
