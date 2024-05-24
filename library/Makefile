@@ -72,6 +72,8 @@ CFLAGS +=-std=c99
 # Include POSIX and GNU features.
 CFLAGS += -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
 CFLAGS += -g -O
+# Guard against Y2038 issue by making timestamps 64-bit
+CFLAGS += -D_TIME_BITS=64 -D_FILE_OFFSET_BITS=64
 
 # Target output to generate.
 CC_PRIVATE_SRCS := $(CCFSM_PRIVATE_DIR)/connector_api.c
