@@ -1756,7 +1756,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 		net_state_error_t err;
 		json_object *eth_item = NULL, *iface_item = NULL;
 
-		if (net_cfgs[i].name == NULL)
+		if (strlen(net_cfgs[i].name) == 0)
 			continue;
 
 		err = ldx_net_set_config(net_cfgs[i]);
@@ -1776,7 +1776,7 @@ static ccapi_receive_error_t set_config_cb(char const *const target,
 		wifi_state_error_t err;
 		json_object *wifi_item = NULL, *iface_item = NULL;
 
-		if (wifi_cfgs[i].name == NULL)
+		if (strlen(wifi_cfgs[i].name) == 0)
 			continue;
 
 		err = ldx_wifi_set_config(wifi_cfgs[i]);

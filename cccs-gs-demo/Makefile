@@ -41,6 +41,8 @@ CFLAGS += -Wno-error=padded -Wno-error=format-nonliteral -Wno-unused-function -W
 CFLAGS +=-std=c99
 # Include POSIX and GNU features.
 CFLAGS += -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
+# Guard against Y2038 issue by making timestamps 64-bit
+CFLAGS += -D_TIME_BITS=64 -D_FILE_OFFSET_BITS=64
 # Include Public Header Files.
 CFLAGS += -DGIT_REVISION=\"$(if $(GIT_REVISION),-g$(GIT_REVISION))\"
 

@@ -57,6 +57,8 @@ CFLAGS += -Wno-error=padded -Wno-error=format-nonliteral -Wno-unused-function -W
 CFLAGS +=-std=c99
 # Include POSIX and GNU features.
 CFLAGS += -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
+# Guard against Y2038 issue by making timestamps 64-bit
+CFLAGS += -D_TIME_BITS=64 -D_FILE_OFFSET_BITS=64
 # Include Public Header Files.
 CFLAGS += -I $(SRC) -I $(CC_LIB_SRC) -I $(CUSTOM_CCFSM_PUBLIC_HEADER_DIR)
 CFLAGS += -I $(CCFSM_PUBLIC_HEADER_DIR) -I $(CCAPI_PUBLIC_HEADER_DIR) -I $(CUSTOM_PUBLIC_HEADER_DIR)

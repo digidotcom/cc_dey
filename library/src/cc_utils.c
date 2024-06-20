@@ -61,7 +61,7 @@ ccapi_timestamp_t *get_timestamp_by_type(cccs_timestamp_type_t type)
 					goto error;
 
 				if (strftime(date, len, "%FT%H:%M:%S", gmtime(&now.tv_sec)) > 0) {
-					sprintf(date + strlen(date), ".%03ldZ", now.tv_usec/10000);
+					sprintf(date + strlen(date), ".%03lldZ", (long long int)now.tv_usec/10000);
 					timestamp->iso8601 = date;
 					break;
 				}
